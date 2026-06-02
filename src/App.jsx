@@ -1,37 +1,85 @@
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import './index.css';
+import { AuthProvider, useAuth } from './hooks/useAuth';
 import Layout from './components/Layout';
+import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Tim from './pages/Tim';
-import { Modul, Jurnal, SOP, Reward, Workshop, Kader, SKB, OneOnOne } from './pages/Pages';
-import { PageFormJurnal, PageFormProfiling } from './pages/FormPages';
+import ManajemenTim from './pages/ManajemenTim';
+import { Modul, Jurnal, SOP, Reward, Workshop, Kader, SKB, OneOnOne, FridayWin } from './pages/Pages';
+import { PageFormJurnal, PageFormProfiling, PageRiwayatJurnal } from './pages/FormPages';
+import Profil from './pages/Profil';
+import Kalender from './pages/Kalender';
 
-function AppRoutes() {
+function AdminRoute({ children }) {
+  const { user } = useAuth();
+  if (user?.role !== 'admin') return <Navigate to="/" replace />;
+  return children;
+}
+
+function ProtectedRoutes() {
+  const { user, loading } = useAuth();
   const location = useLocation();
+
+  if (loading) return (
+    <div style={{
+      minHeight: '100vh', background: 'var(--bg)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      flexDirection: 'column', gap: 12,
+    }}>
+      <div style={{ fontSize: 28 }}>🎨</div>
+      <div style={{ fontSize: 13, color: 'var(--text-2)' }}>Memuat...</div>
+    </div>
+  );
+
+  if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
+
   return (
     <Layout path={location.pathname}>
       <Routes>
-        <Route path="/"                element={<Dashboard />} />
-        <Route path="/tim"             element={<Tim />} />
-        <Route path="/modul"           element={<Modul />} />
-        <Route path="/jurnal"          element={<Jurnal />} />
+        {/* Semua role */}
+        <Route path="/"             element={<Dashboard />} />
+        <Route path="/modul"        element={<Modul />} />
         <Route path="/jurnal/isi"      element={<PageFormJurnal />} />
-        <Route path="/profiling"       element={<PageFormProfiling />} />
-        <Route path="/sop"             element={<SOP />} />
-        <Route path="/reward"          element={<Reward />} />
-        <Route path="/workshop"        element={<Workshop />} />
-        <Route path="/kader"           element={<Kader />} />
-        <Route path="/skb"             element={<SKB />} />
-        <Route path="/1on1"            element={<OneOnOne />} />
+        <Route path="/jurnal/riwayat"  element={<PageRiwayatJurnal />} />
+        <Route path="/profil"          element={<Profil />} />
+        <Route path="/profiling"    element={<PageFormProfiling />} />
+        <Route path="/sop"          element={<SOP />} />
+        <Route path="/reward"       element={<Reward />} />
+        <Route path="/skb"          element={<SKB />} />
+
+        {/* Admin only */}
+        <Route path="/tim"          element={<AdminRoute><Tim /></AdminRoute>} />
+        <Route path="/tim/kelola"   element={<AdminRoute><ManajemenTim /></AdminRoute>} />
+        <Route path="/jurnal"       element={<AdminRoute><Jurnal /></AdminRoute>} />
+        <Route path="/kader"        element={<AdminRoute><Kader /></AdminRoute>} />
+        <Route path="/1on1"         element={<AdminRoute><OneOnOne /></AdminRoute>} />
+        <Route path="/workshop"     element={<AdminRoute><Workshop /></AdminRoute>} />
+        <Route path="/friday-win"   element={<AdminRoute><FridayWin /></AdminRoute>} />
+        <Route path="/kalender"     element={<AdminRoute><Kalender /></AdminRoute>} />
+
+        <Route path="*"             element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
+  );
+}
+
+function AppRoutes() {
+  const { user } = useAuth();
+  return (
+    <Routes>
+      <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
+      <Route path="/*"     element={<ProtectedRoutes />} />
+    </Routes>
   );
 }
 
 export default function App() {
   return (
     <BrowserRouter>
-      <AppRoutes />
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
     </BrowserRouter>
   );
 }

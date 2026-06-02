@@ -1,5 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../services/api';
+import { useAuth } from '../hooks/useAuth';
+import { TIM } from '../data/tim';
+
+const NAMA_TO_DIVISI_ID = {
+  'Admin':       'admin',
+  'PM':          'pm',
+  'Illustrator': 'illustrator',
+  'Rigger':      'rigger',
+  '3D Modeler':  '3d',
+};
 
 // ── FIELD HELPERS ─────────────────────────────────────────────────────────
 function Field({ label, required, hint, children }) {
@@ -54,9 +64,6 @@ function BagianUmum({ form, set }) {
     <div className="card" style={{ marginBottom: 14 }}>
       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--green)' }}>👤 Identitas & Latar Belakang</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        <Field label="Nama lengkap" required>
-          <input value={form.nama} onChange={e => set('nama', e.target.value)} placeholder="Nama lengkap" required />
-        </Field>
         <Field label="Usia">
           <input type="number" value={form.usia} onChange={e => set('usia', e.target.value)} placeholder="Umur" min={15} max={60} />
         </Field>
@@ -320,11 +327,23 @@ const defaultForm = () => ({
 });
 
 export default function FormProfiling({ onSuccess }) {
-  const [divisi, setDivisi] = useState('');
-  const [form, setForm] = useState(defaultForm());
+  const { user } = useAuth();
+  const timData = TIM.find(t => t.nama === user?.nama);
+  const autoDiv = timData ? (NAMA_TO_DIVISI_ID[timData.divisi] || '') : '';
+
+  const [divisi, setDivisi] = useState(autoDiv);
+  const [form, setForm] = useState({ ...defaultForm(), nama: user?.nama || '' });
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (user?.nama) {
+      const t = TIM.find(x => x.nama === user.nama);
+      setForm(f => ({ ...f, nama: user.nama, level_karier: t?.level || '' }));
+      setDivisi(NAMA_TO_DIVISI_ID[t?.divisi] || '');
+    }
+  }, [user]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -355,24 +374,60 @@ export default function FormProfiling({ onSuccess }) {
     <form onSubmit={handleSubmit}>
       {error && <div className="alert alert-red" style={{ marginBottom: 16 }}><span>⚠️</span><div>{error}</div></div>}
 
-      {/* Pilih divisi */}
+      {/* Identitas otomatis */}
       <div className="card" style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Kamu di divisi mana? *</div>
+        <div style={{
+          display:'flex', alignItems:'center', gap:12,
+          padding:'10px 12px', borderRadius:10,
+          background:'var(--surface-2)', border:'1px solid var(--border)',
+        }}>
+          <div style={{
+            width:40, height:40, borderRadius:10, flexShrink:0,
+            background:'var(--green-light)', color:'var(--green)',
+            display:'flex', alignItems:'center', justifyContent:'center',
+            fontSize:14, fontWeight:800,
+          }}>
+            {user?.nama?.split(' ').slice(0,2).map(w=>w[0]).join('')}
+          </div>
+          <div>
+            <div style={{ fontSize:14, fontWeight:700 }}>{user?.nama}</div>
+            <div style={{ fontSize:11, color:'var(--text-2)', marginTop:2 }}>
+              {timData?.divisi} — {timData?.level}
+            </div>
+          </div>
+          <div style={{ marginLeft:'auto', fontSize:10, color:'var(--green)', fontWeight:600,
+            background:'var(--green-light)', padding:'3px 8px', borderRadius:6 }}>
+            ✓ Terdeteksi otomatis
+          </div>
+        </div>
+      </div>
+
+      {/* Divisi — locked untuk member */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Divisi kamu</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {DIVISI_LIST.map(d => (
             <button key={d.id} type="button"
-              onClick={() => setDivisi(d.id)}
+              disabled={!!autoDiv}
+              onClick={() => !autoDiv && setDivisi(d.id)}
               style={{
-                padding: '8px 14px', borderRadius: 8, cursor: 'pointer',
+                padding: '8px 14px', borderRadius: 8,
+                cursor: autoDiv ? 'default' : 'pointer',
                 border: `1px solid ${divisi === d.id ? 'var(--green)' : 'var(--border-2)'}`,
                 background: divisi === d.id ? 'var(--green-light)' : 'var(--surface)',
                 color: divisi === d.id ? 'var(--green)' : 'var(--text)',
                 fontWeight: divisi === d.id ? 600 : 400, fontSize: 13,
+                opacity: autoDiv && divisi !== d.id ? 0.4 : 1,
               }}>
               {d.ico} {d.label}
             </button>
           ))}
         </div>
+        {autoDiv && (
+          <div style={{ fontSize:11, color:'var(--text-3)', marginTop:8 }}>
+            Divisi dikunci sesuai data timmu.
+          </div>
+        )}
       </div>
 
       {divisi && (

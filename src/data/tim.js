@@ -57,39 +57,45 @@ export const TIM = [
 ];
 
 export const TIPE_COLOR = {
-  "Rising Star":   { bg:"#E1F5EE", text:"#085041", badge:"rs" },
-  "High Potential":{ bg:"#EEEDFE", text:"#3C3489", badge:"hp" },
-  "Silent Expert": { bg:"#FAEEDA", text:"#633806", badge:"se" },
-  "At Risk":       { bg:"#FAECE7", text:"#712B13", badge:"ar" },
+  "Rising Star":   { bg:"var(--green-light)",  text:"var(--green)",  badge:"rs" },
+  "High Potential":{ bg:"var(--purple-light)", text:"var(--purple)", badge:"hp" },
+  "Silent Expert": { bg:"var(--amber-light)",  text:"var(--amber)",  badge:"se" },
+  "At Risk":       { bg:"var(--coral-light)",  text:"var(--coral)",  badge:"ar" },
 };
 
 export const DIVISI_COLOR = {
-  Admin:       { bg:"#FAEEDA", text:"#633806", icon:"💼" },
-  PM:          { bg:"#E6F1FB", text:"#0C447C", icon:"📋" },
-  Rigger:      { bg:"#FAECE7", text:"#712B13", icon:"🎬" },
-  Illustrator: { bg:"#EEEDFE", text:"#3C3489", icon:"🎨" },
-  "3D Modeler":{ bg:"#E1F5EE", text:"#085041", icon:"📦" },
+  Admin:       { bg:"var(--amber-light)",  text:"var(--amber)",  icon:"💼" },
+  PM:          { bg:"var(--blue-light)",   text:"var(--blue)",   icon:"📋" },
+  Rigger:      { bg:"var(--coral-light)",  text:"var(--coral)",  icon:"🎬" },
+  Illustrator: { bg:"var(--purple-light)", text:"var(--purple)", icon:"🎨" },
+  "3D Modeler":{ bg:"var(--green-light)",  text:"var(--green)",  icon:"📦" },
 };
 
 export const MODUL_LIST = [
-  { id:"admin",    label:"Admin",           jumlah:12, done:0, warna:"#BA7517", bg:"#FAEEDA" },
-  { id:"pm",       label:"Project Manager", jumlah:12, done:0, warna:"#378ADD", bg:"#E6F1FB" },
-  { id:"secondline",label:"Secondline",     jumlah:12, done:0, warna:"#7F77DD", bg:"#EEEDFE" },
-  { id:"illus",    label:"Illustrator",     jumlah:14, done:0, warna:"#7F77DD", bg:"#EEEDFE" },
-  { id:"rigger",   label:"Rigger/Animator", jumlah:14, done:0, warna:"#D85A30", bg:"#FAECE7" },
-  { id:"3d",       label:"3D Modeler",      jumlah:14, done:0, warna:"#378ADD", bg:"#E6F1FB" },
+  { id:"admin", label:"Admin", jumlah:12, done:0, warna:"var(--amber)", bg:"var(--amber-light)",
+    topik:["Customer Service & Komplain","Copywriting & Platform","Brief Writing","Social Media Dasar","Koordinasi PM & Tim","Pengetahuan Produk","Data Entry & Report","Komunikasi Klien","Prosedur Order","Quality Control Brief","Tools & Software Admin","Onboarding & SOP"] },
+  { id:"pm", label:"Project Manager", jumlah:12, done:0, warna:"var(--blue)", bg:"var(--blue-light)",
+    topik:["Project Planning","Koordinasi Tim","Client Communication","Timeline Management","Brief Assessment","Revision Management","Quality Control","Tools PM","Risk Management","Reporting","Escalation Handling","Closing Project"] },
+  { id:"secondline", label:"Secondline", jumlah:12, done:0, warna:"var(--purple)", bg:"var(--purple-light)",
+    topik:["Visi & Misi Studio","Leadership Dasar","Coaching & Mentoring","Delegasi Tugas","Evaluasi Performa","Komunikasi Strategis","Pengambilan Keputusan","Manajemen Konflik","Budaya Tim","KPI & Metrik","Kaderisasi","Succession Planning"] },
+  { id:"illus", label:"Illustrator", jumlah:14, done:0, warna:"var(--purple)", bg:"var(--purple-light)",
+    topik:["Anatomi Karakter","Color Theory","Art Style VTuber","Chibi Proportions","Layering PSD","Expression Sheet","Costume Design","Hair & Accessories","Background Basic","Line Art Quality","Coloring & Shading","Lighting Effect","Portfolio Building","Client Communication"] },
+  { id:"rigger", label:"Rigger/Animator", jumlah:14, done:0, warna:"var(--coral)", bg:"var(--coral-light)",
+    topik:["Live2D Dasar","Mesh Deformer","Parameter Setup","Physics Setup","Expression Toggle","Outfit Switch","Breath & Idle","Mouth Shapes","Eye Tracking","Hand Rigging","Tail & Hair Physics","VTube Studio Setup","Model Export","QC & Delivery"] },
+  { id:"3d", label:"3D Modeler", jumlah:14, done:0, warna:"var(--blue)", bg:"var(--blue-light)",
+    topik:["Blender Dasar","Character Modeling","UV Unwrapping","Texturing","Rigging 3D","VRM Setup","BlendShape","Spring Bone","Export & Test","AR Filter Spark","3D Print Prep","Watertight Mesh","Support Structure","Finishing & Paint"] },
 ];
 
 export const WORKSHOP_JRUHUB = [
   { id:"layer0", label:"Layer 0 — 5 Pilar Refleksi Diri", bulan:"Bulan 1",
     items:["Adab","Ilmu","Ruang Senyap","Pencapaian","Rezeki"],
-    warna:"#085041", bg:"#E1F5EE" },
+    warna:"var(--green)",  bg:"var(--green-light)"  },
   { id:"layer1", label:"Layer 1 — Ilmu Omprengan", bulan:"Bulan 2–7",
     items:["Merevisi Generasi","Memimpin Diri","Keberanian","Inisiatif & Kreatif","Semangat","Pikiran & Tubuh"],
-    warna:"#3C3489", bg:"#EEEDFE" },
+    warna:"var(--purple)", bg:"var(--purple-light)" },
   { id:"layer2", label:"Layer 2 — Leadership Skill Training", bulan:"Bulan 8–15",
     items:["Pendamping Design","Melakukan Profiling","Membangun Motif","Komunikasi Mentor","Mentee Tidak Tumbuh","Naluri","Public Speaking","Bahasa Tubuh & Komunal"],
-    warna:"#633806", bg:"#FAEEDA" },
+    warna:"var(--amber)",  bg:"var(--amber-light)"  },
 ];
 
 export const REWARD_LIST = [

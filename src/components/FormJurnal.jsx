@@ -1,8 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { TIM } from '../data/tim';
-
-const ANGGOTA = TIM.map(t => ({ nama: t.nama, divisi: t.divisi, level: t.level }));
+import { useAuth } from '../hooks/useAuth';
 
 function StarRating({ label, name, value, onChange }) {
   return (
@@ -49,8 +48,15 @@ function MoodSlider({ value, onChange }) {
 }
 
 export default function FormJurnal({ onSuccess }) {
+  const { user } = useAuth();
+
+  // Cari data anggota berdasarkan user yang login
+  const timData = TIM.find(t => t.nama === user?.nama);
+
   const [form, setForm] = useState({
-    nama: '', divisi: '', level_karier: '',
+    nama: user?.nama || '',
+    divisi: timData?.divisi || '',
+    level_karier: timData?.level || '',
     pencapaian_1: '', pencapaian_2: '', pencapaian_3: '',
     hambatan: '', pelajaran: '', target_depan: '',
     mood: 7, skor_karya: 0, skor_waktu: 0, skor_komunikasi: 0, skor_skill: 0,
@@ -60,17 +66,15 @@ export default function FormJurnal({ onSuccess }) {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
 
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  useEffect(() => {
+    if (user?.nama) {
+      const t = TIM.find(x => x.nama === user.nama);
+      setForm(f => ({ ...f, nama: user.nama, divisi: t?.divisi || '', level_karier: t?.level || '' }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.nama]);
 
-  const handleNama = (nama) => {
-    const anggota = ANGGOTA.find(a => a.nama === nama);
-    setForm(f => ({
-      ...f,
-      nama,
-      divisi: anggota?.divisi || '',
-      level_karier: anggota?.level || '',
-    }));
-  };
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -103,18 +107,30 @@ export default function FormJurnal({ onSuccess }) {
       {/* Identitas */}
       <div className="card" style={{ marginBottom:16 }}>
         <div style={{ fontSize:13, fontWeight:600, marginBottom:12, color:'var(--green)' }}>👤 Identitas</div>
-        <div style={{ marginBottom:10 }}>
-          <label style={{ fontSize:12, fontWeight:500, display:'block', marginBottom:5 }}>Nama *</label>
-          <select value={form.nama} onChange={e => handleNama(e.target.value)} required>
-            <option value="">— Pilih namamu —</option>
-            {ANGGOTA.map(a => <option key={a.nama} value={a.nama}>{a.nama}</option>)}
-          </select>
-        </div>
-        {form.divisi && (
-          <div style={{ fontSize:11, color:'var(--text-2)', marginTop:4 }}>
-            {form.divisi} — {form.level_karier}
+        <div style={{
+          display:'flex', alignItems:'center', gap:12,
+          padding:'10px 12px', borderRadius:10,
+          background:'var(--surface-2)', border:'1px solid var(--border)',
+        }}>
+          <div style={{
+            width:40, height:40, borderRadius:10, flexShrink:0,
+            background:'var(--green-light)', color:'var(--green)',
+            display:'flex', alignItems:'center', justifyContent:'center',
+            fontSize:14, fontWeight:800,
+          }}>
+            {user?.nama?.split(' ').slice(0,2).map(w=>w[0]).join('')}
           </div>
-        )}
+          <div>
+            <div style={{ fontSize:14, fontWeight:700 }}>{form.nama}</div>
+            <div style={{ fontSize:11, color:'var(--text-2)', marginTop:2 }}>
+              {form.divisi} — {form.level_karier}
+            </div>
+          </div>
+          <div style={{ marginLeft:'auto', fontSize:10, color:'var(--green)', fontWeight:600,
+            background:'var(--green-light)', padding:'3px 8px', borderRadius:6 }}>
+            ✓ Terdeteksi otomatis
+          </div>
+        </div>
       </div>
 
       {/* Pencapaian */}
