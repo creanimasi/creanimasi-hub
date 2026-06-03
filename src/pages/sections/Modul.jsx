@@ -10,19 +10,45 @@ const DIVISI_TO_MODUL = DIVISI_TO_MODUL_ID;
 export function Modul() {
   const { user }    = useAuth();
   const isAdmin     = user?.role === 'admin';
-  const [topik,     setTopik]    = useState([]);   // modul_topik rows
+  const [topik,     setTopik]    = useState([]);
+  const [topikNama, setTopikNama]= useState({}); // { 'modulId|idx': 'nama custom' }
   const [loading,   setLoading]  = useState(true);
   const [saving,    setSaving]   = useState({});
+  const [editNama,  setEditNama] = useState(null);  // 'modulId|idx' yang sedang diedit
+  const [editVal,   setEditVal]  = useState('');
   const [expanded,  setExpanded] = useState(null); // modul_id expand
   const [memberExp, setMemberExp]= useState(null); // 'nama|modulId' expand
 
   const load = useCallback(async () => {
     try {
-      const res = await api.getModulTopik(isAdmin ? undefined : user?.nama);
-      setTopik(res.data || []);
-    } catch {}
-    finally { setLoading(false); }
+      const [topikRes, namaRes] = await Promise.all([
+        api.getModulTopik(isAdmin ? undefined : user?.nama),
+        api.getModulTopikNama(),
+      ]);
+      setTopik(topikRes.data || []);
+      // Buat lookup { 'modulId|idx': 'nama' }
+      const namaMap = {};
+      (namaRes.data || []).forEach(r => { namaMap[`${r.modul_id}|${r.topik_idx}`] = r.nama; });
+      setTopikNama(namaMap);
+    } catch (err) {
+      console.error('Gagal load modul topik:', err.message);
+    } finally { setLoading(false); }
   }, [isAdmin, user?.nama]);
+
+  const saveNama = async (modulId, idx) => {
+    const key  = `${modulId}|${idx}`;
+    const nama = editVal.trim();
+    if (!nama) { setEditNama(null); return; }
+    try {
+      await api.updateModulTopikNama(modulId, idx, nama);
+      setTopikNama(prev => ({ ...prev, [key]: nama }));
+    } catch {}
+    setEditNama(null);
+  };
+
+  // Ambil nama topik (custom dari DB atau default dari tim.js)
+  const getNamaTopic = (modulId, idx, defaultNama) =>
+    topikNama[`${modulId}|${idx}`] || defaultNama;
 
   useEffect(() => { load(); }, [load]);
 
@@ -182,30 +208,48 @@ export function Modul() {
                         <div style={{ padding:'10px 8px 4px', borderRadius:8,
                           background:'var(--surface-2)', marginTop:4 }}>
                           <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-                            {(m.topik || Array.from({length:m.jumlah}, (_,i)=>`Topik ${i+1}`)).map((topikNama, idx) => {
+                            {(m.topik || Array.from({length:m.jumlah}, (_,i)=>`Topik ${i+1}`)).map((defaultNama, idx) => {
+                              const displayNama = getNamaTopic(m.id, idx, defaultNama);
                               const sel   = isSelesai(a.nama, m.id, idx);
                               const bkey  = `${a.nama}|${m.id}|${idx}`;
                               const busy  = !!saving[bkey];
+                              const nkey  = `${m.id}|${idx}`;
+                              const isEditingThis = editNama === nkey;
                               return (
-                                <button key={idx}
-                                  disabled={busy || (!isAdmin)}
-                                  onClick={() => isAdmin && toggleTopik(a.nama, m.id, idx, sel)}
-                                  title={topikNama}
-                                  style={{
-                                    padding:'4px 10px', borderRadius:20, fontSize:11,
-                                    border:`1px solid ${sel ? m.warna : 'var(--border-2)'}`,
-                                    background: sel ? m.bg : 'var(--surface)',
-                                    color: sel ? m.warna : 'var(--text-2)',
-                                    fontWeight: sel ? 700 : 400,
-                                    cursor: isAdmin ? (busy ? 'wait' : 'pointer') : 'default',
-                                    transition:'all .15s',
-                                    boxShadow: sel ? `0 0 6px ${m.warna}40` : 'none',
-                                    opacity: busy ? .6 : 1,
-                                    display:'flex', alignItems:'center', gap:4,
-                                  }}>
-                                  {sel && <span style={{ fontSize:9 }}>✓</span>}
-                                  {topikNama}
-                                </button>
+                                <div key={idx} style={{ position:'relative' }}>
+                                  {isEditingThis && isAdmin ? (
+                                    <input
+                                      autoFocus
+                                      value={editVal}
+                                      onChange={e => setEditVal(e.target.value)}
+                                      onBlur={() => saveNama(m.id, idx)}
+                                      onKeyDown={e => { if (e.key === 'Enter') saveNama(m.id, idx); if (e.key === 'Escape') setEditNama(null); }}
+                                      style={{ fontSize:11, padding:'3px 8px', borderRadius:20, width:130,
+                                        border:`1px solid var(--green)`, background:'var(--surface)' }}
+                                    />
+                                  ) : (
+                                    <button
+                                      disabled={busy || (!isAdmin)}
+                                      onClick={() => isAdmin && toggleTopik(a.nama, m.id, idx, sel)}
+                                      onDoubleClick={() => { if (isAdmin) { setEditNama(nkey); setEditVal(displayNama); } }}
+                                      title={isAdmin ? `${displayNama} — double-click untuk rename` : displayNama}
+                                      style={{
+                                        padding:'4px 10px', borderRadius:20, fontSize:11,
+                                        border:`1px solid ${sel ? m.warna : 'var(--border-2)'}`,
+                                        background: sel ? m.bg : 'var(--surface)',
+                                        color: sel ? m.warna : 'var(--text-2)',
+                                        fontWeight: sel ? 700 : 400,
+                                        cursor: isAdmin ? (busy ? 'wait' : 'pointer') : 'default',
+                                        transition:'all .15s',
+                                        boxShadow: sel ? `0 0 6px ${m.warna}40` : 'none',
+                                        opacity: busy ? .6 : 1,
+                                        display:'flex', alignItems:'center', gap:4,
+                                      }}>
+                                      {sel && <span style={{ fontSize:9 }}>✓</span>}
+                                      {displayNama}
+                                    </button>
+                                  )}
+                                </div>
                               );
                             })}
                           </div>

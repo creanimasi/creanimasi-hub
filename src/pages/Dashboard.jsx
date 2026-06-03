@@ -1,9 +1,45 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { RadialBarChart, RadialBar, ResponsiveContainer } from 'recharts';
 import { TIM, TIPE_COLOR, DIVISI_COLOR } from '../data/tim';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../services/api';
 import { STUDIO_CONFIG } from '../data/constants';
+
+// Ring chart tunggal untuk satu metrik
+function MetricRing({ value, max, color, label, sub }) {
+  const pct  = Math.round((value / max) * 100);
+  const data = [{ value: pct, fill: color }];
+  return (
+    <div style={{ textAlign: 'center', flex: '1 1 90px' }}>
+      <div style={{ position: 'relative', width: 80, height: 80, margin: '0 auto' }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <RadialBarChart
+            innerRadius="65%" outerRadius="100%"
+            data={data} startAngle={90} endAngle={-270}
+            barSize={8}>
+            {/* Track (background ring) */}
+            <RadialBar background={{ fill: 'var(--border)' }} dataKey="value"
+              cornerRadius={10} />
+          </RadialBarChart>
+        </ResponsiveContainer>
+        {/* Center text */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color, lineHeight: 1 }}>
+            {value ?? '—'}
+          </div>
+          <div style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 1 }}>/{max}</div>
+        </div>
+      </div>
+      <div style={{ fontSize: 11, fontWeight: 600, marginTop: 6 }}>{label}</div>
+      {sub && <div style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
 
 // Normalisasi kolom skor dari berbagai tabel profiling ke format standar
 function extractScores(p, fallback) {
@@ -78,28 +114,65 @@ function DashboardMember({ user }) {
 
   return (
     <div>
-      {/* Onboarding banner */}
+      {/* Onboarding — member baru belum isi profiling */}
       {!hasProfile && !onboardDismissed && (
         <div style={{
-          marginBottom: 16, padding: '14px 16px', borderRadius: 12,
-          background: 'linear-gradient(135deg, var(--purple-light), var(--green-light))',
-          border: '1px solid rgba(155,143,255,0.25)',
-          display: 'flex', alignItems: 'center', gap: 14,
+          marginBottom: 20, borderRadius: 16, overflow: 'hidden',
+          border: '1px solid rgba(155,143,255,0.3)',
+          background: 'linear-gradient(135deg, var(--surface) 0%, var(--purple-light) 100%)',
         }}>
-          <span style={{ fontSize: 28, flexShrink: 0 }}>👋</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>
-              Selamat datang, {user?.nama?.split(' ')[0]}!
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text-2)' }}>
-              Lengkapi <strong>Form Profiling</strong> agar Mas Kholed bisa memahami kekuatanmu dan mendukung perkembanganmu di Creanimasi.
+          {/* Header */}
+          <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid rgba(155,143,255,0.15)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: 14, flexShrink: 0,
+                background: 'var(--purple-light)', border: '2px solid rgba(155,143,255,0.3)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24,
+              }}>👋</div>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 16 }}>
+                  Selamat datang, {user?.nama?.split(' ')[0]}! 🎉
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>
+                  Selesaikan 3 langkah ini agar sistemmu siap digunakan.
+                </div>
+              </div>
+              <button onClick={dismissOnboard} title="Tutup"
+                style={{ marginLeft:'auto', background:'none', border:'none', cursor:'pointer',
+                  fontSize:16, color:'var(--text-3)', padding:4, flexShrink:0 }}>✕</button>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
-            <button className="btn btn-primary" style={{ fontSize: 11 }}
-              onClick={() => navigate('/profiling')}>Isi Profiling →</button>
-            <button className="btn" style={{ fontSize: 11 }}
-              onClick={dismissOnboard}>Nanti dulu</button>
+          {/* Steps */}
+          <div style={{ padding: '14px 20px', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {[
+              { step: 1, icon: '👤', label: 'Isi Form Profiling', sub: 'Kenalkan dirimu ke tim', done: false, path: '/profiling', color: 'var(--purple)' },
+              { step: 2, icon: '📓', label: 'Isi Jurnal Pertama', sub: 'Refleksi mingguan rutin', done: false, path: '/jurnal/isi', color: 'var(--green)' },
+              { step: 3, icon: '📚', label: 'Cek Modul Belajar',  sub: 'Lihat topik divisimu',   done: false, path: '/modul',      color: 'var(--amber)' },
+            ].map(s => (
+              <div key={s.step} onClick={() => navigate(s.path)}
+                style={{
+                  flex: '1 1 160px', padding: '12px 14px', borderRadius: 12,
+                  background: 'var(--surface)', border: `1px solid ${s.color}30`,
+                  cursor: 'pointer', transition: 'border-color .15s, transform .15s',
+                  display: 'flex', alignItems: 'center', gap: 10,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = s.color; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = `${s.color}30`; e.currentTarget.style.transform = ''; }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                  background: `${s.color}15`, fontSize: 18,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>{s.icon}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700 }}>{s.label}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{s.sub}</div>
+                </div>
+                <span style={{ fontSize: 14, color: s.color }}>→</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: '0 20px 14px', fontSize: 11, color: 'var(--text-3)' }}>
+            Kamu bisa tutup ini kapan saja. Profiling membantu Mas Kholed memahami kekuatanmu. ✨
           </div>
         </div>
       )}
@@ -157,24 +230,27 @@ function DashboardMember({ user }) {
         </div>
       </div>
 
-      {/* Stats member */}
+      {/* Stats member — ring charts */}
       {member && (
-        <div className="metrics-grid" style={{ marginBottom: 16 }}>
-          {[
-            { label: 'Skill Teknis',  val: scores.skill,      max: 5,  color: 'var(--blue)'   },
-            { label: 'Komunikasi',    val: scores.komunikasi,  max: 5,  color: 'var(--purple)' },
-            { label: 'Kriteria PILAR', val: scores.kriteria,    max: 5,  color: 'var(--amber)'  },
-            { label: 'Kepuasan Diri', val: scores.kepuasan,   max: 10, color: 'var(--green)'  },
-          ].map(s => (
-            <div key={s.label} className="metric">
-              <div className="metric-val" style={{ color: s.color, fontSize: 22 }}>
-                {s.val ?? '—'}{s.val != null ? `/${s.max}` : ''}
-              </div>
-              <div className="metric-lbl">{s.label}</div>
-              {!scoresLoaded && <div className="metric-sub" style={{ color:'var(--text-3)', fontSize:9 }}>Memuat...</div>}
-              {scoresLoaded && !scores.fromDB && <div className="metric-sub" style={{ color:'var(--text-3)', fontSize:9 }}>data awal</div>}
-            </div>
-          ))}
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)' }}>📊 Metrik Performa</div>
+            {scoresLoaded && !scores.fromDB && (
+              <span style={{ fontSize: 10, color: 'var(--text-3)',
+                background: 'var(--surface-2)', padding: '2px 8px', borderRadius: 99 }}>
+                data awal · isi profiling untuk update
+              </span>
+            )}
+            {!scoresLoaded && (
+              <span style={{ fontSize: 10, color: 'var(--text-3)' }}>memuat...</span>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'space-around', flexWrap: 'wrap' }}>
+            <MetricRing value={scores.skill}      max={5}  color="var(--blue)"   label="Skill Teknis"   sub={scores.fromDB ? '📊 dari profiling' : null} />
+            <MetricRing value={scores.komunikasi} max={5}  color="var(--purple)" label="Komunikasi"     />
+            <MetricRing value={scores.kriteria}   max={5}  color="var(--amber)"  label="Kriteria PILAR" />
+            <MetricRing value={scores.kepuasan}   max={10} color="var(--green)"  label="Kepuasan Diri"  />
+          </div>
         </div>
       )}
 

@@ -58,10 +58,14 @@ export const api = {
   getRevenueHistory: ()             => request('GET', '/revenue/history'),
   saveRevenue:       (data)         => request('POST', '/revenue', data),
 
-  // Modul Topik
+  // Modul Topik (progress)
   getModulTopik:    (nama)                          => request('GET', `/modul-topik${nama ? `?nama=${encodeURIComponent(nama)}` : ''}`),
   updateModulTopik: (nama, modulId, topikIdx, selesai) =>
     request('PATCH', `/modul-topik/${encodeURIComponent(nama)}/${modulId}/${topikIdx}`, { selesai }),
+
+  // Nama topik modul (custom dari admin)
+  getModulTopikNama:    ()                          => request('GET', '/modul-topik-nama'),
+  updateModulTopikNama: (modulId, topikIdx, nama)   => request('PATCH', `/modul-topik-nama/${modulId}/${topikIdx}`, { nama }),
 
   // Modul Progress (legacy — tidak dipakai, digantikan modul-topik)
   // getModulProgress / updateModulProgress dihapus

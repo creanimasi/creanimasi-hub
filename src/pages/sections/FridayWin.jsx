@@ -11,6 +11,7 @@ export function FridayWin() {
   const [showForm, setShowForm] = useState(false);
   const [form,     setForm]     = useState({ tanggal: new Date().toISOString().slice(0,10), headline:'', penerima:'', pesan:'' });
   const [saving,   setSaving]   = useState(false);
+  const [postErr,  setPostErr]  = useState('');
 
   const load = useCallback(() => {
     api.getFridayWin().then(r => setList(r.data||[])).catch(()=>{}).finally(()=>setLoading(false));
@@ -20,8 +21,13 @@ export function FridayWin() {
   const handlePost = async (e) => {
     e.preventDefault();
     setSaving(true);
-    try { await api.postFridayWin(form); setShowForm(false); setForm({ tanggal:new Date().toISOString().slice(0,10), headline:'', penerima:'', pesan:'' }); load(); }
-    catch {}
+    setPostErr('');
+    try {
+      await api.postFridayWin(form);
+      setShowForm(false);
+      setForm({ tanggal:new Date().toISOString().slice(0,10), headline:'', penerima:'', pesan:'' });
+      load();
+    } catch (err) { setPostErr(err.message || 'Gagal posting. Coba lagi.'); }
     finally { setSaving(false); }
   };
 
@@ -77,6 +83,11 @@ export function FridayWin() {
                 placeholder="Ceritakan lebih lengkap tentang pencapaian ini..."
                 style={{ resize:'vertical' }} />
             </div>
+            {postErr && (
+              <div className="alert alert-red" style={{ marginBottom:8, fontSize:12 }}>
+                <span>⚠️</span><div>{postErr}</div>
+              </div>
+            )}
             <div style={{ display:'flex', gap:8 }}>
               <button type="submit" className="btn btn-primary" disabled={saving}>
                 {saving ? 'Posting...' : '🏆 Post Friday Win'}

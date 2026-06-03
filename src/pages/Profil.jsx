@@ -256,37 +256,102 @@ export default function Profil() {
         </form>
       </div>
 
-      {/* Riwayat Profiling */}
+      {/* Riwayat Profiling — dengan perbandingan antar pengisian */}
       {profilingList.length > 0 && (
         <div className="card" style={{ marginTop: 16 }}>
           <div className="card-title" style={{ cursor:'pointer' }}
             onClick={() => setShowRiwayat(v => !v)}>
-            <span>📋 Riwayat Profiling ({profilingList.length} pengisian)</span>
+            <div>
+              <span>📋 Riwayat Profiling</span>
+              <span style={{ fontSize:11, color:'var(--text-3)', marginLeft:6 }}>
+                {profilingList.length} pengisian
+              </span>
+            </div>
             <span style={{ fontSize:11, color:'var(--text-3)' }}>{showRiwayat ? '▲' : '▼'}</span>
           </div>
-          {showRiwayat && profilingList.map((p, i) => (
-            <div key={i} style={{ padding:'10px 0', borderTop: i > 0 ? '1px solid var(--border)' : 'none' }}>
-              <div style={{ fontSize:10, fontWeight:700, color:'var(--text-3)', textTransform:'uppercase',
-                letterSpacing:'.05em', marginBottom:6 }}>
-                Pengisian #{i + 1} — {new Date(p.created_at).toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'})}
-              </div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-                {[
-                  { label:'Level karier',    val:p.level_karier },
-                  { label:'Domisili',        val:p.domisili },
-                  { label:'Sumber semangat', val:p.semangat_kerja },
-                  { label:'Penguras energi', val:p.penguras_energi },
-                  { label:'Target 1 tahun',  val:p.target_1_tahun },
-                  { label:'Kepuasan diri',   val:p.kepuasan_diri ? `${p.kepuasan_diri}/10` : null },
-                ].filter(x => x.val).map(x => (
-                  <div key={x.label}>
-                    <div style={{ fontSize:9, fontWeight:700, color:'var(--text-3)', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:2 }}>{x.label}</div>
-                    <div style={{ fontSize:11 }}>{x.val}</div>
+
+          {showRiwayat && (
+            <>
+              {/* Skor kepuasan trend */}
+              {profilingList.some(p => p.kepuasan_diri) && (
+                <div style={{ marginBottom:14, paddingBottom:14, borderBottom:'1px solid var(--border)' }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:'var(--text-3)',
+                    textTransform:'uppercase', letterSpacing:'.06em', marginBottom:8 }}>
+                    Tren Kepuasan Diri
                   </div>
-                ))}
-              </div>
-            </div>
-          ))}
+                  <div style={{ display:'flex', gap:6, alignItems:'flex-end' }}>
+                    {profilingList.filter(p => p.kepuasan_diri).map((p, i, arr) => {
+                      const prev = arr[i - 1];
+                      const val  = parseFloat(p.kepuasan_diri);
+                      const delta = prev ? val - parseFloat(prev.kepuasan_diri) : null;
+                      const color = val >= 7 ? 'var(--green)' : val >= 5 ? 'var(--amber)' : 'var(--red)';
+                      return (
+                        <div key={i} style={{ flex:1, textAlign:'center' }}>
+                          <div style={{ fontSize:9, color:'var(--text-3)', marginBottom:4 }}>
+                            {new Date(p.created_at).toLocaleDateString('id-ID',{month:'short',year:'2-digit'})}
+                          </div>
+                          <div style={{
+                            height: `${val * 10}px`, minHeight: 20,
+                            background: color, borderRadius: '4px 4px 0 0', opacity: 0.7,
+                            transition: 'height .3s',
+                          }} />
+                          <div style={{ fontSize:12, fontWeight:700, color, marginTop:4 }}>{val}</div>
+                          {delta !== null && (
+                            <div style={{ fontSize:9, color: delta > 0 ? 'var(--green)' : delta < 0 ? 'var(--red)' : 'var(--text-3)' }}>
+                              {delta > 0 ? `▲+${delta}` : delta < 0 ? `▼${delta}` : '='}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* List detail tiap pengisian */}
+              {profilingList.map((p, i) => {
+                const prev = profilingList[i - 1];
+                return (
+                  <div key={i} style={{ padding:'12px 0', borderTop: i > 0 ? '1px solid var(--border)' : 'none' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+                      <div style={{
+                        width:24, height:24, borderRadius:6, flexShrink:0,
+                        background: i === profilingList.length - 1 ? 'var(--green-light)' : 'var(--surface-2)',
+                        color: i === profilingList.length - 1 ? 'var(--green)' : 'var(--text-3)',
+                        display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700,
+                      }}>#{i + 1}</div>
+                      <div style={{ fontSize:11, fontWeight:600 }}>
+                        {new Date(p.created_at).toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}
+                      </div>
+                      {i === profilingList.length - 1 && (
+                        <span style={{ fontSize:9, background:'var(--green-light)', color:'var(--green)',
+                          padding:'1px 7px', borderRadius:99, fontWeight:700 }}>Terbaru</span>
+                      )}
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                      {[
+                        { label:'Level karier',    val:p.level_karier,    prev:prev?.level_karier },
+                        { label:'Kepuasan diri',   val:p.kepuasan_diri != null ? `${p.kepuasan_diri}/10` : null, prev:prev?.kepuasan_diri != null ? `${prev.kepuasan_diri}/10` : null },
+                        { label:'Sumber semangat', val:p.semangat_kerja,  prev:prev?.semangat_kerja },
+                        { label:'Target 1 tahun',  val:p.target_1_tahun,  prev:prev?.target_1_tahun },
+                      ].filter(x => x.val).map(x => (
+                        <div key={x.label}>
+                          <div style={{ fontSize:9, fontWeight:700, color:'var(--text-3)',
+                            textTransform:'uppercase', letterSpacing:'.05em', marginBottom:2 }}>{x.label}</div>
+                          <div style={{ fontSize:11 }}>{x.val}</div>
+                          {x.prev && x.prev !== x.val && (
+                            <div style={{ fontSize:9, color:'var(--text-3)', marginTop:2, fontStyle:'italic' }}>
+                              sebelumnya: {x.prev}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
         </div>
       )}
 

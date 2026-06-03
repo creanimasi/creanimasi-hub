@@ -40,15 +40,18 @@ export function Reward() {
   }, []);
   useEffect(() => { loadRewards(); }, [loadRewards]);
 
+  const [rewardErr, setRewardErr] = useState('');
+  const [revErr,    setRevErr]    = useState({});
+
   const handleSaveReward = async (e) => {
     e.preventDefault();
-    setSavingReward(true);
+    setSavingReward(true); setRewardErr('');
     try {
       await api.simpanReward(rewardForm);
       setShowRewardForm(false);
       setRewardForm({ tanggal: new Date().toISOString().slice(0,10), nama:'', kategori:'', trigger:'', bentuk:'', nominal:'', catatan:'' });
       loadRewards();
-    } catch {}
+    } catch (err) { setRewardErr(err.message || 'Gagal simpan reward.'); }
     finally { setSavingReward(false); }
   };
 
@@ -60,12 +63,14 @@ export function Reward() {
   const handleSaveRev = async (nama) => {
     const jumlah = parseFloat(editRev[nama] ?? getJumlah(nama)) || 0;
     setSaving(s => ({ ...s, [nama]: true }));
+    setRevErr(e => ({ ...e, [nama]: '' }));
     try {
       await api.saveRevenue({ bulan, tahun, nama, jumlah, target: TARGET_PER_ADMIN });
       loadRevenue();
       setEditRev(e => { const n = { ...e }; delete n[nama]; return n; });
-    } catch {}
-    finally { setSaving(s => { const n = { ...s }; delete n[nama]; return n; }); }
+    } catch (err) {
+      setRevErr(e => ({ ...e, [nama]: err.message || 'Gagal simpan' }));
+    } finally { setSaving(s => { const n = { ...s }; delete n[nama]; return n; }); }
   };
 
   const totalRev    = ADMIN_LIST.reduce((s, a) => s + getJumlah(a.nama), 0);
@@ -163,6 +168,7 @@ export function Reward() {
                       borderColor: editRev[a.nama] !== undefined ? 'var(--green)' : 'var(--border-2)' }} />
                 </div>
                 {saving[a.nama] && <span style={{ fontSize: 10, color: 'var(--text-3)' }}>...</span>}
+                {revErr[a.nama] && <span style={{ fontSize: 10, color: 'var(--red)' }} title={revErr[a.nama]}>⚠</span>}
               </div>
             </div>
           );
@@ -286,6 +292,11 @@ export function Reward() {
                 <textarea rows={2} value={rewardForm.catatan} onChange={e=>setRewardForm(f=>({...f,catatan:e.target.value}))}
                   placeholder="Alasan pemberian reward..." style={{ resize:'vertical' }} />
               </div>
+              {rewardErr && (
+                <div className="alert alert-red" style={{ marginBottom:8, fontSize:11 }}>
+                  <span>⚠️</span><div>{rewardErr}</div>
+                </div>
+              )}
               <div style={{ display:'flex', gap:8 }}>
                 <button type="submit" className="btn btn-primary" disabled={savingReward} style={{ fontSize:12 }}>
                   {savingReward ? 'Menyimpan...' : '🏆 Simpan Reward'}
