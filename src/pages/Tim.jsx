@@ -125,7 +125,7 @@ function MiniCard({ m, onClick }) {
           {[
             { l: 'SKL', v: m.skill,       max: 5  },
             { l: 'KOM', v: m.komunikasi,  max: 5  },
-            { l: 'KIB', v: m.kriteria,    max: 5  },
+            { l: 'PIL', v: m.kriteria,    max: 5  },
             { l: 'PUA', v: m.kepuasan,    max: 10 },
           ].map(s => {
             const pct = (s.v / s.max) * 100;
@@ -157,7 +157,13 @@ function CharacterModal({ m, onClose }) {
   const score = calcScore(m);
   const inits = m.nama.split(' ').slice(0, 2).map(w => w[0]).join('');
 
-  const AVG = { skill: 3.7, komunikasi: 4.0, kriteria: 3.4, kepuasan: 7.4 };
+  const avg = (key) => TIM.reduce((s, t) => s + (t[key] || 0), 0) / TIM.length;
+  const AVG = {
+    skill:      Math.round(avg('skill')      * 10) / 10,
+    komunikasi: Math.round(avg('komunikasi') * 10) / 10,
+    kriteria:   Math.round(avg('kriteria')   * 10) / 10,
+    kepuasan:   Math.round(avg('kepuasan')   * 10) / 10,
+  };
 
   // Tutup dengan Escape
   useEffect(() => {

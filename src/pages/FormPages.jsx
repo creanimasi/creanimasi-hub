@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import FormJurnal from '../components/FormJurnal';
 import FormProfiling from '../components/FormProfiling';
@@ -6,29 +6,48 @@ import { useAuth } from '../hooks/useAuth';
 import { api } from '../services/api';
 
 export function PageFormJurnal() {
-  const navigate   = useNavigate();
+  const navigate    = useNavigate();
   const [submitted, setSubmitted] = useState(false);
+  const bannerRef   = useRef(null);
+
+  const handleSuccess = () => {
+    setSubmitted(true);
+    // Scroll ke banner sukses agar user pasti melihatnya
+    setTimeout(() => bannerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+  };
+
   return (
     <div style={{ maxWidth: 680, margin: '0 auto' }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
-        <div className="alert alert-green" style={{ flex:1, margin:0 }}>
-          <span>📓</span>
-          <div>Isi jurnal ini setiap <strong>Jumat</strong>. Butuh waktu sekitar 10 menit — tapi dampaknya bisa bertahan seminggu penuh.</div>
-        </div>
-        <button onClick={() => navigate('/jurnal/riwayat')}
-          style={{ marginLeft:12, padding:'7px 14px', borderRadius:8, flexShrink:0,
-            border:'1px solid var(--border-2)', background:'var(--surface-2)',
-            color:'var(--text-2)', cursor:'pointer', fontSize:12, fontWeight:600 }}>
-          📋 Riwayat
-        </button>
-      </div>
-      {submitted && (
+      <div ref={bannerRef} />
+      {submitted ? (
         <div className="alert alert-green" style={{ marginBottom: 16 }}>
           <span>✅</span>
-          <div>Jurnal minggu ini sudah tersimpan. Sampai Jumat depan!</div>
+          <div>
+            <strong>Jurnal minggu ini sudah tersimpan!</strong>
+            <div style={{ marginTop:4, fontSize:12 }}>Sampai Jumat depan. Konsistensi adalah kuncinya 💪</div>
+          </div>
+          <button onClick={() => navigate('/jurnal/riwayat')}
+            style={{ marginLeft:'auto', padding:'5px 12px', borderRadius:7, flexShrink:0,
+              border:'1px solid var(--green)', background:'var(--green-light)',
+              color:'var(--green)', cursor:'pointer', fontSize:11, fontWeight:600 }}>
+            Lihat Riwayat →
+          </button>
+        </div>
+      ) : (
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+          <div className="alert alert-green" style={{ flex:1, margin:0 }}>
+            <span>📓</span>
+            <div>Isi jurnal ini setiap <strong>Jumat</strong>. Butuh waktu sekitar 10 menit.</div>
+          </div>
+          <button onClick={() => navigate('/jurnal/riwayat')}
+            style={{ marginLeft:12, padding:'7px 14px', borderRadius:8, flexShrink:0,
+              border:'1px solid var(--border-2)', background:'var(--surface-2)',
+              color:'var(--text-2)', cursor:'pointer', fontSize:12, fontWeight:600 }}>
+            📋 Riwayat
+          </button>
         </div>
       )}
-      <FormJurnal onSuccess={() => setSubmitted(true)} />
+      {!submitted && <FormJurnal onSuccess={handleSuccess} />}
     </div>
   );
 }

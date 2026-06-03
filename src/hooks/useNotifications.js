@@ -99,8 +99,19 @@ export function useNotifications(user) {
 
   useEffect(() => {
     build();
-    const interval = setInterval(build, 5 * 60 * 1000); // poll tiap 5 menit
-    return () => clearInterval(interval);
+    const interval = setInterval(() => {
+      // Pause polling saat tab tidak aktif — hemat server request
+      if (!document.hidden) build();
+    }, 5 * 60 * 1000);
+
+    // Resume saat user kembali ke tab
+    const onVisible = () => { if (!document.hidden) build(); };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [build]);
 
   const readAll = () => {

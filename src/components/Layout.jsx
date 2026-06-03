@@ -220,7 +220,7 @@ export default function Layout({ children, path }) {
                   {greeting.icon} {greeting.text},
                 </div>
                 <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: '-0.3px', lineHeight: 1 }}>
-                  {isAdmin ? 'Mas Kholed' : firstName}
+                  {firstName}
                   <span style={{ color: 'var(--green)', marginLeft: 4 }}>_</span>
                 </div>
               </div>

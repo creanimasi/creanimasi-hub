@@ -2,14 +2,9 @@ import { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import { TIM } from '../data/tim';
+import { DIVISI_TO_PROFILING_ID } from '../data/constants';
 
-const NAMA_TO_DIVISI_ID = {
-  'Admin':       'admin',
-  'PM':          'pm',
-  'Illustrator': 'illustrator',
-  'Rigger':      'rigger',
-  '3D Modeler':  '3d',
-};
+const NAMA_TO_DIVISI_ID = DIVISI_TO_PROFILING_ID;
 
 // ── FIELD HELPERS ─────────────────────────────────────────────────────────
 function Field({ label, required, hint, children }) {
@@ -432,6 +427,16 @@ export default function FormProfiling({ onSuccess }) {
 
       {divisi && (
         <>
+          {/* Progress indicator 4 section */}
+          <div style={{ display:'flex', gap:6, marginBottom:16, alignItems:'center' }}>
+            {['Identitas & Latar', 'Skill ' + (DIVISI_LIST.find(d=>d.id===divisi)?.label||''), 'Karakter & Kerja', 'Motivasi & Arah'].map((label, i) => (
+              <div key={i} style={{ flex:1, textAlign:'center' }}>
+                <div style={{ height:4, borderRadius:99, background:`var(--green)`, opacity: 0.3 + i * 0.2, marginBottom:4 }} />
+                <div style={{ fontSize:9, color:'var(--text-3)', lineHeight:1.2 }}>{label}</div>
+              </div>
+            ))}
+          </div>
+
           <BagianUmum form={form} set={set} />
           <TeknisDivisi divisi={divisi} form={form} set={set} />
           <BagianKarakter form={form} set={set} />

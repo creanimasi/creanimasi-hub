@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TIM, TIPE_COLOR, DIVISI_COLOR } from '../data/tim';
 import { useAuth } from '../hooks/useAuth';
@@ -31,7 +31,11 @@ function DashboardMember({ user }) {
   const dc        = member ? (DIVISI_COLOR[member.divisi] || {}) : {};
   const inits     = user.nama.split(' ').slice(0, 2).map(w => w[0]).join('');
 
-  const fallbackScores = { skill: member?.skill, komunikasi: member?.komunikasi, kriteria: member?.kriteria, kepuasan: member?.kepuasan };
+  const fallbackScores = useMemo(
+    () => ({ skill: member?.skill, komunikasi: member?.komunikasi, kriteria: member?.kriteria, kepuasan: member?.kepuasan }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [member?.id]
+  );
   const [scores, setScores] = useState(fallbackScores);
   const [scoresLoaded, setScoresLoaded] = useState(false);
 

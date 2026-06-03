@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { TIM, TIPE_COLOR, DIVISI_COLOR } from '../data/tim';
+import { DIVISI_TO_PROFILING_ID } from '../data/constants';
 import { api } from '../services/api';
 
 export default function Profil() {
@@ -22,8 +23,7 @@ export default function Profil() {
   const [profilingList, setProfilingList] = useState([]);
   const [showRiwayat, setShowRiwayat]     = useState(false);
 
-  const divisiMap = { 'Admin':'admin','PM':'pm','Illustrator':'illustrator','Rigger':'rigger','3D Modeler':'3d' };
-  const divisiId  = divisiMap[member?.divisi] || 'admin';
+  const divisiId  = DIVISI_TO_PROFILING_ID[member?.divisi] || 'admin';
 
   useEffect(() => {
     api.getProfilingMe()

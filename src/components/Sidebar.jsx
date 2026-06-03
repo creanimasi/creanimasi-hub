@@ -4,11 +4,11 @@ import { useAuth } from '../hooks/useAuth';
 
 const NAV_ADMIN = [
   { section: 'Utama' },
-  { path: '/',           label: 'Dashboard',           badge: null, badgeType: '' },
-  { path: '/tim',        label: 'Tim',                 badge: 11,   badgeType: 'green' },
-  { path: '/tim/kelola', label: 'Kelola Tim',          badge: null, badgeType: '' },
-  { path: '/modul',      label: 'Modul Belajar',       badge: null, badgeType: '' },
-  { path: '/jurnal',     label: 'Jurnal Refleksi',     badge: 3,    badgeType: '' },
+  { path: '/',           label: 'Dashboard',           badge: null,              badgeType: '' },
+  { path: '/tim',        label: 'Tim',                 badge: TIM.length,        badgeType: 'green' },
+  { path: '/tim/kelola', label: 'Kelola Tim',          badge: null,              badgeType: '' },
+  { path: '/modul',      label: 'Modul Belajar',       badge: null,              badgeType: '' },
+  { path: '/jurnal',     label: 'Jurnal Refleksi',     badge: null,              badgeType: '' },
   { section: 'Form' },
   { path: '/jurnal/isi', label: 'Isi Jurnal Mingguan', badge: null, badgeType: '' },
   { path: '/profiling',  label: 'Form Profiling Tim',  badge: null, badgeType: '' },

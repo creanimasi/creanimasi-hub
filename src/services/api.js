@@ -1,7 +1,7 @@
 // src/services/api.js
 // Semua call ke backend dari frontend
 
-const BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api/hub';
+const BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001/api/hub';
 
 function getToken() { return localStorage.getItem('hub_token'); }
 
@@ -61,9 +61,8 @@ export const api = {
   updateModulTopik: (nama, modulId, topikIdx, selesai) =>
     request('PATCH', `/modul-topik/${encodeURIComponent(nama)}/${modulId}/${topikIdx}`, { selesai }),
 
-  // Modul Progress
-  getModulProgress:    ()              => request('GET', '/modul'),
-  updateModulProgress: (nama, modulId, done) => request('PATCH', `/modul/${encodeURIComponent(nama)}/${modulId}`, { done }),
+  // Modul Progress (legacy — tidak dipakai, digantikan modul-topik)
+  // getModulProgress / updateModulProgress dihapus
 
   // Tim
   getTim:          (semua) => request('GET', `/tim${semua ? '?semua=1' : ''}`),
