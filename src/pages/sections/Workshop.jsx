@@ -57,7 +57,7 @@ export function Workshop() {
       {/* Header stats */}
       <div className="metrics-grid" style={{ marginBottom: 16 }}>
         <div className="metric"><div className="metric-val">{totalSesi}</div><div className="metric-lbl">Total sesi</div></div>
-        <div className="metric"><div className="metric-val">{WORKSHOP_JRUHUB.length * 5}</div><div className="metric-lbl">Bulan program</div></div>
+        <div className="metric"><div className="metric-val">{15}</div><div className="metric-lbl">Bulan program</div></div>
         <div className="metric">
           <div className="metric-val text-green">{totalHadir}</div>
           <div className="metric-lbl">Kehadiran tercatat</div>

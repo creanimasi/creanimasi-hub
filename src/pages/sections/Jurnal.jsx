@@ -5,9 +5,29 @@ import { downloadCsv } from '../../utils/exportCsv';
 
 // ── JURNAL ─────────────────────────────────────────────────────────────────
 export function Jurnal() {
-  const [entries,  setEntries]  = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [expanded, setExpanded] = useState(null);
+  const [entries,    setEntries]    = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [expanded,   setExpanded]   = useState(null);
+  const [filterNama, setFilterNama] = useState('');
+  const [showLimit,  setShowLimit]  = useState(10);
+  const [replyOpen,  setReplyOpen]  = useState(null); // jurnal id yang dibuka reply-nya
+  const [replyText,  setReplyText]  = useState('');
+  const [replySaving,setReplySaving]= useState(false);
+
+  const handleReply = async (id) => {
+    if (!replyText.trim()) return;
+    setReplySaving(true);
+    try {
+      await api.replyJurnal(id, replyText);
+      // Update local state agar tidak perlu refetch
+      setEntries(prev => prev.map(e => e.id === id
+        ? { ...e, catatan_mentor: `[ADMIN_REPLY] ${replyText}` }
+        : e
+      ));
+      setReplyOpen(null); setReplyText('');
+    } catch {}
+    finally { setReplySaving(false); }
+  };
 
   useEffect(() => {
     api.getJurnal()
@@ -122,12 +142,53 @@ export function Jurnal() {
                   {j.pencapaian_1 && <div style={{ fontSize:11, marginBottom:4 }}><span style={{ color:'var(--text-3)' }}>🏆 </span>{j.pencapaian_1}</div>}
                   {j.hambatan     && <div style={{ fontSize:11, marginBottom:4 }}><span style={{ color:'var(--text-3)' }}>⚡ </span>{j.hambatan}</div>}
                   {j.target_depan && <div style={{ fontSize:11 }}><span style={{ color:'var(--text-3)' }}>🎯 </span>{j.target_depan}</div>}
-                  {j.catatan_mentor && (
+                  {j.catatan_mentor && !j.catatan_mentor.startsWith('[ADMIN_REPLY]') && (
                     <div style={{ marginTop:8, padding:'6px 10px', background:'var(--surface-3, var(--surface))',
-                      borderRadius:8, fontSize:11, fontStyle:'italic', color:'var(--text-2)',
-                      borderLeft:'2px solid var(--green)' }}>
-                      💌 {j.catatan_mentor}
+                      borderRadius:8, borderLeft:'2px solid var(--green)' }}>
+                      <div style={{ fontSize:9, fontWeight:700, color:'var(--text-3)', marginBottom:3 }}>
+                        PESAN DARI {j.nama.split(' ')[0].toUpperCase()} KE KOORDINATOR
+                      </div>
+                      <div style={{ fontSize:11, fontStyle:'italic', color:'var(--text-2)' }}>
+                        💌 {j.catatan_mentor}
+                      </div>
                     </div>
+                  )}
+                  {j.catatan_mentor?.startsWith('[ADMIN_REPLY]') && (
+                    <div style={{ marginTop:8, padding:'6px 10px', background:'var(--amber-light)',
+                      borderRadius:8, borderLeft:'2px solid var(--amber)' }}>
+                      <div style={{ fontSize:9, fontWeight:700, color:'var(--amber)', marginBottom:3 }}>
+                        BALASAN KOORDINATOR
+                      </div>
+                      <div style={{ fontSize:11, color:'var(--text)' }}>
+                        {j.catatan_mentor.replace('[ADMIN_REPLY] ', '')}
+                      </div>
+                    </div>
+                  )}
+                  {/* Tombol balas jurnal */}
+                  {replyOpen === j.id ? (
+                    <div style={{ marginTop:10 }}>
+                      <textarea rows={2} value={replyText}
+                        onChange={e => setReplyText(e.target.value)}
+                        placeholder={`Balas ke ${j.nama.split(' ')[0]}...`}
+                        style={{ resize:'vertical', fontSize:12, marginBottom:6 }} />
+                      <div style={{ display:'flex', gap:6 }}>
+                        <button className="btn btn-primary" style={{ fontSize:11 }}
+                          disabled={replySaving} onClick={() => handleReply(j.id)}>
+                          {replySaving ? 'Menyimpan...' : '✉️ Kirim Balasan'}
+                        </button>
+                        <button className="btn" style={{ fontSize:11 }}
+                          onClick={() => { setReplyOpen(null); setReplyText(''); }}>Batal</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => { setReplyOpen(j.id); setReplyText(''); }}
+                      style={{ marginTop:8, background:'none', border:'1px solid var(--border-2)',
+                        borderRadius:7, padding:'4px 10px', cursor:'pointer', fontSize:11,
+                        color:'var(--text-3)', transition:'color .15s' }}
+                      onMouseEnter={e => e.currentTarget.style.color = 'var(--green)'}
+                      onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}>
+                      ↩ Balas ke {j.nama.split(' ')[0]}
+                    </button>
                   )}
                 </div>
               )}
@@ -139,27 +200,58 @@ export function Jurnal() {
       {/* Riwayat semua entry */}
       {entries.length > 0 && (
         <div className="card" style={{ marginTop:12 }}>
-          <div className="card-title">
+          <div className="card-title" style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
             <span>Riwayat jurnal ({entries.length} entri)</span>
-            <button className="btn btn-sm no-print" onClick={() => window.print()}
-              style={{ fontSize:11, padding:'3px 10px' }}>🖨️ Cetak</button>
+            <div style={{ display:'flex', gap:8 }}>
+              <select value={filterNama} onChange={e => { setFilterNama(e.target.value); setShowLimit(10); }}
+                style={{ fontSize:11, padding:'3px 8px', width:'auto' }}>
+                <option value="">Semua anggota</option>
+                {TIM.map(t => <option key={t.id} value={t.nama}>{t.nama.split(' ')[0]}</option>)}
+              </select>
+              <button className="btn btn-sm no-print" onClick={() => {
+                const rows = entries.map(e => ({
+                  nama:e.nama, tanggal:e.tanggal_jurnal, mood:e.mood,
+                  pencapaian:e.pencapaian_1, hambatan:e.hambatan, target:e.target_depan
+                }));
+                downloadCsv('jurnal_export.csv', rows, ['nama','tanggal','mood','pencapaian','hambatan','target']);
+              }} style={{ fontSize:11, padding:'3px 10px' }}>⬇ CSV</button>
+            </div>
           </div>
-          {entries.slice(0,10).map((e, i) => (
-            <div key={i} className="member-row" style={{ fontSize:11 }}>
-              <div style={{ width:8, height:8, borderRadius:'50%', flexShrink:0,
-                background: e.mood >= 7 ? 'var(--green)' : e.mood >= 5 ? 'var(--amber)' : 'var(--red)' }} />
-              <span style={{ fontWeight:600, width:140, flexShrink:0 }}>{e.nama}</span>
-              <span style={{ color:'var(--text-2)', flex:1 }}>{e.pencapaian_1 || '—'}</span>
-              <span style={{ color:'var(--text-3)', flexShrink:0 }}>
-                {new Date(e.tanggal_jurnal || e.created_at).toLocaleDateString('id-ID', { day:'numeric', month:'short' })}
-              </span>
-            </div>
-          ))}
-          {entries.length > 10 && (
-            <div style={{ fontSize:11, color:'var(--text-3)', textAlign:'center', paddingTop:8 }}>
-              +{entries.length - 10} entri lainnya
-            </div>
-          )}
+          {(() => {
+            const filtered = filterNama ? entries.filter(e => e.nama === filterNama) : entries;
+            const visible  = filtered.slice(0, showLimit);
+            return (
+              <>
+                {visible.map((e, i) => (
+                  <div key={i} className="member-row" style={{ fontSize:11 }}>
+                    <div style={{ width:8, height:8, borderRadius:'50%', flexShrink:0,
+                      background: e.mood >= 7 ? 'var(--green)' : e.mood >= 5 ? 'var(--amber)' : 'var(--red)' }} />
+                    <span style={{ fontWeight:600, width:130, flexShrink:0 }}>{e.nama.split(' ')[0]}</span>
+                    <span style={{ color:'var(--text-2)', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      {e.pencapaian_1 || '—'}
+                    </span>
+                    <span style={{ fontSize:10, fontWeight:700,
+                      color: e.mood >= 7 ? 'var(--green)' : e.mood >= 5 ? 'var(--amber)' : 'var(--red)',
+                      marginLeft:6, flexShrink:0 }}>{e.mood}/10</span>
+                    <span style={{ color:'var(--text-3)', flexShrink:0, marginLeft:6 }}>
+                      {new Date(e.tanggal_jurnal || e.created_at).toLocaleDateString('id-ID', { day:'numeric', month:'short' })}
+                    </span>
+                  </div>
+                ))}
+                {filtered.length > showLimit && (
+                  <button onClick={() => setShowLimit(l => l + 10)}
+                    className="btn" style={{ width:'100%', marginTop:8, fontSize:11, padding:'5px' }}>
+                    Tampilkan lebih banyak (+{Math.min(10, filtered.length - showLimit)} dari {filtered.length - showLimit} tersisa)
+                  </button>
+                )}
+                {filtered.length === 0 && (
+                  <div style={{ textAlign:'center', padding:'12px 0', fontSize:12, color:'var(--text-3)' }}>
+                    Belum ada jurnal dari {filterNama}.
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
     </div>

@@ -18,10 +18,12 @@ export const DIVISI_TO_MODUL_ID = {
 
 // Konfigurasi umum studio
 export const STUDIO_CONFIG = {
-  targetRevenueBulanan: 5000,   // dalam USD
+  targetRevenueBulanan: 5000,    // total semua admin, dalam USD
+  targetRevenuePerAdmin: 2000,   // per admin/bulan
   seedFund: 'Rp 500rb',
   namaStudio: 'Creanimasi',
   emailOwner: 'creanimasi@gmail.com',
+  profilingKadaluarsaHari: 90,   // hari sebelum profiling dianggap perlu update
 };
 
 // Reward personal per anggota — bisa diupdate tanpa edit komponen

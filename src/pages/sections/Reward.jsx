@@ -1,8 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
+import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { REWARD_LIST, TIM, TIPE_COLOR } from '../../data/tim';
 import { STUDIO_CONFIG, REWARD_PERSONAL } from '../../data/constants';
 import { useAuth } from '../../hooks/useAuth';
 import { api } from '../../services/api';
+
+const ADMIN_COLORS = ['#00D68F','#9B8FFF','#FFB84B'];  // warna per admin
 
 // ── REWARD ─────────────────────────────────────────────────────────────────
 export function Reward() {
@@ -11,16 +14,17 @@ export function Reward() {
   const now       = new Date();
   const [bulan, setBulan] = useState(now.getMonth() + 1);
   const [tahun, setTahun] = useState(now.getFullYear());
-  const [revData,  setRevData]  = useState([]);
+  const [revData,    setRevData]    = useState([]);
+  const [revHistory, setRevHistory] = useState([]);
   const [rewardList, setRewardList] = useState([]);
-  const [editRev,  setEditRev]  = useState({});
-  const [saving,   setSaving]   = useState({});
+  const [editRev,    setEditRev]    = useState({});
+  const [saving,     setSaving]     = useState({});
   const [showRewardForm, setShowRewardForm] = useState(false);
   const [rewardForm, setRewardForm] = useState({ tanggal: now.toISOString().slice(0,10), nama:'', kategori:'', trigger:'', bentuk:'', nominal:'', catatan:'' });
   const [savingReward, setSavingReward] = useState(false);
 
   const ADMIN_LIST = TIM.filter(t => t.divisi === 'Admin');
-  const TARGET_PER_ADMIN = 2000;
+  const TARGET_PER_ADMIN = STUDIO_CONFIG.targetRevenuePerAdmin;
 
   const loadRevenue = useCallback(() => {
     api.getRevenue(bulan, tahun).then(res => setRevData(res.data || [])).catch(() => {});
@@ -31,6 +35,9 @@ export function Reward() {
   }, []);
 
   useEffect(() => { loadRevenue(); }, [loadRevenue]);
+  useEffect(() => {
+    api.getRevenueHistory().then(res => setRevHistory(res.data || [])).catch(() => {});
+  }, []);
   useEffect(() => { loadRewards(); }, [loadRewards]);
 
   const handleSaveReward = async (e) => {
@@ -164,6 +171,44 @@ export function Reward() {
           Klik field angka → ubah → tekan Enter atau klik di luar untuk simpan.
         </div>
       </div>
+
+      {/* Tren Revenue 6 Bulan */}
+      {revHistory.length > 0 && (() => {
+        // Bangun data chart: satu row per bulan, kolom per admin
+        const bulanSet = [...new Set(revHistory.map(r => `${r.tahun}-${String(r.bulan).padStart(2,'0')}`))].sort();
+        const chartData = bulanSet.map(bk => {
+          const [y, m] = bk.split('-');
+          const row = { bulan: BULAN_NAMES[parseInt(m)-1] + ' ' + y };
+          ADMIN_LIST.forEach(a => {
+            const found = revHistory.find(r => r.nama === a.nama && String(r.tahun) === y && Number(r.bulan) === parseInt(m));
+            row[a.nama.split(' ')[0]] = found ? parseFloat(found.jumlah) : 0;
+          });
+          return row;
+        });
+        return (
+          <div className="card" style={{ marginBottom:16 }}>
+            <div className="card-title">📈 Tren Revenue 6 Bulan Terakhir</div>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={chartData} margin={{ top:5, right:10, left:0, bottom:5 }}>
+                <XAxis dataKey="bulan" tick={{ fontSize:10, fill:'var(--text-3)' }} />
+                <YAxis tick={{ fontSize:10, fill:'var(--text-3)' }} tickFormatter={v => `$${v}`} />
+                <Tooltip
+                  contentStyle={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:8, fontSize:11 }}
+                  formatter={(v, name) => [`$${v.toLocaleString()}`, name]}
+                />
+                <Legend iconSize={10} wrapperStyle={{ fontSize:11 }} />
+                <ReferenceLine y={TARGET_PER_ADMIN} stroke="var(--border-2)" strokeDasharray="4 4"
+                  label={{ value:`Target $${TARGET_PER_ADMIN}`, fill:'var(--text-3)', fontSize:9, position:'insideTopRight' }} />
+                {ADMIN_LIST.map((a, i) => (
+                  <Line key={a.id} type="monotone" dataKey={a.nama.split(' ')[0]}
+                    stroke={ADMIN_COLORS[i % ADMIN_COLORS.length]}
+                    strokeWidth={2} dot={{ r:3 }} activeDot={{ r:5 }} />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        );
+      })()}
 
       {/* Reward triggers */}
       <div className="grid-2">

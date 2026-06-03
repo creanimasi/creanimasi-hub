@@ -11,10 +11,12 @@ const TIPE_1ON1 = [
 ];
 
 export function OneOnOne() {
-  const [sesi,     setSesi]     = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [form,     setForm]     = useState({
+  const [sesi,      setSesi]     = useState([]);
+  const [profiling, setProfiling]= useState([]);
+  const [loading,   setLoading]  = useState(true);
+  const [showForm,  setShowForm] = useState(false);
+  const [submitErr, setSubmitErr]= useState('');
+  const [form,      setForm]     = useState({
     tanggal: new Date().toISOString().slice(0,10),
     anggota:'', tipe:'', durasi_menit:30,
     ringkasan:'', tindak_lanjut:'',
@@ -23,19 +25,43 @@ export function OneOnOne() {
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(() => {
-    api.getSesi1on1().then(r => setSesi(r.data||[])).catch(()=>{}).finally(()=>setLoading(false));
+    Promise.all([
+      api.getSesi1on1(),
+      api.getProfilingAll(),
+    ]).then(([sRes, pRes]) => {
+      setSesi(sRes.data || []);
+      setProfiling(pRes.data || []);
+    }).catch(() => {}).finally(() => setLoading(false));
   }, []);
   useEffect(() => { load(); }, [load]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setSaving(true);
-    try { await api.postSesi1on1(form); setShowForm(false); load(); }
-    catch {}
-    finally { setSaving(false); }
+    setSaving(true); setSubmitErr('');
+    try {
+      await api.postSesi1on1(form);
+      setShowForm(false);
+      setForm({ tanggal: new Date().toISOString().slice(0,10), anggota:'', tipe:'', durasi_menit:30, ringkasan:'', tindak_lanjut:'', mood_sebelum:'', mood_sesudah:'' });
+      load();
+    } catch (err) {
+      setSubmitErr(err.message || 'Gagal menyimpan sesi. Coba lagi.');
+    } finally { setSaving(false); }
   };
 
-  const PRIORITAS = TIM.filter(t => ['At Risk','High Potential'].includes(t.tipe) || t.kepuasan <= 6);
+  // Prioritas dari DB profiling (kepuasan real) + tipe At Risk
+  const getPrioritasScore = (m) => {
+    const p = profiling.find(x => x.nama === m.nama);
+    const kepuasan = p?.kepuasan_diri ?? m.kepuasan;
+    if (m.tipe === 'At Risk') return 100;
+    if (kepuasan <= 5) return 80;
+    if (kepuasan <= 6) return 60;
+    if (m.tipe === 'High Potential') return 40;
+    return 0;
+  };
+  const PRIORITAS = TIM
+    .map(m => ({ ...m, prioritasScore: getPrioritasScore(m) }))
+    .filter(m => m.prioritasScore > 0)
+    .sort((a, b) => b.prioritasScore - a.prioritasScore);
   const weekAgo   = new Date(Date.now() - 7*24*60*60*1000);
   const thisWeek  = sesi.filter(s => new Date(s.tanggal) >= weekAgo);
   const thisMonth = sesi.filter(s => new Date(s.tanggal).getMonth() === new Date().getMonth());
@@ -140,6 +166,11 @@ export function OneOnOne() {
               </div>
             ))}
 
+            {submitErr && (
+              <div className="alert alert-red" style={{ marginBottom:8, fontSize:12 }}>
+                <span>⚠️</span><div>{submitErr}</div>
+              </div>
+            )}
             <div style={{ display:'flex', gap:8 }}>
               <button type="submit" className="btn btn-primary" disabled={saving}>
                 {saving ? 'Menyimpan...' : '💾 Simpan Sesi'}

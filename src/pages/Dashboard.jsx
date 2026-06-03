@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { TIM, TIPE_COLOR, DIVISI_COLOR } from '../data/tim';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../services/api';
+import { STUDIO_CONFIG } from '../data/constants';
 
 // Normalisasi kolom skor dari berbagai tabel profiling ke format standar
 function extractScores(p, fallback) {
@@ -235,15 +236,36 @@ function DashboardMember({ user }) {
 export default function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [dbStats, setDbStats] = useState(null);
-  const [revenue, setRevenue] = useState([]);
+  const [dbStats,   setDbStats]   = useState(null);
+  const [revenue,   setRevenue]   = useState([]);
+  const [profiling, setProfiling] = useState([]);
 
   useEffect(() => {
     if (user?.role !== 'admin') return;
     const now = new Date();
     api.getDashboard().then(r => setDbStats(r)).catch(() => {});
     api.getRevenue(now.getMonth() + 1, now.getFullYear()).then(r => setRevenue(r.data || [])).catch(() => {});
+    api.getProfilingAll().then(r => setProfiling(r.data || [])).catch(() => {});
   }, [user]);
+
+  // useMemo HARUS sebelum conditional return (Rules of Hooks)
+  const secondlineTop = useMemo(() => {
+    return TIM
+      .filter(t => ['Rising Star','High Potential'].includes(t.tipe))
+      .map(m => {
+        const p = profiling.find(x => x.nama === m.nama);
+        const pilarRaw = p?.tertarik_memimpin || '';
+        const pilar = pilarRaw.toLowerCase().includes('ya') ? 5
+                    : pilarRaw.toLowerCase().includes('berminat') ? 4
+                    : pilarRaw.toLowerCase().includes('mungkin') ? 3
+                    : m.kriteria;
+        const tipeScore = { 'Rising Star': 40, 'High Potential': 35 }[m.tipe] || 20;
+        const score = tipeScore + (m.skill*6) + (m.komunikasi*6) + (pilar*6) + (m.kepuasan*3);
+        return { ...m, score };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+  }, [profiling]);
 
   if (user?.role !== 'admin') return <DashboardMember user={user} />;
 
@@ -252,7 +274,7 @@ export default function Dashboard() {
   const rising       = TIM.filter(t => t.tipe === 'Rising Star');
   const atRisk       = TIM.filter(t => t.tipe === 'At Risk');
   const revTotal     = revenue.reduce((s, r) => s + parseFloat(r.jumlah||0), 0);
-  const revTarget    = revenue.reduce((s, r) => s + parseFloat(r.target||0), 0) || 5000;
+  const revTarget    = revenue.reduce((s, r) => s + parseFloat(r.target||0), 0) || STUDIO_CONFIG.targetRevenueBulanan;
   const skbPending   = parseInt((dbStats?.skb||[]).find(s => s.status === 'diajukan')?.total || 0);
 
   const ADMIN_LIST = TIM.filter(t => t.divisi === 'Admin');
@@ -315,17 +337,35 @@ export default function Dashboard() {
       </div>
 
       <div className="grid-2">
-        {/* Tim kondisi */}
+        {/* Tim kondisi — dikelompokkan per urgency */}
         <div className="card">
           <div className="card-title">Kondisi tim saat ini</div>
-          {TIM.map(m => {
-            const tc = TIPE_COLOR[m.tipe];
+          {[
+            { label: '⚠️ Perlu Perhatian', tipe: ['At Risk'], border: 'var(--red)' },
+            { label: '💎 Potensial Tinggi', tipe: ['High Potential'], border: 'var(--purple)' },
+            { label: '🛡️ Konsisten', tipe: ['Silent Expert'], border: 'var(--amber)' },
+            { label: '⭐ Top Performer', tipe: ['Rising Star'], border: 'var(--green)' },
+          ].map(group => {
+            const members = TIM.filter(m => group.tipe.includes(m.tipe));
+            if (!members.length) return null;
             return (
-              <div key={m.id} className="member-row">
-                <Avatar nama={m.nama} bg={tc.bg} color={tc.text} />
-                <span className="member-name">{m.nama}</span>
-                <span style={{ fontSize: 11, color: 'var(--text-2)', marginRight: 6 }}>{m.divisi}</span>
-                <span className={`tag tag-${tc.badge}`}>{m.tipe}</span>
+              <div key={group.label} style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)',
+                  textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 6,
+                  paddingLeft: 4, borderLeft: `3px solid ${group.border}`, paddingTop: 2,
+                  paddingBottom: 2 }}>
+                  {group.label} ({members.length})
+                </div>
+                {members.map(m => {
+                  const tc = TIPE_COLOR[m.tipe];
+                  return (
+                    <div key={m.id} className="member-row" style={{ paddingLeft: 8 }}>
+                      <Avatar nama={m.nama} bg={tc.bg} color={tc.text} />
+                      <span className="member-name">{m.nama}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{m.divisi}</span>
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
@@ -363,8 +403,8 @@ export default function Dashboard() {
             <div className="card-title">Aksi prioritas minggu ini</div>
             {[
               ...atRisk.map(m => ({ ico:'🔴', label:`1-on-1 dengan ${m.nama.split(' ')[0]} — At Risk`, sub:'Jadwalkan segera', path:'/1on1' })),
-              { ico:'⭐', label:'Friday Win — apresiasi tim', sub:'Jumat ini', path:'/friday-win' },
-              { ico:'🎉', label:'Jadwalkan gathering / BBQ', sub:'Bulan ini', path:'/1on1' },
+              { ico:'⭐', label:'Friday Win — apresiasi tim', sub:'Rutin tiap Jumat', path:'/friday-win' },
+              ...(belumJurnal > 0 ? [{ ico:'📓', label:`${belumJurnal} anggota belum isi jurnal minggu ini`, sub:'Ingatkan sebelum Jumat', path:'/jurnal' }] : []),
               ...(skbPending > 0 ? [{ ico:'📋', label:`Review ${skbPending} SKB yang menunggu`, sub:'Segera', path:'/skb' }] : []),
             ].map((a, i) => (
               <div key={i} className="member-row" style={{ alignItems:'flex-start', padding:'7px 0',
@@ -382,16 +422,14 @@ export default function Dashboard() {
           {/* Kandidat Secondline — top 3 dinamis */}
           <div className="card">
             <div className="card-title">Top kandidat Secondline</div>
-            {TIM.filter(t => ['Rising Star','High Potential'].includes(t.tipe))
-              .sort((a,b) => (b.skill+b.komunikasi+b.kriteria) - (a.skill+a.komunikasi+a.kriteria))
-              .slice(0,3)
-              .map((k, i) => {
+            {secondlineTop.map((k, i) => {
                 const tc = TIPE_COLOR[k.tipe];
                 return (
                   <div key={k.id} className="member-row">
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-2)', width: 16 }}>{i+1}</div>
                     <Avatar nama={k.nama} bg={tc.bg} color={tc.text} />
                     <span className="member-name">{k.nama}</span>
+                    <span style={{ fontSize:10, color:'var(--text-3)', marginRight:4 }}>Skor: {k.score}</span>
                     <span className={`tag tag-${tc.badge}`}>{k.tipe}</span>
                   </div>
                 );

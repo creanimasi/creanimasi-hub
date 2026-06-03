@@ -177,9 +177,10 @@ export default function FormJurnal({ onSuccess }) {
         <StarRating label="Perkembangan skill" name="skor_skill" value={form.skor_skill} onChange={set} />
       </div>
 
-      {/* Catatan untuk mentor */}
+      {/* Pesan ke Secondline / admin */}
       <div className="card" style={{ marginBottom:20 }}>
-        <div style={{ fontSize:13, fontWeight:600, marginBottom:10, color:'var(--text-2)' }}>💌 Catatan untuk mentor (opsional)</div>
+        <div style={{ fontSize:13, fontWeight:600, marginBottom:4, color:'var(--text-2)' }}>💌 Pesan ke Secondline / Koordinator (opsional)</div>
+        <div style={{ fontSize:11, color:'var(--text-3)', marginBottom:10 }}>Ada yang ingin kamu sampaikan ke Mas Kholed atau Secondline minggu ini?</div>
         <textarea rows={3} value={form.catatan_mentor}
           onChange={e => set('catatan_mentor', e.target.value)}
           placeholder="Ada hal yang ingin kamu sampaikan ke mentor atau Secondline?..."

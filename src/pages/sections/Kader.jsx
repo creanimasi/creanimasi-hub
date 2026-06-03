@@ -5,24 +5,45 @@ import { api } from '../../services/api';
 // ── KADER ──────────────────────────────────────────────────────────────────
 export function Kader() {
   const [profiling, setProfiling] = useState([]);
+  const [sesi1on1,  setSesi1on1]  = useState([]);
+  const [topik,     setTopik]     = useState([]);
+
   useEffect(() => {
-    api.getProfilingAll().then(r => setProfiling(r.data || [])).catch(() => {});
+    Promise.all([
+      api.getProfilingAll(),
+      api.getSesi1on1(),
+      api.getModulTopik(),
+    ]).then(([p, s, t]) => {
+      setProfiling(p.data || []);
+      setSesi1on1(s.data  || []);
+      setTopik(t.data     || []);
+    }).catch(() => {});
   }, []);
 
-  // Hitung skor kader dari TIM + data profiling DB
+  // Hitung skor kader dari profiling + 1-on-1 delta + modul progress
   const kaderData = TIM.map(m => {
     const p = profiling.find(x => x.nama === m.nama);
-    // Ambil skor pilar (tertarik_memimpin) dari profiling bila ada
     const pilarRaw = p?.tertarik_memimpin || '';
     const pilar = pilarRaw.toLowerCase().includes('ya') ? 5
                 : pilarRaw.toLowerCase().includes('berminat') ? 4
                 : pilarRaw.toLowerCase().includes('mungkin') ? 3
-                : m.kriteria; // fallback static
+                : m.kriteria;
 
-    // Skor keseluruhan: tipe + skill + komunikasi + pilar + kepuasan
+    // Bonus dari 1-on-1: rata-rata mood delta positif
+    const sesiMember = sesi1on1.filter(s => s.anggota === m.nama && s.mood_sesudah && s.mood_sebelum);
+    const avgDelta   = sesiMember.length > 0
+      ? sesiMember.reduce((sum, s) => sum + (s.mood_sesudah - s.mood_sebelum), 0) / sesiMember.length
+      : 0;
+    const bonusSesi = Math.max(0, Math.min(10, Math.round(avgDelta * 2)));
+
+    // Bonus dari modul: persentase topik selesai
+    const topikMember = topik.filter(t => t.nama === m.nama && t.selesai).length;
+    const bonusModul  = Math.round(topikMember / 10); // maks ~10 poin untuk 100 topik
+
     const tipeScore = { 'Rising Star': 40, 'High Potential': 35, 'Silent Expert': 25, 'At Risk': 10 }[m.tipe] || 20;
-    const score = tipeScore + (m.skill * 6) + (m.komunikasi * 6) + (pilar * 6) + (m.kepuasan * 3);
-    return { ...m, pilar, score, hasProfiling: !!p };
+    const score = tipeScore + (m.skill*6) + (m.komunikasi*6) + (pilar*6) + (m.kepuasan*3) + bonusSesi + bonusModul;
+
+    return { ...m, pilar, score, bonusSesi, bonusModul, hasProfiling: !!p, jumlahSesi: sesiMember.length };
   }).sort((a, b) => b.score - a.score);
 
   const candidates = kaderData.filter(m => ['Rising Star','High Potential'].includes(m.tipe));
@@ -87,7 +108,14 @@ export function Kader() {
               <div className="avatar" style={{ width:26, height:26, background:tc.bg, color:tc.text, fontSize:10 }}>{inits}</div>
               <span className="member-name" style={{ fontSize:12 }}>{m.nama}</span>
               <span style={{ fontSize:11, color:'var(--text-2)', marginRight:6 }}>{m.divisi}</span>
-              <span style={{ fontSize:11, color:'var(--text-3)', marginRight:6 }}>Skor: {m.score}</span>
+              <div style={{ textAlign:'right', marginRight:6 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--text-2)' }}>Skor: {m.score}</div>
+                {(m.bonusSesi > 0 || m.bonusModul > 0) && (
+                  <div style={{ fontSize:9, color:'var(--green)' }}>
+                    {m.bonusSesi > 0 && `+${m.bonusSesi} sesi`}{m.bonusSesi > 0 && m.bonusModul > 0 && ' · '}{m.bonusModul > 0 && `+${m.bonusModul} modul`}
+                  </div>
+                )}
+              </div>
               <span className={`tag tag-${tc.badge}`}>{m.tipe}</span>
             </div>
           );

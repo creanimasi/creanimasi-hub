@@ -66,6 +66,29 @@ export function useNotifications(user) {
               time: now, path: '/1on1', urgent: true });
           }
         }
+        // 4. Profiling kadaluarsa (>90 hari tidak diupdate)
+        try {
+          const profRes = await api.getProfilingAll();
+          const now90 = new Date(now - 90 * 24 * 60 * 60 * 1000);
+          const profilingByNama = {};
+          (profRes.data || []).forEach(p => {
+            if (!profilingByNama[p.nama] || new Date(p.created_at) > new Date(profilingByNama[p.nama].created_at))
+              profilingByNama[p.nama] = p;
+          });
+          const kadaluarsa = TIM.filter(t => {
+            const p = profilingByNama[t.nama];
+            if (!p) return true; // belum pernah isi
+            return new Date(p.created_at) < now90;
+          });
+          if (kadaluarsa.length > 0) {
+            const id = `profiling_kadaluarsa_${now.toISOString().slice(0,7)}`;
+            list.push({ id, type: 'info', icon: '👤', unread: !read.includes(id),
+              title: `${kadaluarsa.length} anggota perlu update profiling`,
+              body: kadaluarsa.map(t => t.nama.split(' ')[0]).join(', ') + ' (>90 hari)',
+              time: now, path: '/tim' });
+          }
+        } catch {}
+
       } else {
         // Member: cek apakah sudah isi jurnal minggu ini
         const jRes = await api.getJurnal(user.nama);

@@ -22,9 +22,10 @@ async function request(method, path, body) {
 
 export const api = {
   // Jurnal
-  simpanJurnal:   (data) => request('POST', '/jurnal', data),
-  getJurnal:      (nama) => request('GET', `/jurnal${nama ? `?nama=${nama}` : ''}`),
-  getJurnalStats: ()     => request('GET', '/jurnal/stats'),
+  simpanJurnal:   (data)         => request('POST', '/jurnal', data),
+  getJurnal:      (nama)         => request('GET', `/jurnal${nama ? `?nama=${nama}` : ''}`),
+  getJurnalStats: ()             => request('GET', '/jurnal/stats'),
+  replyJurnal:    (id, reply)    => request('PATCH', `/jurnal/${id}/reply`, { reply }),
 
   // Profiling
   simpanProfiling: (divisi, data) => request('POST', `/profiling/${divisi}`, data),
@@ -53,8 +54,9 @@ export const api = {
   updateProfil:   (data)                         => request('PATCH', '/profil/update', data),
 
   // Revenue
-  getRevenue:  (bulan, tahun) => request('GET', `/revenue?bulan=${bulan}&tahun=${tahun}`),
-  saveRevenue: (data)         => request('POST', '/revenue', data),
+  getRevenue:        (bulan, tahun) => request('GET', `/revenue?bulan=${bulan}&tahun=${tahun}`),
+  getRevenueHistory: ()             => request('GET', '/revenue/history'),
+  saveRevenue:       (data)         => request('POST', '/revenue', data),
 
   // Modul Topik
   getModulTopik:    (nama)                          => request('GET', `/modul-topik${nama ? `?nama=${encodeURIComponent(nama)}` : ''}`),

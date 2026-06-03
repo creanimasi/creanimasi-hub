@@ -150,10 +150,12 @@ export function Modul() {
                   return (
                     <div key={a.id} style={{ marginBottom:8 }}>
                       {/* Baris ringkasan anggota */}
-                      <div style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer',
+                      <div style={{ display:'flex', alignItems:'center', gap:10,
+                        cursor: 'pointer',
                         padding:'6px 8px', borderRadius:8,
                         background: isMemOpen ? 'var(--surface-2)' : 'transparent',
                         transition:'background .15s' }}
+                        title={isAdmin ? 'Klik untuk lihat & edit topik' : 'Klik untuk lihat detail topik'}
                         onClick={() => setMemberExp(isMemOpen ? null : memKey)}>
                         <div style={{ width:30, height:30, borderRadius:8, flexShrink:0,
                           background:tc.bg||'var(--surface-2)', color:tc.text||'var(--text-2)',
@@ -208,8 +210,14 @@ export function Modul() {
                             })}
                           </div>
                           {!isAdmin && (
-                            <div style={{ fontSize:10, color:'var(--text-3)', marginTop:8 }}>
-                              Topik hijau = sudah dipelajari. Hanya admin yang bisa mengubah.
+                            <div style={{ display:'flex', alignItems:'center', gap:6,
+                              marginTop:8, padding:'6px 10px', borderRadius:8,
+                              background:'var(--surface-2)', border:'1px solid var(--border)' }}>
+                              <span style={{ fontSize:14 }}>ℹ️</span>
+                              <div style={{ fontSize:10, color:'var(--text-3)' }}>
+                                <strong style={{ color:'var(--text-2)' }}>Topik berwarna</strong> = sudah dipelajari.
+                                Progress dicentang oleh koordinator setelah sesi belajar selesai.
+                              </div>
                             </div>
                           )}
                         </div>
