@@ -1,60 +1,77 @@
-export const TIM = [
+// Hitung lama bergabung otomatis dari format DD/MM/YYYY
+function hitungLama(bergabung) {
+  const [d, m, y] = bergabung.split('/').map(Number);
+  const mulai = new Date(y, m - 1, d);
+  const now   = new Date();
+  const selisihBulan =
+    (now.getFullYear() - mulai.getFullYear()) * 12 +
+    (now.getMonth() - mulai.getMonth());
+  if (selisihBulan < 1)  return '< 1 bln';
+  if (selisihBulan < 12) return `${selisihBulan} bln`;
+  const tahun = Math.floor(selisihBulan / 12);
+  const sisa  = selisihBulan % 12;
+  return sisa > 0 ? `${tahun} thn ${sisa} bln` : `${tahun} thn`;
+}
+
+const RAW_TIM = [
   { id:1, nama:"Ariel Tegar", divisi:"Admin", level:"Senior Team", status:"Aktif",
-    tipe:"Rising Star", kriteria:5, kepuasan:10, bergabung:"21/09/2025", lama:"8 bln",
+    tipe:"Rising Star", kriteria:5, kepuasan:10, bergabung:"21/09/2025",
     semangat:"Mencapai tujuan dan impian awal", energi:"Handle klien awam teknis",
     target:"Memiliki beberapa unit usaha sendiri", memimpin:"Ya, sangat tertarik",
     skill:4, komunikasi:5, mentor:"-" },
   { id:2, nama:"Ryan Cavallera", divisi:"Admin", level:"Senior Team", status:"Aktif",
-    tipe:"Rising Star", kriteria:4, kepuasan:8, bergabung:"25/04/2025", lama:"13 bln",
+    tipe:"Rising Star", kriteria:4, kepuasan:8, bergabung:"25/04/2025",
     semangat:"Mendapatkan ilmu baru dan bonus", energi:"Revisi berulang, komplain klien",
     target:"Memimpin 1 tim dengan 2 akun marketplace", memimpin:"Ya, sangat tertarik",
     skill:4, komunikasi:5, mentor:"-" },
   { id:3, nama:"Nanda Cahya Bintang", divisi:"Admin", level:"Junior Team", status:"Probation",
-    tipe:"High Potential", kriteria:3, kepuasan:5, bergabung:"27/03/2026", lama:"2 bln",
+    tipe:"High Potential", kriteria:3, kepuasan:5, bergabung:"27/03/2026",
     semangat:"Uang dan pemahaman baru", energi:"Sinyal dan device ngelag",
     target:"Tempat yang lebih tinggi lagi", memimpin:"Ya, sangat tertarik",
     skill:3, komunikasi:4, mentor:"Ariel Tegar" },
   { id:4, nama:"Dina Syavina", divisi:"PM", level:"Senior Team", status:"Aktif",
-    tipe:"High Potential", kriteria:3, kepuasan:7, bergabung:"30/08/2023", lama:"21 bln",
+    tipe:"High Potential", kriteria:3, kepuasan:7, bergabung:"30/08/2023",
     semangat:"Uang", energi:"Ngomong sama orang",
     target:"Admin studio sendiri", memimpin:"Mungkin kalau sudah siap",
     skill:3, komunikasi:2, mentor:"-" },
   { id:5, nama:"Tsania Lathifa", divisi:"PM", level:"Junior Team", status:"Probation",
-    tipe:"Rising Star", kriteria:4, kepuasan:7, bergabung:"02/03/2026", lama:"2 bln",
+    tipe:"Rising Star", kriteria:4, kepuasan:7, bergabung:"02/03/2026",
     semangat:"Gajian dan ketemu teman-teman", energi:"Ngerti mood orang lain",
     target:"Berkembang skill dan karier", memimpin:"Ya, sangat tertarik",
     skill:4, komunikasi:5, mentor:"Dina Syavina" },
   { id:6, nama:"Ahmad Fathurrahman", divisi:"Rigger", level:"Senior Team", status:"Aktif",
-    tipe:"Rising Star", kriteria:4, kepuasan:8, bergabung:"05/01/2025", lama:"16 bln",
+    tipe:"Rising Star", kriteria:4, kepuasan:8, bergabung:"05/01/2025",
     semangat:"Lingkungan dan pikiran tenang", energi:"Revisi tanpa kejelasan",
     target:"Menetap dan kembangkan skill", memimpin:"Mungkin kalau sudah siap",
     skill:5, komunikasi:4, mentor:"-" },
   { id:7, nama:"Raynar Harits", divisi:"Rigger", level:"Senior Team", status:"Aktif",
-    tipe:"Silent Expert", kriteria:3, kepuasan:7, bergabung:"13/04/2025", lama:"13 bln",
+    tipe:"Silent Expert", kriteria:3, kepuasan:7, bergabung:"13/04/2025",
     semangat:"Lingkungan", energi:"Jobdesk yang over",
     target:"Masih di Semarang karena kuliah", memimpin:"Mungkin kalau sudah siap",
     skill:3, komunikasi:4, mentor:"-" },
   { id:8, nama:"Aditya Tri Prakoso", divisi:"Illustrator", level:"Senior Team", status:"Aktif",
-    tipe:"High Potential", kriteria:3, kepuasan:7, bergabung:"21/06/2025", lama:"11 bln",
+    tipe:"High Potential", kriteria:3, kepuasan:7, bergabung:"21/06/2025",
     semangat:"Uang", energi:"Ngelag dan internet lemot",
     target:"Improve skill, punya passive income", memimpin:"Ya, sangat tertarik",
     skill:4, komunikasi:3, mentor:"-" },
   { id:9, nama:"Noval Faqihudin Zaky", divisi:"Illustrator", level:"Senior Team", status:"Aktif",
-    tipe:"High Potential", kriteria:3, kepuasan:8, bergabung:"01/01/2025", lama:"16 bln",
+    tipe:"High Potential", kriteria:3, kepuasan:8, bergabung:"01/01/2025",
     semangat:"Entertain dan ketemu teman", energi:"Revisi yang sudah lewat stepnya",
     target:"Illustrator yang lebih baik", memimpin:"Mungkin kalau sudah siap",
     skill:4, komunikasi:5, mentor:"-" },
   { id:10, nama:"Galang Ramadhan", divisi:"Illustrator", level:"Junior Team", status:"Aktif",
-    tipe:"Silent Expert", kriteria:2, kepuasan:8, bergabung:"24/02/2025", lama:"14 bln",
+    tipe:"Silent Expert", kriteria:2, kepuasan:8, bergabung:"24/02/2025",
     semangat:"Mendengarkan musik", energi:"Membersihkan dapur",
     target:"Di sini (Creanimasi)", memimpin:"Belum tertarik saat ini",
     skill:3, komunikasi:5, mentor:"-" },
   { id:11, nama:"Ridho Ramadhan", divisi:"3D Modeler", level:"Junior Team", status:"Aktif",
-    tipe:"At Risk", kriteria:2, kepuasan:5, bergabung:"04/03/2025", lama:"15 bln",
+    tipe:"At Risk", kriteria:2, kepuasan:5, bergabung:"04/03/2025",
     semangat:"Instruksi jelas", energi:"Tidak ada instruksi",
     target:"Intel Arc B580", memimpin:"Mungkin kalau sudah siap",
     skill:4, komunikasi:3, mentor:"-" },
 ];
+
+export const TIM = RAW_TIM.map(m => ({ ...m, lama: hitungLama(m.bergabung) }));
 
 export const TIPE_COLOR = {
   "Rising Star":   { bg:"var(--green-light)",  text:"var(--green)",  badge:"rs" },

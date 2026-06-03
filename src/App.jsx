@@ -45,7 +45,6 @@ function ProtectedRoutes() {
         <Route path="/profil"          element={<Profil />} />
         <Route path="/profiling"    element={<PageFormProfiling />} />
         <Route path="/sop"          element={<SOP />} />
-        <Route path="/reward"       element={<Reward />} />
         <Route path="/skb"          element={<SKB />} />
 
         {/* Admin only */}
@@ -53,6 +52,7 @@ function ProtectedRoutes() {
         <Route path="/tim/kelola"   element={<AdminRoute><ManajemenTim /></AdminRoute>} />
         <Route path="/jurnal"       element={<AdminRoute><Jurnal /></AdminRoute>} />
         <Route path="/kader"        element={<AdminRoute><Kader /></AdminRoute>} />
+        <Route path="/reward"       element={<AdminRoute><Reward /></AdminRoute>} />
         <Route path="/1on1"         element={<AdminRoute><OneOnOne /></AdminRoute>} />
         <Route path="/workshop"     element={<AdminRoute><Workshop /></AdminRoute>} />
         <Route path="/friday-win"   element={<AdminRoute><FridayWin /></AdminRoute>} />

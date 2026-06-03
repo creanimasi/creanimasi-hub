@@ -9,9 +9,9 @@ function extractScores(p, fallback) {
   if (!p) return fallback;
   const skill = p.skill_copywriting ?? p.skill_komunikasi ?? p.skill_level_csp ?? p.skill_level_live2d ?? p.skill_level_blender ?? fallback.skill;
   const kom   = p.skor_komunikasi   ?? p.skill_komunikasi ?? fallback.komunikasi;
-  const kibo  = p.skor_kerja_tim    ?? fallback.kriteria;
+  const pilar = p.skor_kerja_tim    ?? fallback.kriteria;
   const puas  = p.kepuasan_diri     ?? fallback.kepuasan;
-  return { skill, komunikasi: kom, kriteria: kibo, kepuasan: puas, fromDB: true };
+  return { skill, komunikasi: kom, kriteria: pilar, kepuasan: puas, fromDB: true };
 }
 
 function Avatar({ nama, bg, color, size = 28 }) {
@@ -158,7 +158,7 @@ function DashboardMember({ user }) {
           {[
             { label: 'Skill Teknis',  val: scores.skill,      max: 5,  color: 'var(--blue)'   },
             { label: 'Komunikasi',    val: scores.komunikasi,  max: 5,  color: 'var(--purple)' },
-            { label: 'Kerja Tim',     val: scores.kriteria,    max: 5,  color: 'var(--amber)'  },
+            { label: 'Kriteria PILAR', val: scores.kriteria,    max: 5,  color: 'var(--amber)'  },
             { label: 'Kepuasan Diri', val: scores.kepuasan,   max: 10, color: 'var(--green)'  },
           ].map(s => (
             <div key={s.label} className="metric">

@@ -272,7 +272,7 @@ function CharacterModal({ m, onClose }) {
               borderRadius: 12, border: '1px solid var(--border)' }}>
               <StatBar label="Skill Teknis"  value={m.skill}      max={5}  showAvg avg={AVG.skill}      />
               <StatBar label="Komunikasi"    value={m.komunikasi} max={5}  showAvg avg={AVG.komunikasi} />
-              <StatBar label="Kriteria Kibo" value={m.kriteria}   max={5}  showAvg avg={AVG.kriteria}   />
+              <StatBar label="Kriteria PILAR" value={m.kriteria}   max={5}  showAvg avg={AVG.kriteria}   />
               <StatBar label="Kepuasan Diri" value={m.kepuasan}   max={10} showAvg avg={AVG.kepuasan}   />
               <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 6 }}>
                 Garis abu-abu = rata-rata tim · ▲/▼ = selisih dari rata-rata

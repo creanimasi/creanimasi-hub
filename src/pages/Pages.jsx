@@ -991,17 +991,17 @@ export function Kader() {
   // Hitung skor kader dari TIM + data profiling DB
   const kaderData = TIM.map(m => {
     const p = profiling.find(x => x.nama === m.nama);
-    // Ambil skor kibo (tertarik_memimpin) dari profiling bila ada
-    const kiboRaw = p?.tertarik_memimpin || '';
-    const kibo = kiboRaw.toLowerCase().includes('ya') ? 5
-               : kiboRaw.toLowerCase().includes('berminat') ? 4
-               : kiboRaw.toLowerCase().includes('mungkin') ? 3
-               : m.kriteria; // fallback static
+    // Ambil skor pilar (tertarik_memimpin) dari profiling bila ada
+    const pilarRaw = p?.tertarik_memimpin || '';
+    const pilar = pilarRaw.toLowerCase().includes('ya') ? 5
+                : pilarRaw.toLowerCase().includes('berminat') ? 4
+                : pilarRaw.toLowerCase().includes('mungkin') ? 3
+                : m.kriteria; // fallback static
 
-    // Skor keseluruhan: tipe + skill + komunikasi + kibo + kepuasan
+    // Skor keseluruhan: tipe + skill + komunikasi + pilar + kepuasan
     const tipeScore = { 'Rising Star': 40, 'High Potential': 35, 'Silent Expert': 25, 'At Risk': 10 }[m.tipe] || 20;
-    const score = tipeScore + (m.skill * 6) + (m.komunikasi * 6) + (kibo * 6) + (m.kepuasan * 3);
-    return { ...m, kibo, score, hasProfiling: !!p };
+    const score = tipeScore + (m.skill * 6) + (m.komunikasi * 6) + (pilar * 6) + (m.kepuasan * 3);
+    return { ...m, pilar, score, hasProfiling: !!p };
   }).sort((a, b) => b.score - a.score);
 
   const candidates = kaderData.filter(m => ['Rising Star','High Potential'].includes(m.tipe));
@@ -1021,7 +1021,7 @@ export function Kader() {
         <div className="card-title">
           Kandidat Secondline — urutan skor kesiapan
           <span style={{ fontSize:10, color:'var(--text-3)', fontWeight:400, marginLeft:8 }}>
-            dihitung dari tipe + skill + komunikasi + kibo + kepuasan
+            dihitung dari tipe + skill + komunikasi + pilar + kepuasan
           </span>
         </div>
         {candidates.map((k, i) => {
