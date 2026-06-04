@@ -8,8 +8,8 @@
 # testing
 /coverage
 
-# production
-/build
+# production — build folder dikecualikan dari ignore agar bisa di-push ke GitHub
+# /build
 
 # misc
 .DS_Store
