@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, createContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useDarkMode } from '../hooks/useDarkMode';
@@ -6,6 +6,10 @@ import { useAuth } from '../hooks/useAuth';
 import { TIM } from '../data/tim';
 import { api } from '../services/api';
 import { useNotifications } from '../hooks/useNotifications';
+import { usePresence } from '../hooks/usePresence';
+
+// Context agar komponen lain bisa akses online status
+export const PresenceContext = createContext({ onlineUsers: [], isOnline: () => false });
 
 const PAGE_TITLES = {
   '/':            'Dashboard',
@@ -191,16 +195,20 @@ function NotificationBell({ user }) {
 }
 
 export default function Layout({ children, path }) {
-  const { user } = useAuth();
+  const { user }  = useAuth();
   const [dark, toggleDark] = useDarkMode(user?.tema);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const title    = PAGE_TITLES[path] || 'Creanimasi Hub';
-  const greeting = getGreeting();
-  const isHome   = path === '/';
+  const title     = PAGE_TITLES[path] || 'Creanimasi Hub';
+  const greeting  = getGreeting();
+  const isHome    = path === '/';
   const firstName = user?.nama?.split(' ')[0] || 'Kamu';
-  const isAdmin  = user?.role === 'admin';
+  const isAdmin   = user?.role === 'admin';
+
+  // Real-time presence
+  const presence  = usePresence(user);
 
   return (
+    <PresenceContext.Provider value={presence}>
     <div className="app-layout">
       {/* Overlay untuk mobile */}
       <div className={`sidebar-overlay ${sidebarOpen ? 'mobile-open' : ''}`}
@@ -239,7 +247,9 @@ export default function Layout({ children, path }) {
           }}>
             <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)',
               boxShadow: '0 0 6px var(--green)', animation: 'pulseGlow 2s infinite' }} />
-            {TIM.length} Tim Aktif
+            {presence.onlineUsers.length > 0
+              ? `${presence.onlineUsers.length} Online`
+              : `${TIM.length} Tim`}
           </div>
 
           <div className="topbar-date" style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0 }}>{getNow()}</div>
@@ -254,5 +264,6 @@ export default function Layout({ children, path }) {
         </main>
       </div>
     </div>
+    </PresenceContext.Provider>
   );
 }

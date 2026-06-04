@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { TIM, TIPE_COLOR, DIVISI_COLOR } from '../data/tim';
+import { PresenceContext } from '../components/Layout';
 
 const RANK_CFG = {
   'Rising Star':    { icon: '⭐', color: 'var(--green)',  bg: 'var(--green-light)'  },
@@ -60,11 +61,13 @@ function StatBar({ label, value, max, showAvg, avg }) {
 
 // ── MINI CARD ─────────────────────────────────────────────────────────────────
 function MiniCard({ m, onClick }) {
-  const tc    = TIPE_COLOR[m.tipe]  || { bg: 'var(--surface-2)', text: 'var(--text-2)' };
-  const dc    = DIVISI_COLOR[m.divisi] || { bg: 'var(--surface-2)', text: 'var(--text-2)', icon: '👤' };
-  const rank  = RANK_CFG[m.tipe] || { icon: '👤', color: 'var(--text-2)', bg: 'var(--surface-2)' };
-  const score = calcScore(m);
-  const inits = m.nama.split(' ').slice(0, 2).map(w => w[0]).join('');
+  const tc     = TIPE_COLOR[m.tipe]     || { bg: 'var(--surface-2)', text: 'var(--text-2)' };
+  const dc     = DIVISI_COLOR[m.divisi] || { bg: 'var(--surface-2)', text: 'var(--text-2)', icon: '👤' };
+  const rank   = RANK_CFG[m.tipe] || { icon: '👤', color: 'var(--text-2)', bg: 'var(--surface-2)' };
+  const score  = calcScore(m);
+  const inits  = m.nama.split(' ').slice(0, 2).map(w => w[0]).join('');
+  const { isOnline } = useContext(PresenceContext);
+  const online = isOnline(m.nama);
 
   return (
     <div onClick={onClick} style={{
@@ -99,9 +102,22 @@ function MiniCard({ m, onClick }) {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 9, border: '2px solid var(--surface)',
             }}>{dc.icon}</div>
+            {/* Online indicator */}
+            <div style={{
+              position: 'absolute', top: -3, left: -3,
+              width: 11, height: 11, borderRadius: '50%',
+              background: online ? 'var(--green)' : '#555',
+              border: '2px solid var(--surface)',
+              boxShadow: online ? '0 0 6px var(--green)' : 'none',
+              transition: 'background .5s',
+            }} title={online ? 'Sedang online' : 'Offline'} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2, lineHeight: 1.2 }}>{m.nama}</div>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2, lineHeight: 1.2 }}>
+              {m.nama}
+              {online && <span style={{ marginLeft: 5, fontSize: 9, color: 'var(--green)',
+                fontWeight: 400, verticalAlign: 'middle' }}>● online</span>}
+            </div>
             <div style={{ fontSize: 10, color: 'var(--text-2)' }}>{m.divisi} · {m.level}</div>
           </div>
           <div style={{ textAlign: 'center', flexShrink: 0 }}>

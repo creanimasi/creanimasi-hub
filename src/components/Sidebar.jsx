@@ -1,6 +1,8 @@
+import { useContext } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { TIM, TIPE_COLOR } from '../data/tim';
 import { useAuth } from '../hooks/useAuth';
+import { PresenceContext } from './Layout';
 
 const NAV_ADMIN = [
   { section: 'Utama' },
@@ -64,6 +66,7 @@ export default function Sidebar({ isOpen, onClose }) {
   const location       = useLocation();
   const navigate       = useNavigate();
   const { user, logout } = useAuth();
+  const { isOnline }   = useContext(PresenceContext);
   const isAdmin        = user?.role === 'admin';
   const NAV            = isAdmin ? NAV_ADMIN : NAV_MEMBER;
 
@@ -118,21 +121,36 @@ export default function Sidebar({ isOpen, onClose }) {
         </div>
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           {TEAM_PREVIEW.map(m => {
-            const tc = TIPE_COLOR[m.tipe] || { bg: 'var(--surface-2)', text: 'var(--text-2)' };
-            const inits = m.nama.split(' ').slice(0, 2).map(w => w[0]).join('');
+            const tc     = TIPE_COLOR[m.tipe] || { bg: 'var(--surface-2)', text: 'var(--text-2)' };
+            const inits  = m.nama.split(' ').slice(0, 2).map(w => w[0]).join('');
+            const online = isOnline(m.nama);
             return (
-              <div key={m.id} title={m.nama} onClick={() => goTo('/tim')} style={{
-                width: 28, height: 28, borderRadius: 8,
-                background: tc.bg, color: tc.text,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 10, fontWeight: 700, cursor: 'pointer',
-                border: '1px solid rgba(255,255,255,0.06)',
-                transition: 'transform .15s',
-              }}
-                onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.15)'}
-                onMouseLeave={e => e.currentTarget.style.transform = ''}
-              >
-                {inits}
+              <div key={m.id}
+                title={`${m.nama}${online ? ' — Online' : ''}`}
+                onClick={() => goTo('/tim')}
+                style={{ position: 'relative', width: 28, height: 28, cursor: 'pointer' }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: 8,
+                  background: tc.bg, color: tc.text,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 10, fontWeight: 700,
+                  border: `1px solid ${online ? 'rgba(0,214,143,0.4)' : 'rgba(255,255,255,0.06)'}`,
+                  transition: 'transform .15s',
+                }}
+                  onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.15)'}
+                  onMouseLeave={e => e.currentTarget.style.transform = ''}
+                >
+                  {inits}
+                </div>
+                {/* Dot online/offline */}
+                <div style={{
+                  position: 'absolute', bottom: -1, right: -1,
+                  width: 8, height: 8, borderRadius: '50%',
+                  background: online ? 'var(--green)' : 'var(--surface-3, #333)',
+                  border: '1.5px solid var(--surface)',
+                  boxShadow: online ? '0 0 4px var(--green)' : 'none',
+                  transition: 'background .3s',
+                }} />
               </div>
             );
           })}
