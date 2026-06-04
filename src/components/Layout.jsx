@@ -28,6 +28,7 @@ const PAGE_TITLES = {
   '/1on1':        'Sesi 1-on-1',
   '/kader':       'Kader Potensial',
   '/friday-win':  'Friday Win',
+  '/performa':    'Grafik Performa Tim',
   '/kalender':    'Kalender Kegiatan',
 };
 

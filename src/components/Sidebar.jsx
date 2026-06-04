@@ -18,6 +18,8 @@ const NAV_ADMIN = [
   { path: '/sop',        label: 'SOP Brief',           badge: null, badgeType: '' },
   { path: '/reward',     label: 'Reward & KPI',        badge: null, badgeType: '' },
   { path: '/workshop',   label: 'Workshop JRUHUB',     badge: null, badgeType: '' },
+  { section: 'Analitik' },
+  { path: '/performa',   label: 'Grafik Performa',     badge: null, badgeType: '' },
   { section: 'Pengembangan' },
   { path: '/friday-win', label: 'Friday Win',          badge: null, badgeType: '' },
   { path: '/kalender',   label: 'Kalender',             badge: null, badgeType: '' },
@@ -36,6 +38,8 @@ const NAV_MEMBER = [
   { path: '/profiling',      label: 'Form Profiling',       badge: null, badgeType: '' },
   { section: 'Referensi' },
   { path: '/sop',        label: 'SOP Brief',           badge: null, badgeType: '' },
+  { section: 'Analitik' },
+  { path: '/performa',      label: 'Grafik Performa',      badge: null, badgeType: '' },
   { section: 'Inisiatif' },
   { path: '/skb',        label: 'Ajukan SKB',          badge: null, badgeType: '' },
 ];
@@ -56,6 +60,7 @@ const ICONS = {
   '/1on1':       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
   '/kader':      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26 12,2"/></svg>,
   '/friday-win': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 21h8"/><path d="M12 21v-4"/><path d="M17 5H7L5 12h14L17 5z"/><path d="M5 12c0 3.3 3.1 6 7 6s7-2.7 7-6"/></svg>,
+  '/performa':   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>,
   '/kalender':   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>,
 };
 

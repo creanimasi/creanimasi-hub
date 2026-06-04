@@ -9,6 +9,7 @@ import ManajemenTim from './pages/ManajemenTim';
 import { Modul, Jurnal, SOP, Reward, Workshop, Kader, SKB, OneOnOne, FridayWin } from './pages/Pages';
 import { PageFormJurnal, PageFormProfiling, PageRiwayatJurnal } from './pages/FormPages';
 import Profil from './pages/Profil';
+import Performa from './pages/Performa';
 import Kalender from './pages/Kalender';
 
 function AdminRoute({ children }) {
@@ -46,6 +47,7 @@ function ProtectedRoutes() {
         <Route path="/profiling"    element={<PageFormProfiling />} />
         <Route path="/sop"          element={<SOP />} />
         <Route path="/skb"          element={<SKB />} />
+        <Route path="/performa"     element={<Performa />} />
 
         {/* Admin only */}
         <Route path="/tim"          element={<AdminRoute><Tim /></AdminRoute>} />

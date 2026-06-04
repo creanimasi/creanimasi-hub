@@ -830,4 +830,74 @@ setInterval(() => {
   if (changed) broadcastPresence();
 }, 60000);
 
+// ── PERFORMA HISTORIS ─────────────────────────────────────────────────────────
+// GET /api/hub/performa — semua anggota (admin) atau diri sendiri (member)
+router.get('/performa', authMiddleware, async (req, res) => {
+  const { periode = 'minggu', limit = 12 } = req.query;
+  const isAdmin = req.user.role === 'admin';
+
+  const groupBy = periode === 'bulan'
+    ? `DATE_TRUNC('month', tanggal_jurnal)`
+    : `DATE_TRUNC('week',  tanggal_jurnal)`;
+
+  const labelFmt = periode === 'bulan'
+    ? `TO_CHAR(DATE_TRUNC('month', tanggal_jurnal), 'Mon YY')`
+    : `TO_CHAR(DATE_TRUNC('week',  tanggal_jurnal), 'DD Mon')`;
+
+  try {
+    const whereNama = isAdmin ? '' : `WHERE nama = $1`;
+    const params    = isAdmin ? [parseInt(limit)] : [req.user.nama, parseInt(limit)];
+    const limitIdx  = isAdmin ? 1 : 2;
+
+    const q = `
+      SELECT
+        nama,
+        ${labelFmt}                                AS label,
+        ${groupBy}                                 AS periode_date,
+        ROUND(AVG(mood)::numeric,           1)    AS avg_mood,
+        ROUND(AVG(skor_karya)::numeric,     1)    AS avg_karya,
+        ROUND(AVG(skor_waktu)::numeric,     1)    AS avg_waktu,
+        ROUND(AVG(skor_komunikasi)::numeric,1)    AS avg_komunikasi,
+        ROUND(AVG(skor_skill)::numeric,     1)    AS avg_skill,
+        ROUND(
+          (AVG(mood)/10*2 + AVG(skor_karya) + AVG(skor_waktu) +
+           AVG(skor_komunikasi) + AVG(skor_skill)) / 5 * 100
+        ::numeric, 0)                              AS skor_total,
+        COUNT(*)::int                              AS jumlah_jurnal
+      FROM jurnal_mingguan
+      ${whereNama}
+      GROUP BY nama, ${groupBy}
+      ORDER BY nama, periode_date DESC
+      LIMIT $${limitIdx}
+    `;
+
+    const result = await hubPool.query(q, params);
+
+    // Kelompokkan per nama
+    const byNama = {};
+    result.rows.forEach(row => {
+      if (!byNama[row.nama]) byNama[row.nama] = [];
+      byNama[row.nama].push({
+        label:         row.label,
+        periode_date:  row.periode_date,
+        avg_mood:      parseFloat(row.avg_mood) || 0,
+        avg_karya:     parseFloat(row.avg_karya) || 0,
+        avg_waktu:     parseFloat(row.avg_waktu) || 0,
+        avg_komunikasi:parseFloat(row.avg_komunikasi) || 0,
+        avg_skill:     parseFloat(row.avg_skill) || 0,
+        skor_total:    parseFloat(row.skor_total) || 0,
+        jumlah_jurnal: row.jumlah_jurnal,
+      });
+    });
+
+    // Balik urutan supaya chart dari lama ke baru
+    Object.keys(byNama).forEach(k => byNama[k].reverse());
+
+    res.json({ data: byNama, periode });
+  } catch (err) {
+    console.error('GET /performa error:', err.message);
+    res.status(500).json({ error: 'Gagal mengambil data performa' });
+  }
+});
+
 module.exports = router;

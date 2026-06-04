@@ -56,6 +56,10 @@ export const api = {
   getProfilingMe: ()                             => request('GET', '/profiling/me'),
   updateProfil:   (data)                         => request('PATCH', '/profil/update', data),
 
+  // Performa historis
+  getPerforma: (periode = 'minggu', limit = 12) =>
+    request('GET', `/performa?periode=${periode}&limit=${limit}`),
+
   // Presence (real-time online status)
   heartbeat:        ()  => request('PATCH', '/auth/heartbeat'),
   offlineSignal:    ()  => request('DELETE', '/auth/heartbeat'),
