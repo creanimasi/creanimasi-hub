@@ -142,14 +142,15 @@ export default function Sidebar({ isOpen, onClose }) {
                 >
                   {inits}
                 </div>
-                {/* Dot online/offline */}
+                {/* Dot online/offline — selalu tampil */}
                 <div style={{
-                  position: 'absolute', bottom: -1, right: -1,
-                  width: 8, height: 8, borderRadius: '50%',
-                  background: online ? 'var(--green)' : 'var(--surface-3, #333)',
-                  border: '1.5px solid var(--surface)',
-                  boxShadow: online ? '0 0 4px var(--green)' : 'none',
-                  transition: 'background .3s',
+                  position: 'absolute', bottom: -2, right: -2,
+                  width: 10, height: 10, borderRadius: '50%',
+                  background: online ? '#00D68F' : '#555',
+                  border: '2px solid var(--bg, #080C14)',
+                  boxShadow: online ? '0 0 6px #00D68F' : 'none',
+                  transition: 'background .4s, box-shadow .4s',
+                  zIndex: 1,
                 }} />
               </div>
             );

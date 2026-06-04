@@ -105,11 +105,12 @@ function MiniCard({ m, onClick }) {
             {/* Online indicator */}
             <div style={{
               position: 'absolute', top: -3, left: -3,
-              width: 11, height: 11, borderRadius: '50%',
-              background: online ? 'var(--green)' : '#555',
-              border: '2px solid var(--surface)',
-              boxShadow: online ? '0 0 6px var(--green)' : 'none',
-              transition: 'background .5s',
+              width: 12, height: 12, borderRadius: '50%',
+              background: online ? '#00D68F' : '#555',
+              border: '2px solid var(--bg, #080C14)',
+              boxShadow: online ? '0 0 7px #00D68F' : 'none',
+              transition: 'background .4s, box-shadow .4s',
+              zIndex: 1,
             }} title={online ? 'Sedang online' : 'Offline'} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
