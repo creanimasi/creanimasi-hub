@@ -10,8 +10,7 @@ const { Pool } = require('pg');
 const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
 
-const pool    = new Pool({ connectionString: process.env.DATABASE_URL });
-const hubPool = pool; // alias untuk kompatibilitas
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const JWT_SECRET = process.env.HUB_JWT_SECRET || 'creanimasi-hub-secret-2024';
 
 // ── HELPER ────────────────────────────────────────
@@ -650,6 +649,58 @@ router.patch('/profil/update', authMiddleware, async (req, res) => {
     }
     res.json({ ok: true, updated });
   } catch { res.status(500).json({ error: 'Gagal update profil' }); }
+});
+
+// ── REVENUE HISTORY (6 bulan terakhir per admin) ─────────────────────────────
+router.get('/revenue/history', authMiddleware, async (req, res) => {
+  try {
+    const r = await hubPool.query(`
+      SELECT nama, bulan, tahun, jumlah, target
+      FROM revenue_bulanan
+      WHERE (tahun * 12 + bulan) >= (EXTRACT(YEAR FROM NOW())::int * 12 + EXTRACT(MONTH FROM NOW())::int - 5)
+      ORDER BY tahun, bulan, nama
+    `);
+    res.json({ data: r.rows });
+  } catch { res.status(500).json({ error: 'Gagal ambil history revenue' }); }
+});
+
+// ── ADMIN REPLY JURNAL ────────────────────────────────────────────────────────
+router.patch('/jurnal/:id/reply', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+  const { reply } = req.body;
+  try {
+    // Simpan reply ke kolom catatan_mentor (repurpose untuk admin reply)
+    // Prefix dengan marker agar bisa dibedakan dari catatan member
+    const r = await hubPool.query(
+      `UPDATE jurnal_mingguan SET catatan_mentor = $1 WHERE id = $2 RETURNING id, nama`,
+      [`[ADMIN_REPLY] ${reply}`, req.params.id]
+    );
+    if (!r.rowCount) return res.status(404).json({ error: 'Jurnal tidak ditemukan' });
+    res.json({ ok: true, data: r.rows[0] });
+  } catch { res.status(500).json({ error: 'Gagal simpan reply' }); }
+});
+
+// ── MANAJEMEN NAMA TOPIK MODUL ─────────────────────────────────────────────────
+router.get('/modul-topik-nama', authMiddleware, async (req, res) => {
+  try {
+    const r = await hubPool.query('SELECT modul_id, topik_idx, nama FROM modul_topik_nama ORDER BY modul_id, topik_idx');
+    res.json({ data: r.rows });
+  } catch { res.status(500).json({ error: 'Gagal ambil nama topik' }); }
+});
+
+router.patch('/modul-topik-nama/:modul_id/:topik_idx', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+  const { modul_id, topik_idx } = req.params;
+  const { nama } = req.body;
+  if (!nama?.trim()) return res.status(400).json({ error: 'Nama tidak boleh kosong' });
+  try {
+    await hubPool.query(`
+      INSERT INTO modul_topik_nama (modul_id, topik_idx, nama, updated_at, updated_by)
+      VALUES ($1, $2, $3, NOW(), $4)
+      ON CONFLICT (modul_id, topik_idx) DO UPDATE SET nama=$3, updated_at=NOW(), updated_by=$4
+    `, [modul_id, parseInt(topik_idx), nama.trim(), req.user.nama]);
+    res.json({ ok: true });
+  } catch { res.status(500).json({ error: 'Gagal update nama topik' }); }
 });
 
 module.exports = router;
