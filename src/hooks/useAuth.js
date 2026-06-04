@@ -8,11 +8,17 @@ async function restoreSession(retries = 3) {
   for (let i = 0; i < retries; i++) {
     try {
       const res = await api.me();
-      return { user: res.user, error: null };
+      // Pastikan respons benar-benar punya data user
+      if (res?.user?.id) {
+        return { user: res.user, error: null };
+      }
+      // Respons OK tapi tidak ada user → token tidak valid
+      return { user: null, error: 'invalid_token' };
     } catch (err) {
+      const msg = err.message || '';
       // Token invalid/expired (401/403) → langsung logout, jangan retry
-      if (err.message?.includes('401') || err.message?.includes('403') ||
-          err.message?.includes('tidak valid') || err.message?.includes('Token')) {
+      if (msg.includes('401') || msg.includes('403') ||
+          msg.includes('tidak valid') || msg.includes('Token')) {
         return { user: null, error: 'invalid_token' };
       }
       // Error jaringan/server → tunggu sebentar dan retry
@@ -21,7 +27,7 @@ async function restoreSession(retries = 3) {
       }
     }
   }
-  // Semua retry gagal (server down) → tetap gunakan token, coba lagi nanti
+  // Semua retry gagal (server down) → tetap token, jangan logout
   return { user: null, error: 'network_error' };
 }
 
