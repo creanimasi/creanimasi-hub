@@ -11,6 +11,7 @@ const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const hubPool = pool;
 const JWT_SECRET = process.env.HUB_JWT_SECRET || 'creanimasi-hub-secret-2024';
 
 // ── HELPER ────────────────────────────────────────
@@ -55,10 +56,9 @@ router.post('/auth/login', async (req, res) => {
 });
 
 // ── GLOBAL AUTH GUARD ─────────────────────────────
-// Semua route di bawah ini wajib login (kecuali /auth/login yang sudah di atas)
+// Semua route wajib login KECUALI /auth/login
 router.use((req, res, next) => {
-  // Lewati path auth — sudah ditangani individual
-  if (req.path.startsWith('/auth/')) return next();
+  if (req.path === '/auth/login') return next(); // hanya login yang boleh tanpa token
   return authMiddleware(req, res, next);
 });
 
@@ -702,5 +702,132 @@ router.patch('/modul-topik-nama/:modul_id/:topik_idx', authMiddleware, async (re
     res.json({ ok: true });
   } catch { res.status(500).json({ error: 'Gagal update nama topik' }); }
 });
+
+// ── REAL-TIME PRESENCE ────────────────────────────────────────────────────────
+// In-memory store: { userId: { nama, username, role, lastSeen } }
+const onlineUsers = new Map();
+// SSE clients: Set of res objects
+const sseClients  = new Set();
+
+// Saat startup: load user yang last_seen dalam 2 menit terakhir dari DB
+// Ini memastikan user yang sudah login tidak langsung logout saat server restart
+(async () => {
+  try {
+    const r = await hubPool.query(`
+      SELECT id, nama, username, role, last_seen
+      FROM hub_users
+      WHERE last_seen >= NOW() - INTERVAL '2 minutes' AND aktif = TRUE
+    `);
+    r.rows.forEach(u => {
+      onlineUsers.set(u.id, {
+        nama: u.nama, username: u.username, role: u.role,
+        lastSeen: new Date(u.last_seen).getTime()
+      });
+    });
+    if (r.rows.length > 0)
+      console.log(`[Presence] Restored ${r.rows.length} online user(s) from DB`);
+  } catch (e) {
+    console.log('[Presence] Could not restore from DB:', e.message);
+  }
+})();
+
+// Broadcast daftar online ke semua SSE clients
+function broadcastPresence() {
+  const now     = Date.now();
+  const cutoff  = 2 * 60 * 1000; // 2 menit = offline
+  const online  = [];
+  onlineUsers.forEach((u, id) => {
+    if (now - u.lastSeen <= cutoff) {
+      online.push({ id, nama: u.nama, username: u.username, role: u.role });
+    } else {
+      onlineUsers.delete(id);
+    }
+  });
+  const payload = `data: ${JSON.stringify(online)}\n\n`;
+  sseClients.forEach(client => {
+    try { client.write(payload); } catch { sseClients.delete(client); }
+  });
+}
+
+// PATCH /api/hub/auth/heartbeat — user kirim tanda masih aktif (tiap 30 detik)
+router.patch('/auth/heartbeat', authMiddleware, async (req, res) => {
+  const { id, nama, username, role } = req.user;
+  onlineUsers.set(id, { nama, username, role, lastSeen: Date.now() });
+  // Update last_seen ke DB juga (untuk history)
+  try { await hubPool.query('UPDATE hub_users SET last_seen=NOW() WHERE id=$1', [id]); } catch {}
+  broadcastPresence();
+  res.json({ ok: true, online: onlineUsers.size });
+});
+
+// DELETE /api/hub/auth/heartbeat — user logout, tandai offline
+router.delete('/auth/heartbeat', authMiddleware, (req, res) => {
+  onlineUsers.delete(req.user.id);
+  broadcastPresence();
+  res.json({ ok: true });
+});
+
+// GET /api/hub/presence — SSE stream siapa yang online
+// Terima token dari query param (karena EventSource tidak support custom headers)
+router.get('/presence', (req, res) => {
+  const token = req.query.token || req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Token tidak ada' });
+  try {
+    const decoded = require('jsonwebtoken').verify(token, JWT_SECRET);
+    req.user = decoded;
+  } catch { return res.status(401).json({ error: 'Token tidak valid' }); }
+  res.writeHead(200, {
+    'Content-Type':  'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection':    'keep-alive',
+    'X-Accel-Buffering': 'no', // disable nginx buffering
+  });
+  res.flushHeaders();
+
+  // Tambah client ke set
+  sseClients.add(res);
+
+  // Kirim state awal
+  const now    = Date.now();
+  const cutoff = 2 * 60 * 1000;
+  const online = [];
+  onlineUsers.forEach((u, id) => {
+    if (now - u.lastSeen <= cutoff)
+      online.push({ id, nama: u.nama, username: u.username, role: u.role });
+  });
+  res.write(`data: ${JSON.stringify(online)}\n\n`);
+
+  // Heartbeat SSE agar koneksi tidak timeout
+  const ping = setInterval(() => {
+    try { res.write(': ping\n\n'); } catch { clearInterval(ping); }
+  }, 25000);
+
+  // Cleanup saat client disconnect
+  req.on('close', () => {
+    clearInterval(ping);
+    sseClients.delete(res);
+  });
+});
+
+// GET /api/hub/presence/snapshot — simple list tanpa SSE (untuk polling fallback)
+router.get('/presence/snapshot', authMiddleware, (req, res) => {
+  const now    = Date.now();
+  const cutoff = 2 * 60 * 1000;
+  const online = [];
+  onlineUsers.forEach((u, id) => {
+    if (now - u.lastSeen <= cutoff)
+      online.push({ id, nama: u.nama, username: u.username, role: u.role });
+  });
+  res.json({ data: online });
+});
+
+// Bersihkan user yang tidak aktif setiap menit
+setInterval(() => {
+  const now = Date.now(), cutoff = 2 * 60 * 1000;
+  let changed = false;
+  onlineUsers.forEach((u, id) => {
+    if (now - u.lastSeen > cutoff) { onlineUsers.delete(id); changed = true; }
+  });
+  if (changed) broadcastPresence();
+}, 60000);
 
 module.exports = router;
