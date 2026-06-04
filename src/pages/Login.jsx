@@ -67,13 +67,16 @@ export default function Login({ onLogin }) {
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{
-            width: 56, height: 56, borderRadius: 16,
+            width: 64, height: 64, borderRadius: 16,
             background: 'var(--green-light)',
             border: '1px solid rgba(0,214,143,0.25)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 26, margin: '0 auto 14px',
+            margin: '0 auto 14px',
             boxShadow: '0 0 24px rgba(0,214,143,0.2)',
-          }}>🎨</div>
+            padding: 8, overflow: 'hidden',
+          }}>
+            <img src="/logo192.png" alt="Creanimasi" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          </div>
           <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--text)' }}>
             Creanimasi<span style={{ color: 'var(--green)' }}>.</span>
           </div>

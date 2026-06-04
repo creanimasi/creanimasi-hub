@@ -82,12 +82,16 @@ export default function Sidebar({ isOpen, onClose }) {
       {/* Logo */}
       <div className="sidebar-logo">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{
-            width: 30, height: 30, borderRadius: 8,
-            background: 'var(--green-light)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 14, border: '1px solid rgba(0,214,143,0.2)',
-          }}>🎨</div>
+          <img
+            src="/logo192.png"
+            alt="Creanimasi"
+            style={{
+              width: 30, height: 30, borderRadius: 8,
+              background: 'var(--green-light)',
+              border: '1px solid rgba(0,214,143,0.2)',
+              objectFit: 'contain', padding: 3,
+            }}
+          />
           <div>
             <div className="sidebar-logo-name">Creanimasi</div>
             <div className="sidebar-logo-sub">Internal Hub</div>
