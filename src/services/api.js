@@ -16,7 +16,10 @@ async function request(method, path, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Request gagal');
+  if (!res.ok) {
+    // Sertakan status code agar useAuth bisa bedakan 401 vs error lain
+    throw new Error(`${res.status}: ${data.error || 'Request gagal'}`);
+  }
   return data;
 }
 
