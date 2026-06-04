@@ -860,8 +860,8 @@ router.get('/performa', authMiddleware, async (req, res) => {
         ROUND(AVG(skor_komunikasi)::numeric,1)    AS avg_komunikasi,
         ROUND(AVG(skor_skill)::numeric,     1)    AS avg_skill,
         ROUND(
-          (AVG(mood)/10*2 + AVG(skor_karya) + AVG(skor_waktu) +
-           AVG(skor_komunikasi) + AVG(skor_skill)) / 5 * 100
+          (AVG(mood)/10 + AVG(skor_karya)/5 + AVG(skor_waktu)/5 +
+           AVG(skor_komunikasi)/5 + AVG(skor_skill)/5) / 5 * 100
         ::numeric, 0)                              AS skor_total,
         COUNT(*)::int                              AS jumlah_jurnal
       FROM jurnal_mingguan
