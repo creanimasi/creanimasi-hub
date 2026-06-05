@@ -937,6 +937,16 @@ router.get('/laporan-harian', authMiddleware, async (req, res) => {
   } catch { res.status(500).json({ error: 'Gagal ambil laporan harian' }); }
 });
 
+router.delete('/laporan-harian/:id', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+  const { id } = req.params;
+  try {
+    const r = await hubPool.query('DELETE FROM laporan_harian WHERE id=$1 RETURNING id', [id]);
+    if (r.rowCount === 0) return res.status(404).json({ error: 'Record tidak ditemukan' });
+    res.json({ ok: true });
+  } catch { res.status(500).json({ error: 'Gagal hapus laporan harian' }); }
+});
+
 router.get('/laporan-harian/stats', authMiddleware, async (req, res) => {
   const { dari, sampai } = req.query;
   const isAdmin = req.user.role === 'admin';

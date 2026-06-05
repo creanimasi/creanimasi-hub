@@ -361,7 +361,9 @@ function StatCard({ stat }) {
 }
 
 // ── LAPORAN CARD ──────────────────────────────────────────────────────────────
-function LaporanCard({ l, expanded, onToggle }) {
+function LaporanCard({ l, expanded, onToggle, onHapus }) {
+  const { user }   = useAuth();
+  const isAdmin    = user?.role === 'admin';
   const member = TIM.find(t => t.nama === l.nama);
   const tc     = member ? (TIPE_COLOR[member.tipe]||{}) : {};
   const tgl    = new Date(l.tanggal);
@@ -413,6 +415,14 @@ function LaporanCard({ l, expanded, onToggle }) {
         )}
 
         <span style={{ fontSize:11, color:'var(--text-3)', flexShrink:0 }}>{expanded ? '▲' : '▼'}</span>
+        {isAdmin && (
+          <button onClick={e => { e.stopPropagation(); onHapus(l.id); }}
+            title="Hapus laporan"
+            style={{ background:'none', border:'none', cursor:'pointer', fontSize:14,
+              color:'var(--text-3)', padding:4, flexShrink:0 }}
+            onMouseEnter={e => e.currentTarget.style.color='var(--red)'}
+            onMouseLeave={e => e.currentTarget.style.color='var(--text-3)'}>✕</button>
+        )}
       </div>
 
       {expanded && (
@@ -498,6 +508,8 @@ export default function LaporanHarian() {
   const [expanded,  setExpanded]  = useState(null);
   const [filterNama,setFilterNama]= useState('');
   const [view,      setView]      = useState('today'); // 'today' | 'week' | 'all' | 'grafik'
+  const [hapusId,   setHapusId]   = useState(null);
+  const [hapusErr,  setHapusErr]  = useState('');
 
   const load = useCallback(async () => {
     if (view === 'grafik') return;
@@ -525,6 +537,15 @@ export default function LaporanHarian() {
   }, [view, isAdmin]);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleHapus = async (id) => {
+    setHapusErr('');
+    try {
+      await api.hapusLaporanHarian(id);
+      setHapusId(null);
+      load();
+    } catch (err) { setHapusErr(err.message || 'Gagal hapus. Coba lagi.'); }
+  };
 
   const filtered = filterNama
     ? laporan.filter(l => l.nama.toLowerCase().includes(filterNama.toLowerCase()))
@@ -633,10 +654,36 @@ export default function LaporanHarian() {
                 l={l}
                 expanded={expanded === l.id}
                 onToggle={() => setExpanded(expanded === l.id ? null : l.id)}
+                onHapus={(id) => { setHapusId(id); setHapusErr(''); }}
               />
             ))}
           </>
         )
+      )}
+
+      {hapusId && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)',
+          display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}
+          onClick={e => e.target===e.currentTarget && setHapusId(null)}>
+          <div style={{ background:'var(--surface)', borderRadius:14, padding:24,
+            width:'100%', maxWidth:340, boxShadow:'0 8px 32px rgba(0,0,0,.18)' }}>
+            <div style={{ fontWeight:700, fontSize:15, marginBottom:8 }}>Hapus Laporan?</div>
+            <div style={{ fontSize:13, color:'var(--text-2)', marginBottom: hapusErr ? 10 : 20 }}>
+              Tindakan ini tidak bisa dibatalkan.
+            </div>
+            {hapusErr && <div style={{ fontSize:12, color:'var(--red)', marginBottom:12 }}>{hapusErr}</div>}
+            <div style={{ display:'flex', gap:10 }}>
+              <button onClick={() => setHapusId(null)}
+                style={{ flex:1, padding:'9px', borderRadius:8, border:'1px solid var(--border-2)',
+                  background:'var(--surface)', cursor:'pointer', fontSize:13 }}>Batal</button>
+              <button onClick={() => handleHapus(hapusId)}
+                style={{ flex:1, padding:'9px', borderRadius:8, border:'none',
+                  background:'var(--red)', color:'#fff', cursor:'pointer', fontSize:13, fontWeight:600 }}>
+                Ya, Hapus
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

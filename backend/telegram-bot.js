@@ -206,8 +206,18 @@ async function handleUpdate(update) {
   try {
     const id = await simpanLaporan(parsed, fromUser);
     const tglStr = parsed.tanggal
-      ? parsed.tanggal.toLocaleDateString('id-ID', { weekday:'long', day:'numeric', month:'long' })
+      ? parsed.tanggal.toLocaleDateString('id-ID', { weekday:'long', day:'numeric', month:'long', year:'numeric' })
       : 'hari ini';
+
+    // Warn if date is in the future (compare YYYY-MM-DD strings in UTC)
+    let futureWarning = '';
+    if (parsed.tanggal) {
+      const tglISO = `${parsed.tanggal.getFullYear()}-${String(parsed.tanggal.getMonth()+1).padStart(2,'0')}-${String(parsed.tanggal.getDate()).padStart(2,'0')}`;
+      const todayISO = new Date().toISOString().slice(0,10);
+      if (tglISO > todayISO) {
+        futureWarning = `\n\n⚠️ <b>Perhatian:</b> Tanggal laporan (${tglStr}) adalah masa depan! Cek kembali tanggal — laporan mungkin tidak muncul di web hari ini.`;
+      }
+    }
 
     await sendMessage(chatId,
       `✅ <b>Laporan berhasil dicatat!</b>\n\n` +
@@ -217,7 +227,8 @@ async function handleUpdate(update) {
       `⏰ ${parsed.jam_mulai || '-'} – ${parsed.jam_selesai || '-'}\n` +
       `📊 Active order: ${parsed.active_order}\n` +
       (parsed.impresi ? `👁 Impresi: ${parsed.impresi} | Klik: ${parsed.click} | CR: ${parsed.cr}\n` : '') +
-      `\n🔗 hub.creanimasi.com/laporan-harian (ID: #${id})`
+      `\n🔗 hub.creanimasi.com/laporan-harian (ID: #${id})` +
+      futureWarning
     );
 
     console.log(`[BOT] ✅ Laporan #${id} dari ${parsed.nama} (${fromUser}) disimpan`);

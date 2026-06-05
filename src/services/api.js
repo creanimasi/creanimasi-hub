@@ -60,6 +60,7 @@ export const api = {
   getLaporanHarian:       (q = '') => request('GET', `/laporan-harian${q}`),
   getLaporanHarianStats:  (q = '') => request('GET', `/laporan-harian/stats${q}`),
   getLaporanHarianGrafik: (q = '') => request('GET', `/laporan-harian/grafik${q}`),
+  hapusLaporanHarian:     (id)     => request('DELETE', `/laporan-harian/${id}`),
 
   // Laporan Mingguan
   getAnalisisSdm:   (tgl)   => request('GET', `/laporan-sdm-analisa?tanggal=${tgl}`),
