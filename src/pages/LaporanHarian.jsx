@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  LineChart, Line, BarChart, Bar,
+  LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
 } from 'recharts';
@@ -11,8 +11,7 @@ import { api } from '../services/api';
 // ── HELPERS ────────────────────────────────────────────────────────────────────
 function parseNum(str) {
   if (!str) return 0;
-  // Strip emojis and non-ASCII before parsing
-  const clean = String(str).replace(/[^\x00-\x7F]/g, '').replace(/\s/g, '').toLowerCase();
+  const clean = String(str).replace(/[^0-9a-zA-Z.,+-]/g, '').toLowerCase();
   if (clean.endsWith('k')) return Math.round(parseFloat(clean) * 1000);
   if (clean.endsWith('m')) return Math.round(parseFloat(clean) * 1000000);
   return parseFloat(clean.replace(',', '.')) || 0;
