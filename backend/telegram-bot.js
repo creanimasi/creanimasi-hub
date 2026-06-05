@@ -1,7 +1,8 @@
 // Creanimasi Hub — Telegram Bot untuk laporan harian tim
 // Token disimpan di env var TELEGRAM_BOT_TOKEN
 
-const { Pool } = require('pg');
+import pg from 'pg';
+const { Pool } = pg;
 
 const TOKEN   = process.env.TELEGRAM_BOT_TOKEN;
 const DB_URL  = process.env.DATABASE_URL;
@@ -24,6 +25,7 @@ function parseLaporan(text) {
   };
 
   let section = 'header';
+  let activeOrderExplicit = false;
   const sectionBuffer = { yang_didapat: [], capaian: [], chat_masuk: [], order: [], complete_order: [] };
 
   for (let i = 0; i < lines.length; i++) {
@@ -56,9 +58,9 @@ function parseLaporan(text) {
     // ── Jam kerja: 09.00-16.30: aktivitas
     const jamMatch = line.match(/^(\d{1,2}[.:]\d{2})\s*[-–]\s*(\d{1,2}[.:]\d{2})\s*[:.]?\s*(.*)/);
     if (jamMatch) {
-      result.jam_mulai  = jamMatch[1].replace('.', ':');
+      result.jam_mulai   = jamMatch[1].replace('.', ':');
       result.jam_selesai = jamMatch[2].replace('.', ':');
-      result.aktivitas  = jamMatch[3] || '';
+      result.aktivitas   = jamMatch[3] || '';
       section = 'aktivitas'; continue;
     }
 
@@ -78,6 +80,16 @@ function parseLaporan(text) {
     }
     if (/^order\s*(masuk|:)/i.test(line)) {
       section = 'order'; continue;
+    }
+
+    // ── Active Order (bisa "Active Order 10" atau "Active Order" sebagai heading)
+    if (/^active\s+order/i.test(line)) {
+      const numMatch = line.match(/active\s+order\s+(\d+)/i);
+      if (numMatch) {
+        result.active_order = parseInt(numMatch[1]);
+        activeOrderExplicit = true;
+      }
+      section = 'detail_order'; continue;
     }
 
     // ── Isi per section
@@ -109,16 +121,6 @@ function parseLaporan(text) {
       sectionBuffer.complete_order.push(line); continue;
     }
 
-    // ── Active Order (bisa "Active Order 10" atau "Active Order" sebagai heading)
-    if (/^active\s+order/i.test(line)) {
-      const numMatch = line.match(/active\s+order\s+(\d+)/i);
-      if (numMatch) {
-        result.active_order = parseInt(numMatch[1]);
-        result._activeOrderExplicit = true;
-      }
-      section = 'detail_order'; continue;
-    }
-
     if (section === 'detail_order') {
       // Format: "-filter: 1" atau "filter = 1" atau "filter: 1"
       const m = line.match(/^-?\s*(.+?)\s*[=:]\s*(\d+)/);
@@ -126,16 +128,16 @@ function parseLaporan(text) {
         const key = m[1].trim().toLowerCase();
         const val = parseInt(m[2]);
         result.detail_order[key] = val;
-        if (!result._activeOrderExplicit) result.active_order += val;
+        if (!activeOrderExplicit) result.active_order += val;
       }
       continue;
     }
   }
 
   // Gabungkan buffer sections
-  result.yang_didapat  = sectionBuffer.yang_didapat.join('\n').trim();
-  result.chat_masuk    = sectionBuffer.chat_masuk.join('\n').trim();
-  result.order_masuk   = sectionBuffer.order.join('\n').trim();
+  result.yang_didapat   = sectionBuffer.yang_didapat.join('\n').trim();
+  result.chat_masuk     = sectionBuffer.chat_masuk.join('\n').trim();
+  result.order_masuk    = sectionBuffer.order.join('\n').trim();
   result.complete_order = sectionBuffer.complete_order.join('\n').trim();
 
   return result;
@@ -167,7 +169,6 @@ async function simpanLaporan(data, telegramUser) {
 
 // ── KIRIM PESAN TELEGRAM ───────────────────────────────────────────────────────
 async function sendMessage(chatId, text, parseMode = 'HTML') {
-  const fetch = (await import('node-fetch')).default;
   await fetch(`${API_URL}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -180,21 +181,19 @@ async function handleUpdate(update) {
   const msg = update.message || update.channel_post;
   if (!msg?.text) return;
 
-  const chatId    = msg.chat.id;
-  const text      = msg.text.trim();
-  const fromUser  = msg.from?.username || msg.from?.first_name || 'unknown';
+  const chatId   = msg.chat.id;
+  const text     = msg.text.trim();
+  const fromUser = msg.from?.username || msg.from?.first_name || 'unknown';
 
-  // Abaikan command
   if (text.startsWith('/')) {
     if (text === '/start' || text === '/help') {
       await sendMessage(chatId,
-        `👋 <b>Creanimasi Hub Bot</b>\n\nKirim laporan harian kamu langsung ke sini atau forward dari grup.\n\nFormat:\n<code>Nama Lengkap\nAkun: Creanimasi\nRabu, 4 Juni 2026\n09.00-16.30: aktivitas...\n\nyang di dapat hari ini:\n...\n\nCapaian hari ini:\nImpresi = 14k\nClick = 164\nCr = 0,03%\n\nChat Masuk:\n...\n\nactive order 10\nar filter: 1</code>`
+        `👋 <b>Creanimasi Hub Bot</b>\n\nKirim laporan harian kamu langsung ke sini.\n\nFormat:\n<code>Nama Lengkap\nFiverr: NamaAkun\nKamis, 4 Juni 2026\n09.00-15.30 : aktivitas\n\nCapaian hari ini:\nImpresi : 14k\nKlik : 164\nCr : 0,03%\n\nHal yang dipelajari hari ini:\n- ...\n\nChat Masuk\n- ...\n\nOrder Masuk\n- ...\n\nComplete Order\n- ...\n\nActive Order\n- filter: 1\n- vrm: 2</code>`
       );
     }
     return;
   }
 
-  // Coba parse sebagai laporan
   const parsed = parseLaporan(text);
 
   if (!parsed.nama) {
@@ -217,8 +216,8 @@ async function handleUpdate(update) {
       `📅 ${tglStr}\n` +
       `⏰ ${parsed.jam_mulai || '-'} – ${parsed.jam_selesai || '-'}\n` +
       `📊 Active order: ${parsed.active_order}\n` +
-      (parsed.impresi ? `👁 Impresi: ${parsed.impresi} | Click: ${parsed.click} | CR: ${parsed.cr}\n` : '') +
-      `\n🔗 Lihat di hub.creanimasi.com/laporan-harian (ID: #${id})`
+      (parsed.impresi ? `👁 Impresi: ${parsed.impresi} | Klik: ${parsed.click} | CR: ${parsed.cr}\n` : '') +
+      `\n🔗 hub.creanimasi.com/laporan-harian (ID: #${id})`
     );
 
     console.log(`[BOT] ✅ Laporan #${id} dari ${parsed.nama} (${fromUser}) disimpan`);
@@ -232,9 +231,8 @@ async function handleUpdate(update) {
 let offset = 0;
 
 async function poll() {
-  const fetch = (await import('node-fetch')).default;
   try {
-    const r = await fetch(`${API_URL}/getUpdates?timeout=30&offset=${offset}`);
+    const r    = await fetch(`${API_URL}/getUpdates?timeout=30&offset=${offset}`);
     const data = await r.json();
 
     if (data.ok && data.result.length > 0) {
