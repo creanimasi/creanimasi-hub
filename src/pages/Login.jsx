@@ -140,15 +140,6 @@ export default function Login({ onLogin }) {
         </form>
 
         {/* Hint akun */}
-        <div style={{
-          marginTop: 24, padding: '12px 14px', borderRadius: 10,
-          background: 'var(--surface-2)', border: '1px solid var(--border)',
-          fontSize: 11, color: 'var(--text-3)', lineHeight: 1.7,
-        }}>
-          <div style={{ fontWeight: 700, color: 'var(--text-2)', marginBottom: 4 }}>💡 Akun default:</div>
-          <div>Admin: <span style={{ color: 'var(--green)' }}>kholed</span> / <span style={{ color: 'var(--text-2)' }}>admin123</span></div>
-          <div>Tim: <span style={{ color: 'var(--green)' }}>ariel / ryan / dst</span> / <span style={{ color: 'var(--text-2)' }}>creanimasi123</span></div>
-        </div>
       </div>
     </div>
   );
