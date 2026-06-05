@@ -900,6 +900,43 @@ router.get('/performa', authMiddleware, async (req, res) => {
   }
 });
 
+// ── LAPORAN HARIAN ────────────────────────────────────────────────────────────
+router.get('/laporan-harian', authMiddleware, async (req, res) => {
+  const { dari, sampai, nama, limit = 50 } = req.query;
+  const isAdmin = req.user.role === 'admin';
+  try {
+    let q = 'SELECT * FROM laporan_harian WHERE 1=1';
+    const p = [];
+    if (!isAdmin) { q += ` AND nama = $${p.length+1}`; p.push(req.user.nama); }
+    else if (nama) { q += ` AND nama ILIKE $${p.length+1}`; p.push(`%${nama}%`); }
+    if (dari)   { q += ` AND tanggal >= $${p.length+1}`; p.push(dari); }
+    if (sampai) { q += ` AND tanggal <= $${p.length+1}`; p.push(sampai); }
+    q += ` ORDER BY tanggal DESC, created_at DESC LIMIT $${p.length+1}`;
+    p.push(parseInt(limit));
+    const r = await hubPool.query(q, p);
+    res.json({ data: r.rows });
+  } catch { res.status(500).json({ error: 'Gagal ambil laporan harian' }); }
+});
+
+router.get('/laporan-harian/stats', authMiddleware, async (req, res) => {
+  const { dari, sampai } = req.query;
+  try {
+    const r = await hubPool.query(`
+      SELECT
+        nama,
+        COUNT(*)::int                          AS total_hari,
+        ROUND(AVG(active_order)::numeric, 1)   AS avg_order,
+        SUM(active_order)::int                 AS total_order,
+        MAX(tanggal)                           AS terakhir_lapor
+      FROM laporan_harian
+      WHERE ($1::date IS NULL OR tanggal >= $1)
+        AND ($2::date IS NULL OR tanggal <= $2)
+      GROUP BY nama ORDER BY nama
+    `, [dari || null, sampai || null]);
+    res.json({ data: r.rows });
+  } catch { res.status(500).json({ error: 'Gagal ambil stats' }); }
+});
+
 // ── ANALISA SDM OTOMATIS ──────────────────────────────────────────────────────
 // GET /api/hub/laporan-sdm-analisa?tanggal=YYYY-MM-DD
 // Ambil jurnal minggu ini + 1-on-1 terbaru per anggota → buat narasi SDM

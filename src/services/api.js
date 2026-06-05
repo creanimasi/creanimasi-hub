@@ -56,6 +56,10 @@ export const api = {
   getProfilingMe: ()                             => request('GET', '/profiling/me'),
   updateProfil:   (data)                         => request('PATCH', '/profil/update', data),
 
+  // Laporan Harian (dari Telegram bot)
+  getLaporanHarian:      (q = '') => request('GET', `/laporan-harian${q}`),
+  getLaporanHarianStats: (q = '') => request('GET', `/laporan-harian/stats${q}`),
+
   // Laporan Mingguan
   getAnalisisSdm:   (tgl)   => request('GET', `/laporan-sdm-analisa?tanggal=${tgl}`),
   getLaporan:       ()      => request('GET', '/laporan-mingguan'),
