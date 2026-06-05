@@ -12,7 +12,8 @@ const jwt     = require('jsonwebtoken');
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const hubPool = pool;
-const JWT_SECRET = process.env.HUB_JWT_SECRET || 'creanimasi-hub-secret-2024';
+const JWT_SECRET = process.env.HUB_JWT_SECRET;
+if (!JWT_SECRET) throw new Error('HUB_JWT_SECRET environment variable tidak di-set');
 
 // ── HELPER ────────────────────────────────────────
 const query = (text, params) => pool.query(text, params);
@@ -557,7 +558,8 @@ router.post('/sesi-1on1', authMiddleware, async (req, res) => {
 router.patch('/tim/:id/reset-password', authMiddleware, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
   const { password_baru } = req.body;
-  const pw = password_baru || 'creanimasi123';
+  if (!password_baru) return res.status(400).json({ error: 'password_baru wajib diisi' });
+  const pw = password_baru;
   try {
     const timR = await hubPool.query('SELECT nama FROM tim WHERE id=$1', [req.params.id]);
     if (!timR.rows.length) return res.status(404).json({ error: 'Anggota tidak ditemukan' });
