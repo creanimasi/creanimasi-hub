@@ -937,6 +937,23 @@ router.get('/laporan-harian/stats', authMiddleware, async (req, res) => {
   } catch { res.status(500).json({ error: 'Gagal ambil stats' }); }
 });
 
+// GET /laporan-harian/grafik?dari=YYYY-MM-DD&sampai=YYYY-MM-DD
+router.get('/laporan-harian/grafik', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+  const { dari, sampai } = req.query;
+  try {
+    const r = await hubPool.query(`
+      SELECT akun, tanggal, nama, active_order, impresi, click, cr, detail_order
+      FROM laporan_harian
+      WHERE akun IS NOT NULL AND akun != ''
+        AND ($1::date IS NULL OR tanggal >= $1)
+        AND ($2::date IS NULL OR tanggal <= $2)
+      ORDER BY akun, tanggal ASC
+    `, [dari || null, sampai || null]);
+    res.json({ data: r.rows });
+  } catch { res.status(500).json({ error: 'Gagal ambil grafik' }); }
+});
+
 // ── ANALISA SDM OTOMATIS ──────────────────────────────────────────────────────
 // GET /api/hub/laporan-sdm-analisa?tanggal=YYYY-MM-DD
 // Ambil jurnal minggu ini + 1-on-1 terbaru per anggota → buat narasi SDM
