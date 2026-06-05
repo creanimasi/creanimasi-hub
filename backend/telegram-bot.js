@@ -35,9 +35,9 @@ function parseLaporan(text) {
       result.nama = line; continue;
     }
 
-    // ── Akun: Creanimasi / Jelia / Creillustra
-    if (lc.startsWith('akun:') || lc.startsWith('akun :')) {
-      result.akun = line.replace(/akun\s*:/i, '').trim(); continue;
+    // ── Akun: "Akun: Creanimasi" atau "fiverr: jellia" / "vgen: X"
+    if (/^(akun|fiverr|vgen|etsy|gumroad)\s*:/i.test(lc)) {
+      result.akun = line.trim(); continue;
     }
 
     // ── Tanggal (Rabu, 4 Juni 2026)
@@ -63,7 +63,8 @@ function parseLaporan(text) {
     }
 
     // ── Section markers
-    if (lc.includes('yang di dapat') || lc.includes('yang didapat') || lc === 'yang di dapat hari ini:') {
+    if (lc.includes('yang di dapat') || lc.includes('yang didapat') ||
+        lc.includes('yang dipelajari') || lc === 'yang di dapat hari ini:') {
       section = 'yang_didapat'; continue;
     }
     if (lc.includes('capaian hari ini') || lc === 'capaian:') {
@@ -72,10 +73,10 @@ function parseLaporan(text) {
     if (lc.startsWith('chat masuk') || lc === 'chat masuk:') {
       section = 'chat_masuk'; continue;
     }
-    if (/^complete order\s*:/i.test(line) || lc === 'complete order :' || lc === 'complete order:') {
+    if (/^complete\s*order/i.test(line)) {
       section = 'complete_order'; continue;
     }
-    if (/^order\s*:/i.test(line) || lc === 'order :') {
+    if (/^order\s*(masuk|:)/i.test(line)) {
       section = 'order'; continue;
     }
 
@@ -85,12 +86,13 @@ function parseLaporan(text) {
     }
 
     if (section === 'capaian') {
+      const stripArrow = s => s.replace(/[▲▼↑↓]\s*/g, '').trim();
       const impresi = line.match(/impresi\s*[=:]\s*(.+)/i);
-      const click   = line.match(/click\s*[=:]\s*(.+)/i);
+      const click   = line.match(/(?:klik|click)\s*[=:]\s*(.+)/i);
       const cr      = line.match(/cr\s*[=:]\s*(.+)/i);
-      if (impresi)  result.impresi = impresi[1].trim();
-      else if (click) result.click = click[1].trim();
-      else if (cr)    result.cr    = cr[1].trim();
+      if (impresi)    result.impresi = stripArrow(impresi[1]);
+      else if (click) result.click   = stripArrow(click[1]);
+      else if (cr)    result.cr      = stripArrow(cr[1]);
       else sectionBuffer.capaian.push(line);
       continue;
     }
@@ -107,13 +109,25 @@ function parseLaporan(text) {
       sectionBuffer.complete_order.push(line); continue;
     }
 
-    // ── Detail order (active order N, ar filter: 1, dst)
-    const activeMatch = line.match(/active\s+order\s+(\d+)/i);
-    if (activeMatch) { result.active_order = parseInt(activeMatch[1]); section = 'detail_order'; continue; }
+    // ── Active Order (bisa "Active Order 10" atau "Active Order" sebagai heading)
+    if (/^active\s+order/i.test(line)) {
+      const numMatch = line.match(/active\s+order\s+(\d+)/i);
+      if (numMatch) {
+        result.active_order = parseInt(numMatch[1]);
+        result._activeOrderExplicit = true;
+      }
+      section = 'detail_order'; continue;
+    }
 
     if (section === 'detail_order') {
-      const m = line.match(/^(.+?)\s*[=:]\s*(\d+)/);
-      if (m) result.detail_order[m[1].trim().toLowerCase()] = parseInt(m[2]);
+      // Format: "-filter: 1" atau "filter = 1" atau "filter: 1"
+      const m = line.match(/^-?\s*(.+?)\s*[=:]\s*(\d+)/);
+      if (m) {
+        const key = m[1].trim().toLowerCase();
+        const val = parseInt(m[2]);
+        result.detail_order[key] = val;
+        if (!result._activeOrderExplicit) result.active_order += val;
+      }
       continue;
     }
   }
