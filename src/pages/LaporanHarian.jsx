@@ -11,10 +11,11 @@ import { api } from '../services/api';
 // ── HELPERS ────────────────────────────────────────────────────────────────────
 function parseNum(str) {
   if (!str) return 0;
-  const s = String(str).replace(/\s/g, '').toLowerCase();
-  if (s.endsWith('k')) return Math.round(parseFloat(s) * 1000);
-  if (s.endsWith('m')) return Math.round(parseFloat(s) * 1000000);
-  return parseFloat(s.replace(',', '.')) || 0;
+  // Strip emojis and non-ASCII before parsing
+  const clean = String(str).replace(/[^\x00-\x7F]/g, '').replace(/\s/g, '').toLowerCase();
+  if (clean.endsWith('k')) return Math.round(parseFloat(clean) * 1000);
+  if (clean.endsWith('m')) return Math.round(parseFloat(clean) * 1000000);
+  return parseFloat(clean.replace(',', '.')) || 0;
 }
 function parseCR(str) {
   if (!str) return 0;
@@ -262,15 +263,20 @@ function GrafikAkun({ akun, rows }) {
 function GrafikPanel() {
   const [data,    setData]    = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState('');
   const [periode, setPeriode] = useState('30');
 
   useEffect(() => {
     setLoading(true);
-    const sampai = new Date().toISOString().slice(0,10);
+    setError('');
+    // sampai = tomorrow UTC so we include records saved as midnight WIB today
+    const sampaiDate = new Date();
+    sampaiDate.setDate(sampaiDate.getDate() + 1);
+    const sampai = sampaiDate.toISOString().slice(0,10);
     const dari   = new Date(Date.now() - parseInt(periode) * 24*60*60*1000).toISOString().slice(0,10);
     api.getLaporanHarianGrafik(`?dari=${dari}&sampai=${sampai}`)
       .then(res => setData(res.data || []))
-      .catch(() => {})
+      .catch(err => setError(err.message || 'Gagal memuat grafik'))
       .finally(() => setLoading(false));
   }, [periode]);
 
@@ -305,6 +311,10 @@ function GrafikPanel() {
 
       {loading ? (
         <div style={{ textAlign:'center', padding:40, color:'var(--text-2)' }}>Memuat grafik...</div>
+      ) : error ? (
+        <div className="alert alert-red" style={{ marginTop:8 }}>
+          <span>⚠️</span><div>Gagal memuat grafik: {error}</div>
+        </div>
       ) : akunList.length === 0 ? (
         <div className="empty">
           <div className="empty-icon">📊</div>
