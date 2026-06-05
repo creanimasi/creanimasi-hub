@@ -16,8 +16,9 @@ export function Modul() {
   const [saving,    setSaving]   = useState({});
   const [editNama,  setEditNama] = useState(null);  // 'modulId|idx' yang sedang diedit
   const [editVal,   setEditVal]  = useState('');
-  const [expanded,  setExpanded] = useState(null); // modul_id expand
-  const [memberExp, setMemberExp]= useState(null); // 'nama|modulId' expand
+  const [expanded,  setExpanded] = useState(null);
+  const [memberExp, setMemberExp]= useState(null);
+  const [error,     setError]    = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -31,7 +32,7 @@ export function Modul() {
       (namaRes.data || []).forEach(r => { namaMap[`${r.modul_id}|${r.topik_idx}`] = r.nama; });
       setTopikNama(namaMap);
     } catch (err) {
-      console.error('Gagal load modul topik:', err.message);
+      setError(err.message || 'Gagal memuat modul');
     } finally { setLoading(false); }
   }, [isAdmin, user?.nama]);
 
@@ -42,7 +43,9 @@ export function Modul() {
     try {
       await api.updateModulTopikNama(modulId, idx, nama);
       setTopikNama(prev => ({ ...prev, [key]: nama }));
-    } catch {}
+    } catch (err) {
+      setError(err.message || 'Gagal menyimpan nama topik');
+    }
     setEditNama(null);
   };
 
@@ -101,6 +104,7 @@ export function Modul() {
   const grandPct = grandMax > 0 ? Math.round(grandDone / grandMax * 100) : 0;
 
   if (loading) return <div style={{ textAlign:'center', padding:40, color:'var(--text-2)' }}>Memuat data modul...</div>;
+  if (error)   return <div className="alert alert-red"><span>⚠️</span><div>{error}</div></div>;
 
   return (
     <div>

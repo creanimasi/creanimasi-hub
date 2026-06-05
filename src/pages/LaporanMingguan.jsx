@@ -133,9 +133,10 @@ const DEFAULT_FORM = () => ({
 });
 
 function FormLaporan({ initial, onSave, onCancel, saving, error }) {
-  const [form,     setForm]     = useState(initial || DEFAULT_FORM());
-  const [analisa,  setAnalisa]  = useState(false);  // loading analisa SDM
-  const [analisaInfo, setAnalisaInfo] = useState(''); // info berapa isi jurnal
+  const [form,        setForm]       = useState(initial || DEFAULT_FORM());
+  const [analisa,     setAnalisa]    = useState(false);
+  const [analisaInfo, setAnalisaInfo]= useState('');
+  const [localErr,    setLocalErr]   = useState('');
 
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -156,8 +157,8 @@ function FormLaporan({ initial, onSave, onCancel, saving, error }) {
   }));
 
   const handleAutoFill = async () => {
-    if (!form.tanggal) { alert('Isi tanggal laporan dulu'); return; }
-    setAnalisa(true); setAnalisaInfo('');
+    if (!form.tanggal) { setLocalErr('Isi tanggal laporan dulu'); return; }
+    setLocalErr(''); setAnalisa(true); setAnalisaInfo('');
     try {
       const res = await api.getAnalisisSdm(form.tanggal);
       const hasil = res.data || [];
@@ -173,7 +174,7 @@ function FormLaporan({ initial, onSave, onCancel, saving, error }) {
         })
       }));
     } catch (err) {
-      alert('Gagal generate analisa: ' + (err.message || 'coba lagi'));
+      setLocalErr('Gagal generate analisa: ' + (err.message || 'coba lagi'));
     } finally { setAnalisa(false); }
   };
 
@@ -183,9 +184,9 @@ function FormLaporan({ initial, onSave, onCancel, saving, error }) {
 
   return (
     <form onSubmit={e => { e.preventDefault(); onSave(form); }} style={{ maxWidth: 800 }}>
-      {error && (
+      {(error || localErr) && (
         <div className="alert alert-red" style={{ marginBottom:16, fontSize:12 }}>
-          <span>⚠️</span><div>{error}</div>
+          <span>⚠️</span><div>{error || localErr}</div>
         </div>
       )}
 
@@ -330,9 +331,11 @@ export default function LaporanMingguan() {
   const [view,     setView]     = useState('list');   // 'list' | 'form' | 'preview'
   const [selected, setSelected] = useState(null);    // laporan detail
   const [editData, setEditData] = useState(null);    // form initial data
-  const [saving,   setSaving]   = useState(false);
-  const [formErr,  setFormErr]  = useState('');
-  const [genPdf,   setGenPdf]   = useState(false);
+  const [saving,      setSaving]      = useState(false);
+  const [formErr,     setFormErr]     = useState('');
+  const [genPdf,      setGenPdf]      = useState(false);
+  const [confirmHapus,setConfirmHapus]= useState(null); // id laporan yang akan dihapus
+  const [hapusErr,    setHapusErr]    = useState('');
   const previewRef = useRef(null);
 
   const loadDaftar = useCallback(() => {
@@ -351,6 +354,7 @@ export default function LaporanMingguan() {
   };
 
   const handleEdit = async (id) => {
+    try {
     const r = await api.getLaporanById(id);
     const d = r.data;
     // Map SDM: pastikan semua anggota TIM ada (merge dengan data tersimpan)
@@ -360,6 +364,7 @@ export default function LaporanMingguan() {
     setEditData({ ...d, sdm });
     setFormErr('');
     setView('form');
+    } catch (err) { setFormErr(err.message || 'Gagal memuat laporan'); }
   };
 
   const handleSave = async (form) => {
@@ -378,15 +383,17 @@ export default function LaporanMingguan() {
   };
 
   const handleHapus = async (id) => {
-    if (!window.confirm('Hapus laporan ini?')) return;
-    try { await api.hapusLaporan(id); loadDaftar(); }
-    catch { alert('Gagal hapus'); }
+    setHapusErr('');
+    try { await api.hapusLaporan(id); setConfirmHapus(null); loadDaftar(); }
+    catch (err) { setHapusErr(err.message || 'Gagal hapus'); }
   };
 
   const handlePreview = async (id) => {
-    const r = await api.getLaporanById(id);
-    setSelected(r.data);
-    setView('preview');
+    try {
+      const r = await api.getLaporanById(id);
+      setSelected(r.data);
+      setView('preview');
+    } catch (err) { setFormErr(err.message || 'Gagal memuat preview'); }
   };
 
   const handleDownloadPdf = async () => {
@@ -472,12 +479,38 @@ export default function LaporanMingguan() {
                     style={{ fontSize:11 }}>👁 Preview</button>
                   <button onClick={() => handleEdit(l.id)} className="btn btn-sm"
                     style={{ fontSize:11 }}>✏️ Edit</button>
-                  <button onClick={() => handleHapus(l.id)} className="btn btn-sm"
+                  <button onClick={() => { setConfirmHapus(l.id); setHapusErr(''); }}
+                    className="btn btn-sm"
                     style={{ fontSize:11, color:'var(--red)', borderColor:'var(--red)' }}>✕</button>
                 </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {confirmHapus && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)',
+          display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}
+          onClick={e => e.target===e.currentTarget && setConfirmHapus(null)}>
+          <div style={{ background:'var(--surface)', borderRadius:14, padding:24,
+            width:'100%', maxWidth:340, boxShadow:'0 8px 32px rgba(0,0,0,.18)' }}>
+            <div style={{ fontWeight:700, fontSize:15, marginBottom:8 }}>Hapus laporan ini?</div>
+            <div style={{ fontSize:13, color:'var(--text-2)', marginBottom:hapusErr ? 10 : 20 }}>
+              Tindakan ini tidak bisa dibatalkan.
+            </div>
+            {hapusErr && <div style={{ fontSize:12, color:'var(--red)', marginBottom:12 }}>{hapusErr}</div>}
+            <div style={{ display:'flex', gap:10 }}>
+              <button onClick={() => setConfirmHapus(null)}
+                style={{ flex:1, padding:'9px', borderRadius:8, border:'1px solid var(--border-2)',
+                  background:'var(--surface)', cursor:'pointer', fontSize:13 }}>Batal</button>
+              <button onClick={() => handleHapus(confirmHapus)}
+                style={{ flex:1, padding:'9px', borderRadius:8, border:'none',
+                  background:'var(--red)', color:'#fff', cursor:'pointer', fontSize:13, fontWeight:600 }}>
+                Ya, Hapus
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -26,7 +26,7 @@ async function request(method, path, body) {
 export const api = {
   // Jurnal
   simpanJurnal:   (data)         => request('POST', '/jurnal', data),
-  getJurnal:      (nama)         => request('GET', `/jurnal${nama ? `?nama=${nama}` : ''}`),
+  getJurnal:      (nama)         => request('GET', `/jurnal${nama ? `?nama=${encodeURIComponent(nama)}` : ''}`),
   getJurnalStats: ()             => request('GET', '/jurnal/stats'),
   replyJurnal:    (id, reply)    => request('PATCH', `/jurnal/${id}/reply`, { reply }),
 

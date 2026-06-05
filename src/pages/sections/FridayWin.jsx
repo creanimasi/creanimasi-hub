@@ -12,6 +12,8 @@ export function FridayWin() {
   const [form,     setForm]     = useState({ tanggal: new Date().toISOString().slice(0,10), headline:'', penerima:'', pesan:'' });
   const [saving,   setSaving]   = useState(false);
   const [postErr,  setPostErr]  = useState('');
+  const [deleteId, setDeleteId] = useState(null);
+  const [deleteErr,setDeleteErr]= useState('');
 
   const load = useCallback(() => {
     api.getFridayWin().then(r => setList(r.data||[])).catch(()=>{}).finally(()=>setLoading(false));
@@ -32,9 +34,9 @@ export function FridayWin() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Hapus Friday Win ini? Tindakan tidak bisa dibatalkan.')) return;
-    try { await api.deleteFridayWin(id); load(); }
-    catch (err) { alert('Gagal hapus: ' + (err.message || 'coba lagi')); }
+    setDeleteErr('');
+    try { await api.deleteFridayWin(id); setDeleteId(null); load(); }
+    catch (err) { setDeleteErr(err.message || 'Gagal hapus. Coba lagi.'); }
   };
 
   if (loading) return <div style={{ textAlign:'center', padding:40, color:'var(--text-2)' }}>Memuat...</div>;
@@ -130,7 +132,7 @@ export function FridayWin() {
                 </div>
               </div>
               {user?.role === 'admin' && (
-                <button onClick={() => handleDelete(w.id)} title="Hapus"
+                <button onClick={() => { setDeleteId(w.id); setDeleteErr(''); }} title="Hapus"
                   style={{ background:'none', border:'none', cursor:'pointer', fontSize:14,
                     color:'var(--text-3)', padding:4 }}
                   onMouseEnter={e=>e.currentTarget.style.color='var(--red)'}
@@ -140,6 +142,31 @@ export function FridayWin() {
           </div>
         );
       })}
+
+      {deleteId && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)',
+          display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}
+          onClick={e => e.target===e.currentTarget && setDeleteId(null)}>
+          <div style={{ background:'var(--surface)', borderRadius:14, padding:24,
+            width:'100%', maxWidth:340, boxShadow:'0 8px 32px rgba(0,0,0,.18)' }}>
+            <div style={{ fontWeight:700, fontSize:15, marginBottom:8 }}>Hapus Friday Win?</div>
+            <div style={{ fontSize:13, color:'var(--text-2)', marginBottom: deleteErr ? 10 : 20 }}>
+              Tindakan ini tidak bisa dibatalkan.
+            </div>
+            {deleteErr && <div style={{ fontSize:12, color:'var(--red)', marginBottom:12 }}>{deleteErr}</div>}
+            <div style={{ display:'flex', gap:10 }}>
+              <button onClick={() => setDeleteId(null)}
+                style={{ flex:1, padding:'9px', borderRadius:8, border:'1px solid var(--border-2)',
+                  background:'var(--surface)', cursor:'pointer', fontSize:13 }}>Batal</button>
+              <button onClick={() => handleDelete(deleteId)}
+                style={{ flex:1, padding:'9px', borderRadius:8, border:'none',
+                  background:'var(--red)', color:'#fff', cursor:'pointer', fontSize:13, fontWeight:600 }}>
+                Ya, Hapus
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

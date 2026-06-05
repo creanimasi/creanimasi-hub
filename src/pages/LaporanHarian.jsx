@@ -367,9 +367,10 @@ function LaporanCard({ l, expanded, onToggle }) {
   const tgl    = new Date(l.tanggal);
   const inits  = l.nama.split(' ').slice(0,2).map(w=>w[0]).join('');
 
-  const detailOrder = typeof l.detail_order === 'string'
-    ? JSON.parse(l.detail_order || '{}')
-    : (l.detail_order || {});
+  const detailOrder = (() => {
+    if (typeof l.detail_order !== 'string') return l.detail_order || {};
+    try { return JSON.parse(l.detail_order); } catch { return {}; }
+  })();
 
   return (
     <div className="card" style={{ marginBottom:8 }}>
@@ -510,7 +511,7 @@ export default function LaporanHarian() {
                  : undefined;
 
       let q = dari ? `?dari=${dari}&sampai=${today}` : '';
-      if (!isAdmin) q = `?dari=${dari||''}&sampai=${today}`;
+      if (!isAdmin) q = dari ? `?dari=${dari}&sampai=${today}` : `?sampai=${today}`;
 
       const [lRes, sRes] = await Promise.all([
         api.getLaporanHarian(q),
@@ -518,8 +519,9 @@ export default function LaporanHarian() {
       ]);
       setLaporan(lRes.data || []);
       setStats(sRes.data || []);
-    } catch {}
-    finally { setLoading(false); }
+    } catch (err) {
+      console.error('Gagal load laporan harian:', err.message);
+    } finally { setLoading(false); }
   }, [view, isAdmin]);
 
   useEffect(() => { load(); }, [load]);

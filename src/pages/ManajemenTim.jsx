@@ -1,25 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
+import { TIPE_COLOR } from '../data/tim';
 
 const DIVISI_OPTIONS = ['Admin', 'PM', 'Illustrator', 'Rigger', '3D Modeler'];
 const LEVEL_OPTIONS  = ['Magang / Probation', 'Junior', 'Senior', 'Admin (L4)', 'Secondline', 'Koordinator'];
 
-const TIPE_COLOR = {
-  'Rising Star':     { bg: 'var(--green-light)',  color: 'var(--green)'  },
-  'High Potential':  { bg: 'var(--purple-light)', color: 'var(--purple)' },
-  'Silent Expert':   { bg: 'var(--amber-light)',  color: 'var(--amber)'  },
-  'At Risk':         { bg: 'var(--coral-light)',  color: 'var(--coral)'  },
-  'Steady Performer':{ bg: 'var(--amber-light)',  color: 'var(--amber)'  },
-};
-
 const emptyForm = { nama: '', divisi: '', level: '' };
 
 function Badge({ tipe }) {
-  const s = TIPE_COLOR[tipe] || { bg: 'var(--surface-2)', color: 'var(--text-2)' };
+  const s = TIPE_COLOR[tipe] || { bg: 'var(--surface-2)', text: 'var(--text-2)' };
   return (
     <span style={{
       fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20,
-      background: s.bg, color: s.color,
+      background: s.bg, color: s.text,
     }}>{tipe || '—'}</span>
   );
 }
@@ -176,17 +169,21 @@ export default function ManajemenTim() {
   const handleResetPW = async () => {
     try {
       const res = await api.resetPassword(modal.data.id);
-      notify(`Password ${modal.data.nama} direset ke "creanimasi123" (username: ${res.username})`);
+      setModal({ type: 'reset-done', data: { nama: modal.data.nama, username: res.username, pw: res.password_temp } });
     } catch (err) {
-      notify(`Gagal: ${err.message}`);
+      notify(`Gagal reset: ${err.message}`);
+      setModal(null);
     }
-    setModal(null);
   };
 
   const handleAktifkan = async (anggota) => {
-    await api.updateTim(anggota.id, { ...anggota, aktif: true });
-    notify(`${anggota.nama} diaktifkan kembali`);
-    load();
+    try {
+      await api.updateTim(anggota.id, { ...anggota, aktif: true });
+      notify(`${anggota.nama} diaktifkan kembali`);
+      load();
+    } catch (err) {
+      notify(`Gagal mengaktifkan: ${err.message}`);
+    }
   };
 
   // Group by divisi
@@ -324,7 +321,7 @@ export default function ManajemenTim() {
             width:'100%', maxWidth:360, boxShadow:'0 8px 32px rgba(0,0,0,.18)' }}>
             <div style={{ fontWeight:700, fontSize:15, marginBottom:8 }}>Reset password?</div>
             <div style={{ fontSize:13, color:'var(--text-2)', marginBottom:20 }}>
-              Password <strong>{modal.data.nama}</strong> akan direset ke <strong>creanimasi123</strong>. Beritahu anggota setelah reset.
+              Password <strong>{modal.data.nama}</strong> akan direset otomatis. Password sementara akan ditampilkan setelah reset — beritahu anggota.
             </div>
             <div style={{ display:'flex', gap:10 }}>
               <button onClick={() => setModal(null)}
@@ -336,6 +333,29 @@ export default function ManajemenTim() {
                 Reset Password
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {modal?.type === 'reset-done' && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)',
+          display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}>
+          <div style={{ background:'var(--surface)', borderRadius:14, padding:24,
+            width:'100%', maxWidth:380, boxShadow:'0 8px 32px rgba(0,0,0,.18)' }}>
+            <div style={{ fontWeight:700, fontSize:15, marginBottom:8, color:'var(--green)' }}>Password berhasil direset</div>
+            <div style={{ fontSize:13, color:'var(--text-2)', marginBottom:12 }}>
+              Beritahu <strong>{modal.data.nama}</strong> password sementara berikut:
+            </div>
+            <div style={{ background:'var(--surface-2)', borderRadius:8, padding:'10px 14px', marginBottom:6,
+              fontFamily:'monospace', fontSize:15, letterSpacing:'.05em', color:'var(--text)', fontWeight:700 }}>
+              {modal.data.pw}
+            </div>
+            <div style={{ fontSize:11, color:'var(--text-3)', marginBottom:16 }}>
+              Username: <strong>{modal.data.username}</strong> — Minta anggota ganti password setelah login.
+            </div>
+            <button onClick={() => setModal(null)} className="btn btn-primary"
+              style={{ width:'100%', justifyContent:'center' }}>
+              Tutup
+            </button>
           </div>
         </div>
       )}

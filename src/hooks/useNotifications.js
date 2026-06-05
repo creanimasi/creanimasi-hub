@@ -21,8 +21,14 @@ export function useNotifications(user) {
 
     try {
       if (isAdmin) {
+        const [jRes, skbRes, sesiRes, profRes] = await Promise.all([
+          api.getJurnal(),
+          api.getSKB(),
+          api.getSesi1on1(),
+          api.getProfilingAll(),
+        ]);
+
         // 1. Anggota belum isi jurnal minggu ini
-        const jRes = await api.getJurnal();
         const isiMingguIni = new Set(
           (jRes.data || [])
             .filter(j => new Date(j.tanggal_jurnal || j.created_at) >= weekAgo)
@@ -38,7 +44,6 @@ export function useNotifications(user) {
         }
 
         // 2. SKB menunggu review
-        const skbRes = await api.getSKB();
         const pending = (skbRes.data || []).filter(s => s.status === 'diajukan');
         if (pending.length > 0) {
           const id = `skb_pending_${pending.map(s=>s.id).join('_')}`;
@@ -51,7 +56,6 @@ export function useNotifications(user) {
         // 3. Sesi 1-on-1 belum dengan At Risk
         const atRisk = TIM.filter(t => t.tipe === 'At Risk');
         if (atRisk.length > 0) {
-          const sesiRes = await api.getSesi1on1();
           const recently = new Set(
             (sesiRes.data || [])
               .filter(s => new Date(s.tanggal) >= new Date(now - 30 * 24 * 60 * 60 * 1000))
@@ -66,32 +70,32 @@ export function useNotifications(user) {
               time: now, path: '/1on1', urgent: true });
           }
         }
+
         // 4. Profiling kadaluarsa (>90 hari tidak diupdate)
-        try {
-          const profRes = await api.getProfilingAll();
-          const now90 = new Date(now - 90 * 24 * 60 * 60 * 1000);
-          const profilingByNama = {};
-          (profRes.data || []).forEach(p => {
-            if (!profilingByNama[p.nama] || new Date(p.created_at) > new Date(profilingByNama[p.nama].created_at))
-              profilingByNama[p.nama] = p;
-          });
-          const kadaluarsa = TIM.filter(t => {
-            const p = profilingByNama[t.nama];
-            if (!p) return true; // belum pernah isi
-            return new Date(p.created_at) < now90;
-          });
-          if (kadaluarsa.length > 0) {
-            const id = `profiling_kadaluarsa_${now.toISOString().slice(0,7)}`;
-            list.push({ id, type: 'info', icon: '👤', unread: !read.includes(id),
-              title: `${kadaluarsa.length} anggota perlu update profiling`,
-              body: kadaluarsa.map(t => t.nama.split(' ')[0]).join(', ') + ' (>90 hari)',
-              time: now, path: '/tim' });
-          }
-        } catch {}
+        const now90 = new Date(now - 90 * 24 * 60 * 60 * 1000);
+        const profilingByNama = {};
+        (profRes.data || []).forEach(p => {
+          if (!profilingByNama[p.nama] || new Date(p.created_at) > new Date(profilingByNama[p.nama].created_at))
+            profilingByNama[p.nama] = p;
+        });
+        const kadaluarsa = TIM.filter(t => {
+          const p = profilingByNama[t.nama];
+          return !p || new Date(p.created_at) < now90;
+        });
+        if (kadaluarsa.length > 0) {
+          const id = `profiling_kadaluarsa_${now.toISOString().slice(0,7)}`;
+          list.push({ id, type: 'info', icon: '👤', unread: !read.includes(id),
+            title: `${kadaluarsa.length} anggota perlu update profiling`,
+            body: kadaluarsa.map(t => t.nama.split(' ')[0]).join(', ') + ' (>90 hari)',
+            time: now, path: '/tim' });
+        }
 
       } else {
-        // Member: cek apakah sudah isi jurnal minggu ini
-        const jRes = await api.getJurnal(user.nama);
+        const [jRes, skbRes] = await Promise.all([
+          api.getJurnal(user.nama),
+          api.getSKB(),
+        ]);
+
         const sudah = (jRes.data || []).some(j => new Date(j.tanggal_jurnal || j.created_at) >= weekAgo);
         const hari  = now.getDay();
         if (!sudah && hari >= 4) {
@@ -102,8 +106,6 @@ export function useNotifications(user) {
             time: now, path: '/jurnal/isi' });
         }
 
-        // Cek SKB yang ditolak/disetujui
-        const skbRes = await api.getSKB();
         const mySkb = (skbRes.data || []).filter(s => s.nama === user.nama && ['disetujui','ditolak'].includes(s.status));
         mySkb.forEach(s => {
           const id = `skb_status_${s.id}`;

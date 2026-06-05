@@ -41,10 +41,10 @@ router.post('/auth/login', async (req, res) => {
       `SELECT * FROM hub_users WHERE username = $1 AND aktif = TRUE`, [username]
     );
     const user = result.rows[0];
-    if (!user) return res.status(401).json({ error: 'Username tidak ditemukan' });
+    if (!user) return res.status(401).json({ error: 'Username atau password salah' });
 
     const valid = await bcrypt.compare(password, user.password);
-    if (!valid) return res.status(401).json({ error: 'Password salah' });
+    if (!valid) return res.status(401).json({ error: 'Username atau password salah' });
 
     const token = jwt.sign(
       { id: user.id, nama: user.nama, username: user.username, role: user.role },
@@ -79,8 +79,8 @@ router.patch('/auth/password', authMiddleware, async (req, res) => {
   const { password_lama, password_baru } = req.body;
   if (!password_lama || !password_baru)
     return res.status(400).json({ error: 'Password lama dan baru wajib diisi' });
-  if (password_baru.length < 6)
-    return res.status(400).json({ error: 'Password baru minimal 6 karakter' });
+  if (password_baru.length < 8)
+    return res.status(400).json({ error: 'Password baru minimal 8 karakter' });
   try {
     const result = await query(`SELECT * FROM hub_users WHERE id = $1`, [req.user.id]);
     const user = result.rows[0];
@@ -113,15 +113,16 @@ router.get('/profiling/me', authMiddleware, async (req, res) => {
 router.post('/jurnal', async (req, res) => {
   try {
     const {
-      nama, divisi, level_karier, tanggal_jurnal,
+      divisi, level_karier, tanggal_jurnal,
       pencapaian_1, pencapaian_2, pencapaian_3,
       hambatan, pelajaran, target_depan,
       mood, skor_karya, skor_waktu, skor_komunikasi, skor_skill,
       catatan_mentor
     } = req.body;
 
-    if (!nama || !mood) {
-      return res.status(400).json({ error: 'Nama dan mood wajib diisi' });
+    const nama = req.user.nama;
+    if (!mood) {
+      return res.status(400).json({ error: 'Mood wajib diisi' });
     }
 
     const result = await query(
@@ -151,6 +152,7 @@ router.post('/jurnal', async (req, res) => {
 router.get('/jurnal', async (req, res) => {
   try {
     const { nama, limit = 50 } = req.query;
+    const cap = Math.min(parseInt(limit) || 50, 200);
     let q = `SELECT * FROM jurnal_mingguan`;
     const params = [];
     if (nama) {
@@ -158,7 +160,7 @@ router.get('/jurnal', async (req, res) => {
       params.push(nama);
     }
     q += ` ORDER BY tanggal_jurnal DESC, created_at DESC LIMIT $${params.length + 1}`;
-    params.push(limit);
+    params.push(cap);
 
     const result = await query(q, params);
     res.json({ success: true, data: result.rows, total: result.rowCount });
@@ -205,7 +207,11 @@ router.post('/profiling/:divisi', async (req, res) => {
   if (!table) return res.status(400).json({ error: 'Divisi tidak valid' });
 
   try {
-    const fields = Object.keys(req.body).filter(k => k !== 'id' && k !== 'created_at');
+    // Hanya izinkan nama kolom yang aman: huruf kecil, angka, underscore saja
+    const fields = Object.keys(req.body).filter(k =>
+      k !== 'id' && k !== 'created_at' && /^[a-z][a-z0-9_]*$/.test(k)
+    );
+    if (fields.length === 0) return res.status(400).json({ error: 'Tidak ada field valid yang dikirim' });
     const values = fields.map(f => req.body[f]);
     const placeholders = fields.map((_, i) => `$${i + 1}`).join(', ');
 
@@ -286,6 +292,7 @@ router.get('/reward', async (req, res) => {
 
 // PATCH /api/hub/reward/:id/status — update status reward
 router.patch('/reward/:id/status', async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
   try {
     const result = await query(
       `UPDATE reward_tracking SET status = $1 WHERE id = $2 RETURNING *`,
@@ -339,6 +346,7 @@ router.get('/skb', async (req, res) => {
 
 // PATCH /api/hub/skb/:id — update status SKB
 router.patch('/skb/:id', async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
   try {
     const { status, catatan_review, reviewer } = req.body;
     const result = await query(
@@ -370,6 +378,7 @@ router.get('/tim', async (req, res) => {
 
 // POST /api/hub/tim — tambah anggota baru
 router.post('/tim', async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
   try {
     const { nama, divisi, level, tipe } = req.body;
     if (!nama || !divisi) return res.status(400).json({ error: 'Nama dan divisi wajib diisi' });
@@ -385,6 +394,7 @@ router.post('/tim', async (req, res) => {
 
 // PATCH /api/hub/tim/:id — edit anggota
 router.patch('/tim/:id', async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
   try {
     const { nama, divisi, level, tipe, aktif } = req.body;
     const result = await query(
@@ -401,6 +411,7 @@ router.patch('/tim/:id', async (req, res) => {
 
 // DELETE /api/hub/tim/:id — nonaktifkan anggota (soft delete)
 router.delete('/tim/:id', async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
   try {
     const result = await query(
       `UPDATE tim SET aktif=FALSE, updated_at=NOW() WHERE id=$1 RETURNING *`,
@@ -493,6 +504,8 @@ router.get('/workshop', authMiddleware, async (req, res) => {
 
 router.patch('/workshop/:nama/:layer_id/:sesi_idx', authMiddleware, async (req, res) => {
   const { nama, layer_id, sesi_idx } = req.params;
+  if (req.user.role !== 'admin' && req.user.nama !== nama)
+    return res.status(403).json({ error: 'Tidak bisa update kehadiran orang lain' });
   const { hadir } = req.body;
   try {
     await hubPool.query(`
@@ -528,6 +541,7 @@ router.post('/friday-win', authMiddleware, async (req, res) => {
 });
 
 router.delete('/friday-win/:id', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
   try {
     await hubPool.query('DELETE FROM friday_win WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
@@ -558,8 +572,8 @@ router.post('/sesi-1on1', authMiddleware, async (req, res) => {
 router.patch('/tim/:id/reset-password', authMiddleware, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
   const { password_baru } = req.body;
-  if (!password_baru) return res.status(400).json({ error: 'password_baru wajib diisi' });
-  const pw = password_baru;
+  // Jika tidak ada password_baru, generate temp password acak
+  const pw = password_baru || Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6).toUpperCase();
   try {
     const timR = await hubPool.query('SELECT nama FROM tim WHERE id=$1', [req.params.id]);
     if (!timR.rows.length) return res.status(404).json({ error: 'Anggota tidak ditemukan' });
@@ -567,7 +581,7 @@ router.patch('/tim/:id/reset-password', authMiddleware, async (req, res) => {
     const hashed = await bcrypt.hash(pw, 10);
     const r = await hubPool.query('UPDATE hub_users SET password=$1 WHERE nama=$2 RETURNING username', [hashed, nama]);
     if (!r.rows.length) return res.status(404).json({ error: 'User tidak ditemukan di hub_users' });
-    res.json({ ok: true, username: r.rows[0].username });
+    res.json({ ok: true, username: r.rows[0].username, password_temp: pw });
   } catch { res.status(500).json({ error: 'Gagal reset password' }); }
 });
 
@@ -612,6 +626,8 @@ router.get('/modul-topik', authMiddleware, async (req, res) => {
 
 router.patch('/modul-topik/:nama/:modul_id/:topik_idx', authMiddleware, async (req, res) => {
   const { nama, modul_id, topik_idx } = req.params;
+  if (req.user.role !== 'admin' && req.user.nama !== nama)
+    return res.status(403).json({ error: 'Tidak bisa update progress orang lain' });
   const { selesai } = req.body;
   try {
     await hubPool.query(`
@@ -907,6 +923,7 @@ router.get('/laporan-harian', authMiddleware, async (req, res) => {
   const { dari, sampai, nama, limit = 50 } = req.query;
   const isAdmin = req.user.role === 'admin';
   try {
+    const cap = Math.min(parseInt(limit) || 50, 200);
     let q = 'SELECT * FROM laporan_harian WHERE 1=1';
     const p = [];
     if (!isAdmin) { q += ` AND nama = $${p.length+1}`; p.push(req.user.nama); }
@@ -914,7 +931,7 @@ router.get('/laporan-harian', authMiddleware, async (req, res) => {
     if (dari)   { q += ` AND tanggal >= $${p.length+1}`; p.push(dari); }
     if (sampai) { q += ` AND tanggal <= $${p.length+1}`; p.push(sampai); }
     q += ` ORDER BY tanggal DESC, created_at DESC LIMIT $${p.length+1}`;
-    p.push(parseInt(limit));
+    p.push(cap);
     const r = await hubPool.query(q, p);
     res.json({ data: r.rows });
   } catch { res.status(500).json({ error: 'Gagal ambil laporan harian' }); }
@@ -922,7 +939,11 @@ router.get('/laporan-harian', authMiddleware, async (req, res) => {
 
 router.get('/laporan-harian/stats', authMiddleware, async (req, res) => {
   const { dari, sampai } = req.query;
+  const isAdmin = req.user.role === 'admin';
   try {
+    const params = [dari || null, sampai || null];
+    let namaFilter = '';
+    if (!isAdmin) { namaFilter = `AND nama = $3`; params.push(req.user.nama); }
     const r = await hubPool.query(`
       SELECT
         nama,
@@ -933,8 +954,9 @@ router.get('/laporan-harian/stats', authMiddleware, async (req, res) => {
       FROM laporan_harian
       WHERE ($1::date IS NULL OR tanggal >= $1)
         AND ($2::date IS NULL OR tanggal <= $2)
+        ${namaFilter}
       GROUP BY nama ORDER BY nama
-    `, [dari || null, sampai || null]);
+    `, params);
     res.json({ data: r.rows });
   } catch { res.status(500).json({ error: 'Gagal ambil stats' }); }
 });

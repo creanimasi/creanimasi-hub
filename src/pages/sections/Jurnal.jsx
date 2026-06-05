@@ -14,25 +14,28 @@ export function Jurnal() {
   const [replyText,  setReplyText]  = useState('');
   const [replySaving,setReplySaving]= useState(false);
 
+  const [replyErr, setReplyErr] = useState('');
+
   const handleReply = async (id) => {
     if (!replyText.trim()) return;
-    setReplySaving(true);
+    setReplySaving(true); setReplyErr('');
     try {
       await api.replyJurnal(id, replyText);
-      // Update local state agar tidak perlu refetch
       setEntries(prev => prev.map(e => e.id === id
         ? { ...e, catatan_mentor: `[ADMIN_REPLY] ${replyText}` }
         : e
       ));
       setReplyOpen(null); setReplyText('');
-    } catch {}
+    } catch (err) { setReplyErr(err.message || 'Gagal menyimpan balasan'); }
     finally { setReplySaving(false); }
   };
+
+  const [loadErr, setLoadErr] = useState('');
 
   useEffect(() => {
     api.getJurnal()
       .then(res => setEntries(res.data || []))
-      .catch(() => {})
+      .catch(err => setLoadErr(err.message || 'Gagal memuat jurnal'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -61,6 +64,10 @@ export function Jurnal() {
 
   if (loading) return (
     <div style={{ textAlign:'center', padding:40, color:'var(--text-2)' }}>Memuat jurnal...</div>
+  );
+
+  if (loadErr) return (
+    <div className="alert alert-red"><span>⚠️</span><div>{loadErr}</div></div>
   );
 
   return (
@@ -177,8 +184,9 @@ export function Jurnal() {
                           {replySaving ? 'Menyimpan...' : '✉️ Kirim Balasan'}
                         </button>
                         <button className="btn" style={{ fontSize:11 }}
-                          onClick={() => { setReplyOpen(null); setReplyText(''); }}>Batal</button>
+                          onClick={() => { setReplyOpen(null); setReplyText(''); setReplyErr(''); }}>Batal</button>
                       </div>
+                      {replyErr && <div style={{ fontSize:11, color:'var(--red)', marginTop:4 }}>{replyErr}</div>}
                     </div>
                   ) : (
                     <button onClick={() => { setReplyOpen(j.id); setReplyText(''); }}

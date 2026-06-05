@@ -18,20 +18,19 @@ export default function Kalender() {
     const fetchAll = async () => {
       const evs = [];
       try {
-        // Friday Win
-        const fw = await api.getFridayWin();
+        const [fw, s1, skb] = await Promise.all([
+          api.getFridayWin(),
+          api.getSesi1on1(),
+          api.getSKB(),
+        ]);
         (fw.data||[]).forEach(w => evs.push({
           date: w.tanggal?.slice(0,10), type:'fw', icon:'🏆', color:'var(--amber)',
           label: w.headline, sub: w.penerima || 'Tim'
         }));
-        // Sesi 1-on-1
-        const s1 = await api.getSesi1on1();
         (s1.data||[]).forEach(s => evs.push({
           date: s.tanggal, type:'1on1', icon:'💬', color:'var(--blue)',
           label:`1-on-1: ${s.anggota?.split(' ')[0]}`, sub:`${s.tipe} · ${s.durasi_menit}m`
         }));
-        // SKB yang disetujui
-        const skb = await api.getSKB();
         (skb.data||[]).filter(s => s.status==='disetujui').forEach(s => evs.push({
           date: s.created_at?.slice(0,10), type:'skb', icon:'📋', color:'var(--purple)',
           label:`SKB: ${s.judul?.slice(0,30)}`, sub: s.nama
