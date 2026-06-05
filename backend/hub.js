@@ -868,25 +868,31 @@ router.get('/performa', authMiddleware, async (req, res) => {
     const limitIdx  = isAdmin ? 1 : 2;
 
     const q = `
-      SELECT
-        nama,
-        ${labelFmt}                                AS label,
-        ${groupBy}                                 AS periode_date,
-        ROUND(AVG(mood)::numeric,           1)    AS avg_mood,
-        ROUND(AVG(skor_karya)::numeric,     1)    AS avg_karya,
-        ROUND(AVG(skor_waktu)::numeric,     1)    AS avg_waktu,
-        ROUND(AVG(skor_komunikasi)::numeric,1)    AS avg_komunikasi,
-        ROUND(AVG(skor_skill)::numeric,     1)    AS avg_skill,
-        ROUND(
-          (AVG(mood)/10 + AVG(skor_karya)/5 + AVG(skor_waktu)/5 +
-           AVG(skor_komunikasi)/5 + AVG(skor_skill)/5) / 5 * 100
-        ::numeric, 0)                              AS skor_total,
-        COUNT(*)::int                              AS jumlah_jurnal
-      FROM jurnal_mingguan
-      ${whereNama}
-      GROUP BY nama, ${groupBy}
-      ORDER BY nama, periode_date DESC
-      LIMIT $${limitIdx}
+      SELECT nama, label, periode_date,
+             avg_mood, avg_karya, avg_waktu, avg_komunikasi, avg_skill,
+             skor_total, jumlah_jurnal
+      FROM (
+        SELECT
+          nama,
+          ${labelFmt}                                AS label,
+          ${groupBy}                                 AS periode_date,
+          ROUND(AVG(mood)::numeric,           1)    AS avg_mood,
+          ROUND(AVG(skor_karya)::numeric,     1)    AS avg_karya,
+          ROUND(AVG(skor_waktu)::numeric,     1)    AS avg_waktu,
+          ROUND(AVG(skor_komunikasi)::numeric,1)    AS avg_komunikasi,
+          ROUND(AVG(skor_skill)::numeric,     1)    AS avg_skill,
+          ROUND(
+            (AVG(mood)/10 + AVG(skor_karya)/5 + AVG(skor_waktu)/5 +
+             AVG(skor_komunikasi)/5 + AVG(skor_skill)/5) / 5 * 100
+          ::numeric, 0)                              AS skor_total,
+          COUNT(*)::int                              AS jumlah_jurnal,
+          ROW_NUMBER() OVER (PARTITION BY nama ORDER BY ${groupBy} DESC) AS rn
+        FROM jurnal_mingguan
+        ${whereNama}
+        GROUP BY nama, ${groupBy}
+      ) sub
+      WHERE rn <= $${limitIdx}
+      ORDER BY nama, periode_date ASC
     `;
 
     const result = await hubPool.query(q, params);
