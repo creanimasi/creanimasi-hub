@@ -56,6 +56,13 @@ export const api = {
   getProfilingMe: ()                             => request('GET', '/profiling/me'),
   updateProfil:   (data)                         => request('PATCH', '/profil/update', data),
 
+  // Laporan Mingguan
+  getLaporan:       ()      => request('GET', '/laporan-mingguan'),
+  getLaporanById:   (id)    => request('GET', `/laporan-mingguan/${id}`),
+  buatLaporan:      (data)  => request('POST', '/laporan-mingguan', data),
+  updateLaporan:    (id, d) => request('PUT',  `/laporan-mingguan/${id}`, d),
+  hapusLaporan:     (id)    => request('DELETE', `/laporan-mingguan/${id}`),
+
   // Performa historis
   getPerforma: (periode = 'minggu', limit = 12) =>
     request('GET', `/performa?periode=${periode}&limit=${limit}`),

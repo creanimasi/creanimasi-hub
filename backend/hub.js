@@ -900,4 +900,116 @@ router.get('/performa', authMiddleware, async (req, res) => {
   }
 });
 
+// ── LAPORAN MINGGUAN ──────────────────────────────────────────────────────────
+
+// GET /api/hub/laporan-mingguan — daftar semua laporan
+router.get('/laporan-mingguan', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+  try {
+    const r = await hubPool.query(
+      `SELECT id, tanggal, judul, kas, dibuat_oleh, created_at
+       FROM laporan_mingguan ORDER BY tanggal DESC`
+    );
+    res.json({ data: r.rows });
+  } catch { res.status(500).json({ error: 'Gagal ambil laporan' }); }
+});
+
+// GET /api/hub/laporan-mingguan/:id — detail + akun + SDM
+router.get('/laporan-mingguan/:id', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+  try {
+    const [laporan, akun, sdm] = await Promise.all([
+      hubPool.query('SELECT * FROM laporan_mingguan WHERE id=$1', [req.params.id]),
+      hubPool.query('SELECT * FROM laporan_akun WHERE laporan_id=$1 ORDER BY id', [req.params.id]),
+      hubPool.query('SELECT * FROM laporan_sdm WHERE laporan_id=$1 ORDER BY nama', [req.params.id]),
+    ]);
+    if (!laporan.rows.length) return res.status(404).json({ error: 'Laporan tidak ditemukan' });
+    res.json({ data: { ...laporan.rows[0], akun: akun.rows, sdm: sdm.rows } });
+  } catch { res.status(500).json({ error: 'Gagal ambil detail laporan' }); }
+});
+
+// POST /api/hub/laporan-mingguan — buat laporan baru
+router.post('/laporan-mingguan', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+  const { tanggal, judul, kas, marketing, produksi, akun = [], sdm = [] } = req.body;
+  if (!tanggal) return res.status(400).json({ error: 'Tanggal wajib diisi' });
+  try {
+    // Insert laporan header
+    const r = await hubPool.query(
+      `INSERT INTO laporan_mingguan (tanggal, judul, kas, marketing, produksi, dibuat_oleh)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [tanggal, judul || 'Creanimasi', kas || 0, marketing, produksi, req.user.nama]
+    );
+    const id = r.rows[0].id;
+
+    // Insert akun keuangan
+    for (const a of akun) {
+      await hubPool.query(
+        `INSERT INTO laporan_akun (laporan_id, nama_akun, available_withdraw, payment_clearing, active_order, total_withdraw)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [id, a.nama_akun, a.available_withdraw||0, a.payment_clearing||0, a.active_order||0, a.total_withdraw||0]
+      );
+    }
+
+    // Insert SDM notes
+    for (const s of sdm) {
+      if (s.catatan?.trim()) {
+        await hubPool.query(
+          `INSERT INTO laporan_sdm (laporan_id, nama, catatan) VALUES ($1,$2,$3)`,
+          [id, s.nama, s.catatan]
+        );
+      }
+    }
+
+    res.status(201).json({ data: r.rows[0] });
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Laporan untuk tanggal & judul ini sudah ada' });
+    res.status(500).json({ error: 'Gagal buat laporan' });
+  }
+});
+
+// PUT /api/hub/laporan-mingguan/:id — update laporan
+router.put('/laporan-mingguan/:id', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+  const { tanggal, judul, kas, marketing, produksi, akun = [], sdm = [] } = req.body;
+  const id = req.params.id;
+  try {
+    await hubPool.query(
+      `UPDATE laporan_mingguan SET tanggal=$1, judul=$2, kas=$3, marketing=$4, produksi=$5
+       WHERE id=$6`,
+      [tanggal, judul, kas||0, marketing, produksi, id]
+    );
+
+    // Replace akun dan SDM
+    await hubPool.query('DELETE FROM laporan_akun WHERE laporan_id=$1', [id]);
+    await hubPool.query('DELETE FROM laporan_sdm  WHERE laporan_id=$1', [id]);
+
+    for (const a of akun) {
+      await hubPool.query(
+        `INSERT INTO laporan_akun (laporan_id, nama_akun, available_withdraw, payment_clearing, active_order, total_withdraw)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [id, a.nama_akun, a.available_withdraw||0, a.payment_clearing||0, a.active_order||0, a.total_withdraw||0]
+      );
+    }
+    for (const s of sdm) {
+      if (s.catatan?.trim()) {
+        await hubPool.query(
+          `INSERT INTO laporan_sdm (laporan_id, nama, catatan) VALUES ($1,$2,$3)`,
+          [id, s.nama, s.catatan]
+        );
+      }
+    }
+    res.json({ ok: true });
+  } catch { res.status(500).json({ error: 'Gagal update laporan' }); }
+});
+
+// DELETE /api/hub/laporan-mingguan/:id
+router.delete('/laporan-mingguan/:id', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+  try {
+    await hubPool.query('DELETE FROM laporan_mingguan WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch { res.status(500).json({ error: 'Gagal hapus laporan' }); }
+});
+
 module.exports = router;

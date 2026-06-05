@@ -10,6 +10,7 @@ import { Modul, Jurnal, SOP, Reward, Workshop, Kader, SKB, OneOnOne, FridayWin }
 import { PageFormJurnal, PageFormProfiling, PageRiwayatJurnal } from './pages/FormPages';
 import Profil from './pages/Profil';
 import Performa from './pages/Performa';
+import LaporanMingguan from './pages/LaporanMingguan';
 import Kalender from './pages/Kalender';
 
 function AdminRoute({ children }) {
@@ -58,6 +59,7 @@ function ProtectedRoutes() {
         <Route path="/1on1"         element={<AdminRoute><OneOnOne /></AdminRoute>} />
         <Route path="/workshop"     element={<AdminRoute><Workshop /></AdminRoute>} />
         <Route path="/friday-win"   element={<AdminRoute><FridayWin /></AdminRoute>} />
+        <Route path="/laporan"      element={<AdminRoute><LaporanMingguan /></AdminRoute>} />
         <Route path="/kalender"     element={<AdminRoute><Kalender /></AdminRoute>} />
 
         <Route path="*"             element={<Navigate to="/" replace />} />
