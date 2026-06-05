@@ -900,6 +900,146 @@ router.get('/performa', authMiddleware, async (req, res) => {
   }
 });
 
+// ── ANALISA SDM OTOMATIS ──────────────────────────────────────────────────────
+// GET /api/hub/laporan-sdm-analisa?tanggal=YYYY-MM-DD
+// Ambil jurnal minggu ini + 1-on-1 terbaru per anggota → buat narasi SDM
+router.get('/laporan-sdm-analisa', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+
+  const { tanggal } = req.query;
+  const tgl    = tanggal ? new Date(tanggal) : new Date();
+  // Range: 7 hari sebelum tanggal laporan
+  const start  = new Date(tgl); start.setDate(start.getDate() - 7);
+  const end    = tgl;
+
+  try {
+    // Jurnal minggu ini
+    const jurnalR = await hubPool.query(`
+      SELECT DISTINCT ON (nama)
+        nama, tanggal_jurnal, mood, skor_karya, skor_waktu, skor_komunikasi, skor_skill,
+        pencapaian_1, pencapaian_2, pencapaian_3, hambatan, pelajaran, target_depan, catatan_mentor
+      FROM jurnal_mingguan
+      WHERE tanggal_jurnal BETWEEN $1 AND $2
+      ORDER BY nama, tanggal_jurnal DESC
+    `, [start.toISOString().slice(0,10), end.toISOString().slice(0,10)]);
+
+    // Jurnal minggu SEBELUMNYA (untuk perbandingan tren)
+    const prevStart = new Date(start); prevStart.setDate(prevStart.getDate() - 7);
+    const prevR = await hubPool.query(`
+      SELECT DISTINCT ON (nama)
+        nama, mood, skor_karya, skor_waktu, skor_komunikasi, skor_skill
+      FROM jurnal_mingguan
+      WHERE tanggal_jurnal BETWEEN $1 AND $2
+      ORDER BY nama, tanggal_jurnal DESC
+    `, [prevStart.toISOString().slice(0,10), start.toISOString().slice(0,10)]);
+
+    // Sesi 1-on-1 minggu ini
+    const sesiR = await hubPool.query(`
+      SELECT anggota, tipe, ringkasan, tindak_lanjut, mood_sebelum, mood_sesudah
+      FROM sesi_1on1
+      WHERE tanggal BETWEEN $1 AND $2
+      ORDER BY tanggal DESC
+    `, [start.toISOString().slice(0,10), end.toISOString().slice(0,10)]);
+
+    // Susun map
+    const jurnalMap = {};
+    jurnalR.rows.forEach(j => { jurnalMap[j.nama] = j; });
+    const prevMap = {};
+    prevR.rows.forEach(j => { prevMap[j.nama] = j; });
+    const sesiMap = {};
+    sesiR.rows.forEach(s => { sesiMap[s.anggota] = s; });
+
+    // Ambil daftar anggota dari DB tim
+    const timR = await hubPool.query('SELECT nama, divisi, level FROM tim WHERE aktif=TRUE ORDER BY divisi, nama');
+
+    // Generate narasi per anggota
+    const hasil = timR.rows.map(anggota => {
+      const j    = jurnalMap[anggota.nama];
+      const prev = prevMap[anggota.nama];
+      const sesi = sesiMap[anggota.nama];
+      const bagian = [];
+
+      if (!j) {
+        // Tidak isi jurnal minggu ini
+        bagian.push(`${anggota.nama.split(' ')[0]} tidak mengisi jurnal minggu ini.`);
+      } else {
+        // Tren mood
+        const moodLabel = j.mood >= 8 ? 'sangat baik' : j.mood >= 6 ? 'cukup baik' : j.mood >= 4 ? 'sedang' : 'rendah';
+        let moodTren = '';
+        if (prev) {
+          const delta = j.mood - prev.mood;
+          if (delta > 1)       moodTren = `, naik ${delta} poin dari minggu lalu`;
+          else if (delta < -1) moodTren = `, turun ${Math.abs(delta)} poin dari minggu lalu — perlu perhatian`;
+          else                 moodTren = `, stabil dari minggu lalu`;
+        }
+        bagian.push(`Mood minggu ini ${j.mood}/10 (${moodLabel}${moodTren}).`);
+
+        // Pencapaian
+        const pencapaian = [j.pencapaian_1, j.pencapaian_2, j.pencapaian_3].filter(Boolean);
+        if (pencapaian.length > 0) {
+          bagian.push(`Pencapaian: ${pencapaian.slice(0,2).join('; ')}.`);
+        }
+
+        // Hambatan
+        if (j.hambatan?.trim()) {
+          bagian.push(`Hambatan: ${j.hambatan}.`);
+        }
+
+        // Pelajaran/insight
+        if (j.pelajaran?.trim()) {
+          bagian.push(`Insight: ${j.pelajaran}.`);
+        }
+
+        // Target minggu depan
+        if (j.target_depan?.trim()) {
+          bagian.push(`Target: ${j.target_depan}.`);
+        }
+
+        // Skor performa — flag yang menonjol
+        const skor = [];
+        if (prev) {
+          if (j.skor_skill > prev.skor_skill)   skor.push(`skill membaik (${prev.skor_skill}→${j.skor_skill})`);
+          if (j.skor_karya < prev.skor_karya)   skor.push(`kualitas karya perlu perhatian (${prev.skor_karya}→${j.skor_karya})`);
+          if (j.skor_waktu < prev.skor_waktu)   skor.push(`manajemen waktu menurun`);
+          if (j.skor_komunikasi > (prev.skor_komunikasi + 1)) skor.push(`komunikasi meningkat`);
+        }
+        if (j.skor_karya <= 2) skor.push('kualitas karya rendah minggu ini');
+        if (skor.length > 0)   bagian.push(`Catatan performa: ${skor.join(', ')}.`);
+
+        // Pesan untuk mentor/secondline
+        if (j.catatan_mentor?.trim() && !j.catatan_mentor.startsWith('[ADMIN_REPLY]')) {
+          bagian.push(`Pesan: "${j.catatan_mentor}".`);
+        }
+      }
+
+      // Sesi 1-on-1 minggu ini
+      if (sesi) {
+        let sesiTeks = `Ada sesi 1-on-1 (${sesi.tipe})`;
+        if (sesi.ringkasan) sesiTeks += `: ${sesi.ringkasan}`;
+        if (sesi.tindak_lanjut) sesiTeks += `. Tindak lanjut: ${sesi.tindak_lanjut}`;
+        if (sesi.mood_sebelum && sesi.mood_sesudah) {
+          const delta = sesi.mood_sesudah - sesi.mood_sebelum;
+          sesiTeks += `. Mood ${delta >= 0 ? 'naik' : 'turun'} dari ${sesi.mood_sebelum} → ${sesi.mood_sesudah}`;
+        }
+        bagian.push(sesiTeks + '.');
+      }
+
+      return {
+        nama:    anggota.nama,
+        divisi:  anggota.divisi,
+        catatan: bagian.join(' '),
+        isi_jurnal: !!j,
+        mood:    j?.mood || null,
+      };
+    });
+
+    res.json({ data: hasil, periode: { dari: start.toISOString().slice(0,10), sampai: end.toISOString().slice(0,10) } });
+  } catch (err) {
+    console.error('GET /laporan-sdm-analisa:', err.message);
+    res.status(500).json({ error: 'Gagal generate analisa SDM' });
+  }
+});
+
 // ── LAPORAN MINGGUAN ──────────────────────────────────────────────────────────
 
 // GET /api/hub/laporan-mingguan — daftar semua laporan

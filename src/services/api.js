@@ -57,6 +57,7 @@ export const api = {
   updateProfil:   (data)                         => request('PATCH', '/profil/update', data),
 
   // Laporan Mingguan
+  getAnalisisSdm:   (tgl)   => request('GET', `/laporan-sdm-analisa?tanggal=${tgl}`),
   getLaporan:       ()      => request('GET', '/laporan-mingguan'),
   getLaporanById:   (id)    => request('GET', `/laporan-mingguan/${id}`),
   buatLaporan:      (data)  => request('POST', '/laporan-mingguan', data),

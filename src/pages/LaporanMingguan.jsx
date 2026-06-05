@@ -133,7 +133,9 @@ const DEFAULT_FORM = () => ({
 });
 
 function FormLaporan({ initial, onSave, onCancel, saving, error }) {
-  const [form, setForm] = useState(initial || DEFAULT_FORM());
+  const [form,     setForm]     = useState(initial || DEFAULT_FORM());
+  const [analisa,  setAnalisa]  = useState(false);  // loading analisa SDM
+  const [analisaInfo, setAnalisaInfo] = useState(''); // info berapa isi jurnal
 
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -152,6 +154,28 @@ function FormLaporan({ initial, onSave, onCancel, saving, error }) {
   const setSdm = (i, v) => setForm(f => ({
     ...f, sdm: f.sdm.map((s, idx) => idx === i ? { ...s, catatan: v } : s)
   }));
+
+  const handleAutoFill = async () => {
+    if (!form.tanggal) { alert('Isi tanggal laporan dulu'); return; }
+    setAnalisa(true); setAnalisaInfo('');
+    try {
+      const res = await api.getAnalisisSdm(form.tanggal);
+      const hasil = res.data || [];
+      const isiJurnal = hasil.filter(h => h.isi_jurnal).length;
+      setAnalisaInfo(`${isiJurnal} dari ${hasil.length} anggota isi jurnal minggu ini (${res.periode?.dari} – ${res.periode?.sampai})`);
+
+      // Update SDM di form: merge hasil analisa ke daftar SDM yang ada
+      setForm(f => ({
+        ...f,
+        sdm: f.sdm.map(s => {
+          const found = hasil.find(h => h.nama === s.nama);
+          return found ? { ...s, catatan: found.catatan } : s;
+        })
+      }));
+    } catch (err) {
+      alert('Gagal generate analisa: ' + (err.message || 'coba lagi'));
+    } finally { setAnalisa(false); }
+  };
 
   const inputStyle = { fontSize: 13, padding: '7px 10px', marginBottom: 0 };
   const labelStyle = { fontSize: 11, fontWeight: 700, color: 'var(--text-2)',
@@ -248,7 +272,31 @@ function FormLaporan({ initial, onSave, onCancel, saving, error }) {
 
       {/* SDM per anggota */}
       <div className="card" style={{ marginBottom:20 }}>
-        <div style={{ fontSize:13, fontWeight:700, color:'var(--coral)', marginBottom:12 }}>👥 SDM — Update Per Anggota</div>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12 }}>
+          <div style={{ fontSize:13, fontWeight:700, color:'var(--coral)' }}>👥 SDM — Update Per Anggota</div>
+          <button type="button" onClick={handleAutoFill} disabled={analisa}
+            style={{
+              padding:'7px 14px', borderRadius:8, fontSize:12, cursor: analisa ? 'wait' : 'pointer',
+              background:'linear-gradient(135deg, var(--purple-light), var(--green-light))',
+              border:'1px solid rgba(155,143,255,0.3)', color:'var(--text)',
+              fontWeight:600, display:'flex', alignItems:'center', gap:6,
+            }}>
+            {analisa ? (
+              <><span style={{ animation:'spin 1s linear infinite', display:'inline-block' }}>⏳</span> Menganalisa...</>
+            ) : (
+              <><span>🤖</span> Auto-fill dari Jurnal</>
+            )}
+          </button>
+        </div>
+
+        {analisaInfo && (
+          <div style={{ marginBottom:10, padding:'8px 12px', borderRadius:8,
+            background:'var(--green-light)', border:'1px solid rgba(0,214,143,0.2)',
+            fontSize:11, color:'var(--green)', fontWeight:600 }}>
+            ✅ {analisaInfo} — teks sudah diisi otomatis, bisa diedit.
+          </div>
+        )}
+
         <div style={{ fontSize:11, color:'var(--text-3)', marginBottom:12 }}>
           Kosongkan jika tidak ada update. Hanya anggota yang terisi yang akan muncul di PDF.
         </div>
