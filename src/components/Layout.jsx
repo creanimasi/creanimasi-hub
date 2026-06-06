@@ -201,7 +201,7 @@ export default function Layout({ children, path }) {
   const { user }  = useAuth();
   const [dark, toggleDark] = useDarkMode(user?.tema);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const title     = PAGE_TITLES[path] || 'Creanimasi Hub';
+  const title     = PAGE_TITLES[path] || 'Flipspace Hub';
   const greeting  = getGreeting();
   const isHome    = path === '/';
   const firstName = user?.nama?.split(' ')[0] || 'Kamu';

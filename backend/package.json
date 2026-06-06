@@ -1,7 +1,7 @@
 {
-  "name": "creanimasi-hub-api",
+  "name": "flipspace-hub-api",
   "version": "1.0.0",
-  "description": "Creanimasi Internal Hub — Backend API",
+  "description": "Flipspace Internal Hub — Backend API",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

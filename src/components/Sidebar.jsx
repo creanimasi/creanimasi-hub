@@ -88,7 +88,7 @@ export default function Sidebar({ isOpen, onClose }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <img
             src="/logo192.png"
-            alt="Creanimasi"
+            alt="Flipspace"
             style={{
               width: 30, height: 30, borderRadius: 8,
               background: 'var(--green-light)',
@@ -97,7 +97,7 @@ export default function Sidebar({ isOpen, onClose }) {
             }}
           />
           <div>
-            <div className="sidebar-logo-name">Creanimasi</div>
+            <div className="sidebar-logo-name">Flipspace</div>
             <div className="sidebar-logo-sub">Internal Hub</div>
           </div>
         </div>

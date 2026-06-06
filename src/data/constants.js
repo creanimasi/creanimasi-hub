@@ -16,14 +16,14 @@ export const DIVISI_TO_MODUL_ID = {
   '3D Modeler':  '3d',
 };
 
-export const BOT_USERNAME = 'Creanimasihub_bot';
+export const BOT_USERNAME = 'Flipspacehub_bot';
 
 // Konfigurasi umum studio
 export const STUDIO_CONFIG = {
   targetRevenueBulanan: 5000,    // total semua admin, dalam USD
   targetRevenuePerAdmin: 2000,   // per admin/bulan
   seedFund: 'Rp 500rb',
-  namaStudio: 'Creanimasi',
+  namaStudio: 'Flipspace',
   emailOwner: 'creanimasi@gmail.com',
   profilingKadaluarsaHari: 90,   // hari sebelum profiling dianggap perlu update
 };

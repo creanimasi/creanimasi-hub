@@ -176,7 +176,7 @@ export function PageFormProfiling() {
       {submitted && (
         <div className="alert alert-green" style={{ marginBottom: 16 }}>
           <span>🎉</span>
-          <div>Profiling berhasil! Data kamu sudah masuk ke sistem Creanimasi.</div>
+          <div>Profiling berhasil! Data kamu sudah masuk ke sistem Flipspace.</div>
         </div>
       )}
       <FormProfiling onSuccess={() => setSubmitted(true)} />

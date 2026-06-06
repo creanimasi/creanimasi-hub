@@ -10,7 +10,7 @@ app.use(cors({ origin: '*', credentials: true }));
 app.use(express.json());
 
 // Health check
-app.get('/api/health', (_, res) => res.json({ ok: true, service: 'creanimasi-hub' }));
+app.get('/api/health', (_, res) => res.json({ ok: true, service: 'flipspace-hub' }));
 
 // API routes
 app.use('/api/hub', hubRoutes);
@@ -23,5 +23,5 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Creanimasi Hub running on port ${PORT}`);
+  console.log(`Flipspace Hub running on port ${PORT}`);
 });
