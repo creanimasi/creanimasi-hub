@@ -202,6 +202,76 @@ function AnggotaFormModal({ initial, onSave, onClose }) {
   );
 }
 
+// ── BUAT AKUN MODAL (anggota tanpa akun login) ───────────────────────────────
+function BuatAkunModal({ anggota, onClose, onSuccess }) {
+  const [form, setForm] = useState({ username: '', password: '', role: 'member' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState('');
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.username.trim()) { setError('Username wajib diisi'); return; }
+    if (form.password.length < 8) { setError('Password minimal 8 karakter'); return; }
+    setLoading(true);
+    setError('');
+    try {
+      await api.buatAkunAnggota(anggota.id, { username: form.username.trim().toLowerCase(), password: form.password, role: form.role });
+      onSuccess();
+      onClose();
+    } catch (err) {
+      setError(err.message.replace(/^\d+: /, ''));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 24, width: '100%', maxWidth: 400, boxShadow: '0 8px 32px rgba(0,0,0,.22)' }}>
+        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>Buat Akun Login</div>
+        <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 16 }}>
+          Buat akun untuk <strong>{anggota.nama}</strong> yang belum punya akses login.
+        </div>
+        {error && <div className="alert alert-red" style={{ marginBottom: 12 }}><span>⚠️</span><div>{error}</div></div>}
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: 12 }}>
+            <label style={labelStyle}>Username *</label>
+            <input value={form.username} onChange={e => set('username', e.target.value.toLowerCase())} placeholder="username" required />
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <label style={labelStyle}>Password * <span style={{ fontWeight: 400, color: 'var(--text-2)' }}>(min. 8 karakter)</span></label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input type="text" value={form.password} onChange={e => set('password', e.target.value)} placeholder="Password awal" style={{ flex: 1 }} required />
+              <button type="button" onClick={() => set('password', genPassword())}
+                style={{ padding: '0 12px', borderRadius: 8, border: '1px solid var(--border-2)', background: 'var(--surface-2)', cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap', color: 'var(--text-2)' }}>
+                Generate
+              </button>
+            </div>
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>Role</label>
+            <select value={form.role} onChange={e => set('role', e.target.value)}>
+              <option value="member">Member</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button type="button" onClick={onClose}
+              style={{ flex: 1, padding: '9px', borderRadius: 8, border: '1px solid var(--border-2)', background: 'var(--surface)', cursor: 'pointer', fontSize: 13 }}>
+              Batal
+            </button>
+            <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={loading}>
+              {loading ? 'Membuat...' : 'Buat Akun'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ── RESET PASSWORD MODAL ──────────────────────────────────────────────────────
 function ResetPwModal({ anggota, onClose, onSuccess }) {
   const [pw, setPw]         = useState('');
@@ -517,10 +587,17 @@ export default function KelolAnggota() {
                         style={{ padding: '5px 11px', borderRadius: 7, fontSize: 12, fontWeight: 500, border: '1px solid var(--border-2)', background: 'var(--surface)', cursor: 'pointer' }}>
                         Edit
                       </button>
-                      <button onClick={() => setModal({ type: 'reset', data: a })}
-                        style={{ padding: '5px 11px', borderRadius: 7, fontSize: 12, fontWeight: 500, border: '1px solid var(--amber)', background: 'var(--amber-light)', color: 'var(--amber)', cursor: 'pointer' }}>
-                        Reset PW
-                      </button>
+                      {a.username ? (
+                        <button onClick={() => setModal({ type: 'reset', data: a })}
+                          style={{ padding: '5px 11px', borderRadius: 7, fontSize: 12, fontWeight: 500, border: '1px solid var(--amber)', background: 'var(--amber-light)', color: 'var(--amber)', cursor: 'pointer' }}>
+                          Reset PW
+                        </button>
+                      ) : (
+                        <button onClick={() => setModal({ type: 'buat-akun', data: a })}
+                          style={{ padding: '5px 11px', borderRadius: 7, fontSize: 12, fontWeight: 500, border: '1px solid #818cf8', background: 'rgba(99,102,241,0.1)', color: '#818cf8', cursor: 'pointer' }}>
+                          Buat Akun
+                        </button>
+                      )}
                       <button onClick={() => setModal({ type: 'nonaktif', data: a })}
                         style={{ padding: '5px 11px', borderRadius: 7, fontSize: 12, fontWeight: 500, border: '1px solid #fca5a5', background: 'var(--surface)', color: 'var(--red)', cursor: 'pointer' }}>
                         Nonaktifkan
@@ -554,6 +631,13 @@ export default function KelolAnggota() {
           anggota={modal.data}
           onClose={() => setModal(null)}
           onSuccess={load}
+        />
+      )}
+      {modal?.type === 'buat-akun' && (
+        <BuatAkunModal
+          anggota={modal.data}
+          onClose={() => setModal(null)}
+          onSuccess={() => { notify(`Akun ${modal.data.nama} berhasil dibuat`); load(); }}
         />
       )}
     </div>

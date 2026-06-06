@@ -114,8 +114,9 @@ export const api = {
   tambahTim:       (data)  => request('POST', '/tim', data),
   updateTim:       (id, data) => request('PATCH', `/tim/${id}`, data),
   nonaktifkanTim:  (id)    => request('DELETE', `/tim/${id}`),
-  aktifkanAnggota: (id)    => request('PATCH', `/tim/${id}/aktifkan`),
-  resetPassword:   (id, pw) => request('PATCH', `/tim/${id}/reset-password`, { password_baru: pw }),
+  aktifkanAnggota: (id)       => request('PATCH', `/tim/${id}/aktifkan`),
+  buatAkunAnggota: (id, data) => request('POST',  `/tim/${id}/buat-akun`, data),
+  resetPassword:   (id, pw)   => request('PATCH', `/tim/${id}/reset-password`, { password_baru: pw }),
 
   // Workshop Kehadiran
   getWorkshop:          ()                          => request('GET', '/workshop'),
