@@ -315,6 +315,8 @@ export default function Dashboard() {
   const [dbStats,   setDbStats]   = useState(null);
   const [revenue,   setRevenue]   = useState([]);
   const [profiling, setProfiling] = useState([]);
+  const [timDB,     setTimDB]     = useState([]);
+  const [sesi1on1,  setSesi1on1]  = useState([]);
 
   useEffect(() => {
     if (user?.role !== 'admin') return;
@@ -322,6 +324,8 @@ export default function Dashboard() {
     api.getDashboard().then(r => setDbStats(r)).catch(() => {});
     api.getRevenue(now.getMonth() + 1, now.getFullYear()).then(r => setRevenue(r.data || [])).catch(() => {});
     api.getProfilingAll().then(r => setProfiling(r.data || [])).catch(() => {});
+    api.getTim(false).then(r => setTimDB(r.data || [])).catch(() => {});
+    api.getSesi1on1().then(r => setSesi1on1(r.data || [])).catch(() => {});
   }, [user]);
 
   // useMemo HARUS sebelum conditional return (Rules of Hooks)
@@ -346,14 +350,23 @@ export default function Dashboard() {
   if (user?.role !== 'admin') return <DashboardMember user={user} />;
 
   const isiMingguIni = dbStats?.jurnal?.minggu_ini ?? 0;
-  const belumJurnal  = TIM.length - isiMingguIni;
-  const rising       = TIM.filter(t => t.tipe === 'Rising Star');
-  const atRisk       = TIM.filter(t => t.tipe === 'At Risk');
+  const timAktif     = timDB.length > 0 ? timDB : TIM;
+  const belumJurnal  = timAktif.length - isiMingguIni;
+  const rising       = timAktif.filter(t => t.tipe === 'Rising Star');
+  // At Risk: tampilkan alert HANYA jika belum ada sesi 1-on-1 dalam 14 hari terakhir
+  const cutoff14 = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+  const atRisk = timAktif.filter(t => {
+    if (t.tipe !== 'At Risk') return false;
+    const sudah1on1 = sesi1on1.some(s =>
+      s.anggota === t.nama && new Date(s.tanggal) >= cutoff14
+    );
+    return !sudah1on1;
+  });
   const revTotal     = revenue.reduce((s, r) => s + parseFloat(r.jumlah||0), 0);
   const revTarget    = revenue.reduce((s, r) => s + parseFloat(r.target||0), 0) || STUDIO_CONFIG.targetRevenueBulanan;
   const skbPending   = parseInt((dbStats?.skb||[]).find(s => s.status === 'diajukan')?.total || 0);
 
-  const ADMIN_LIST = TIM.filter(t => t.divisi === 'Admin');
+  const ADMIN_LIST = timAktif.filter(t => t.divisi === 'Admin');
 
   return (
     <div>
@@ -385,9 +398,9 @@ export default function Dashboard() {
       {/* Metrics real-time */}
       <div className="metrics-grid">
         <div className="metric">
-          <div className="metric-val">{TIM.filter(t => t.status === 'Aktif').length}</div>
+          <div className="metric-val">{timAktif.filter(t => t.status === 'Aktif' || t.aktif).length}</div>
           <div className="metric-lbl">Anggota aktif</div>
-          <div className="metric-sub text-muted">+{TIM.filter(t => t.status === 'Probation').length} probation</div>
+          <div className="metric-sub text-muted">+{timAktif.filter(t => t.status === 'Probation' || (t.level || '').toLowerCase().includes('probation')).length} probation</div>
         </div>
         <div className="metric">
           <div className="metric-val" style={{ color: belumJurnal > 0 ? 'var(--red)' : 'var(--green)' }}>
@@ -395,7 +408,7 @@ export default function Dashboard() {
           </div>
           <div className="metric-lbl">Belum isi jurnal</div>
           <div className="metric-sub" style={{ color: belumJurnal > 0 ? 'var(--red)' : 'var(--green)' }}>
-            {isiMingguIni}/{TIM.length} sudah isi
+            {isiMingguIni}/{timAktif.length} sudah isi
           </div>
         </div>
         <div className="metric">
@@ -422,7 +435,7 @@ export default function Dashboard() {
             { label: '🛡️ Konsisten', tipe: ['Silent Expert'], border: 'var(--amber)' },
             { label: '⭐ Top Performer', tipe: ['Rising Star'], border: 'var(--green)' },
           ].map(group => {
-            const members = TIM.filter(m => group.tipe.includes(m.tipe));
+            const members = timAktif.filter(m => group.tipe.includes(m.tipe));
             if (!members.length) return null;
             return (
               <div key={group.label} style={{ marginBottom: 12 }}>
