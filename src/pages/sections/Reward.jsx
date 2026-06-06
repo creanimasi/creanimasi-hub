@@ -310,7 +310,9 @@ export function Reward() {
             <div style={{ textAlign:'center', padding:'20px 0', fontSize:12, color:'var(--text-3)' }}>
               Belum ada reward yang dicatat.
             </div>
-          ) : rewardList.slice(0,10).map(r => {
+          ) : (
+          <>
+          {rewardList.slice(0,10).map(r => {
             const member = TIM.find(t => t.nama === r.nama);
             const tc = member ? (TIPE_COLOR[member.tipe]||{}) : {};
             return (
@@ -332,6 +334,13 @@ export function Reward() {
               </div>
             );
           })}
+          {rewardList.length > 10 && (
+            <div style={{ textAlign:'center', fontSize:11, color:'var(--text-3)', paddingTop:8, borderTop:'1px solid var(--border)' }}>
+              Menampilkan 10 dari {rewardList.length} reward
+            </div>
+          )}
+          </>
+          )}
         </div>
       )}
     </div>

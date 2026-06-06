@@ -81,8 +81,7 @@ export const api = {
   // SSE connection — tidak pakai request() karena streaming
   connectPresence: ()   => {
     const token = localStorage.getItem('hub_token');
-    const base  = process.env.REACT_APP_API_URL || 'http://localhost:3001/api/hub';
-    return new EventSource(`${base}/presence?token=${token}`);
+    return new EventSource(`${BASE}/presence?token=${token}`);
   },
 
   // Revenue

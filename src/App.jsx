@@ -61,7 +61,7 @@ function ProtectedRoutes() {
         <Route path="/workshop"     element={<AdminRoute><Workshop /></AdminRoute>} />
         <Route path="/friday-win"   element={<AdminRoute><FridayWin /></AdminRoute>} />
         <Route path="/laporan"          element={<AdminRoute><LaporanMingguan /></AdminRoute>} />
-        <Route path="/laporan-harian"   element={<LaporanHarian />} />
+        <Route path="/laporan-harian"   element={<AdminRoute><LaporanHarian /></AdminRoute>} />
         <Route path="/kalender"     element={<AdminRoute><Kalender /></AdminRoute>} />
 
         <Route path="*"             element={<Navigate to="/" replace />} />

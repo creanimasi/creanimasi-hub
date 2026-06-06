@@ -116,7 +116,9 @@ export function useNotifications(user) {
               body: s.catatan_review || '', time: new Date(s.updated_at), path: '/skb' });
         });
       }
-    } catch {}
+    } catch {
+      // Notifikasi bersifat opsional — gagal fetch tidak crash UI
+    }
 
     setNotifs(list);
     setLoading(false);

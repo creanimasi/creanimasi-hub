@@ -3,6 +3,21 @@ import { TIM, TIPE_COLOR } from '../../data/tim';
 import { api } from '../../services/api';
 import { downloadCsv } from '../../utils/exportCsv';
 
+// Pisah catatan_mentor menjadi pesan member dan reply admin.
+// Format baru: "pesan_member\n[ADMIN_REPLY]\nreply_admin"
+// Format lama (backward compat): "[ADMIN_REPLY] reply" atau "[ADMIN_REPLY]\nreply"
+function parseCatatanMentor(cm) {
+  if (!cm) return { pesanMember: '', replyAdmin: '' };
+  const SEP = '\n[ADMIN_REPLY]\n';
+  const idx = cm.indexOf(SEP);
+  if (idx !== -1) {
+    return { pesanMember: cm.slice(0, idx).trim(), replyAdmin: cm.slice(idx + SEP.length).trim() };
+  }
+  if (cm.startsWith('[ADMIN_REPLY]\n')) return { pesanMember: '', replyAdmin: cm.slice('[ADMIN_REPLY]\n'.length).trim() };
+  if (cm.startsWith('[ADMIN_REPLY] ')) return { pesanMember: '', replyAdmin: cm.slice('[ADMIN_REPLY] '.length).trim() };
+  return { pesanMember: cm.trim(), replyAdmin: '' };
+}
+
 // ── JURNAL ─────────────────────────────────────────────────────────────────
 export function Jurnal() {
   const [entries,    setEntries]    = useState([]);
@@ -21,10 +36,14 @@ export function Jurnal() {
     setReplySaving(true); setReplyErr('');
     try {
       await api.replyJurnal(id, replyText);
-      setEntries(prev => prev.map(e => e.id === id
-        ? { ...e, catatan_mentor: `[ADMIN_REPLY] ${replyText}` }
-        : e
-      ));
+      setEntries(prev => prev.map(e => {
+        if (e.id !== id) return e;
+        const { pesanMember } = parseCatatanMentor(e.catatan_mentor);
+        const newCm = pesanMember
+          ? `${pesanMember}\n[ADMIN_REPLY]\n${replyText}`
+          : `[ADMIN_REPLY]\n${replyText}`;
+        return { ...e, catatan_mentor: newCm };
+      }));
       setReplyOpen(null); setReplyText('');
     } catch (err) { setReplyErr(err.message || 'Gagal menyimpan balasan'); }
     finally { setReplySaving(false); }
@@ -149,28 +168,35 @@ export function Jurnal() {
                   {j.pencapaian_1 && <div style={{ fontSize:11, marginBottom:4 }}><span style={{ color:'var(--text-3)' }}>🏆 </span>{j.pencapaian_1}</div>}
                   {j.hambatan     && <div style={{ fontSize:11, marginBottom:4 }}><span style={{ color:'var(--text-3)' }}>⚡ </span>{j.hambatan}</div>}
                   {j.target_depan && <div style={{ fontSize:11 }}><span style={{ color:'var(--text-3)' }}>🎯 </span>{j.target_depan}</div>}
-                  {j.catatan_mentor && !j.catatan_mentor.startsWith('[ADMIN_REPLY]') && (
-                    <div style={{ marginTop:8, padding:'6px 10px', background:'var(--surface-3, var(--surface))',
-                      borderRadius:8, borderLeft:'2px solid var(--green)' }}>
-                      <div style={{ fontSize:9, fontWeight:700, color:'var(--text-3)', marginBottom:3 }}>
-                        PESAN DARI {j.nama.split(' ')[0].toUpperCase()} KE KOORDINATOR
-                      </div>
-                      <div style={{ fontSize:11, fontStyle:'italic', color:'var(--text-2)' }}>
-                        💌 {j.catatan_mentor}
-                      </div>
-                    </div>
-                  )}
-                  {j.catatan_mentor?.startsWith('[ADMIN_REPLY]') && (
-                    <div style={{ marginTop:8, padding:'6px 10px', background:'var(--amber-light)',
-                      borderRadius:8, borderLeft:'2px solid var(--amber)' }}>
-                      <div style={{ fontSize:9, fontWeight:700, color:'var(--amber)', marginBottom:3 }}>
-                        BALASAN KOORDINATOR
-                      </div>
-                      <div style={{ fontSize:11, color:'var(--text)' }}>
-                        {j.catatan_mentor.replace('[ADMIN_REPLY] ', '')}
-                      </div>
-                    </div>
-                  )}
+                  {(() => {
+                    const { pesanMember, replyAdmin } = parseCatatanMentor(j.catatan_mentor);
+                    return (
+                      <>
+                        {pesanMember && (
+                          <div style={{ marginTop:8, padding:'6px 10px', background:'var(--surface-3, var(--surface))',
+                            borderRadius:8, borderLeft:'2px solid var(--green)' }}>
+                            <div style={{ fontSize:9, fontWeight:700, color:'var(--text-3)', marginBottom:3 }}>
+                              PESAN DARI {j.nama.split(' ')[0].toUpperCase()} KE KOORDINATOR
+                            </div>
+                            <div style={{ fontSize:11, fontStyle:'italic', color:'var(--text-2)' }}>
+                              💌 {pesanMember}
+                            </div>
+                          </div>
+                        )}
+                        {replyAdmin && (
+                          <div style={{ marginTop:8, padding:'6px 10px', background:'var(--amber-light)',
+                            borderRadius:8, borderLeft:'2px solid var(--amber)' }}>
+                            <div style={{ fontSize:9, fontWeight:700, color:'var(--amber)', marginBottom:3 }}>
+                              BALASAN KOORDINATOR
+                            </div>
+                            <div style={{ fontSize:11, color:'var(--text)' }}>
+                              {replyAdmin}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                   {/* Tombol balas jurnal */}
                   {replyOpen === j.id ? (
                     <div style={{ marginTop:10 }}>

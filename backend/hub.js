@@ -29,6 +29,26 @@ function authMiddleware(req, res, next) {
   }
 }
 
+// Ekstrak pesan asli member dari catatan_mentor (pisahkan dari admin reply)
+function extractPesanMember(cm) {
+  if (!cm) return '';
+  const SEP = '\n[ADMIN_REPLY]\n';
+  const idx = cm.indexOf(SEP);
+  if (idx !== -1) return cm.slice(0, idx).trim();
+  if (cm.startsWith('[ADMIN_REPLY]')) return ''; // reply tanpa pesan asli (record lama)
+  return cm.trim();
+}
+
+function extractReplyAdmin(cm) {
+  if (!cm) return '';
+  const SEP = '\n[ADMIN_REPLY]\n';
+  const idx = cm.indexOf(SEP);
+  if (idx !== -1) return cm.slice(idx + SEP.length).trim();
+  if (cm.startsWith('[ADMIN_REPLY]\n')) return cm.slice('[ADMIN_REPLY]\n'.length).trim();
+  if (cm.startsWith('[ADMIN_REPLY] ')) return cm.slice('[ADMIN_REPLY] '.length).trim(); // format lama
+  return '';
+}
+
 // ── AUTH ──────────────────────────────────────────
 
 // POST /api/hub/auth/login
@@ -687,11 +707,21 @@ router.patch('/jurnal/:id/reply', authMiddleware, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
   const { reply } = req.body;
   try {
-    // Simpan reply ke kolom catatan_mentor (repurpose untuk admin reply)
-    // Prefix dengan marker agar bisa dibedakan dari catatan member
+    // Simpan reply ke catatan_mentor sambil pertahankan pesan asli member.
+    // Format: "pesan_member\n[ADMIN_REPLY]\nreply_admin"
+    // Jika sudah ada reply sebelumnya, timpa bagian reply saja.
     const r = await hubPool.query(
-      `UPDATE jurnal_mingguan SET catatan_mentor = $1 WHERE id = $2 RETURNING id, nama`,
-      [`[ADMIN_REPLY] ${reply}`, req.params.id]
+      `UPDATE jurnal_mingguan
+       SET catatan_mentor =
+         CASE
+           WHEN catatan_mentor IS NULL OR catatan_mentor = '' OR catatan_mentor LIKE '[ADMIN_REPLY]%'
+           THEN '[ADMIN_REPLY]' || chr(10) || $1
+           WHEN catatan_mentor LIKE '%' || chr(10) || '[ADMIN_REPLY]' || chr(10) || '%'
+           THEN regexp_replace(catatan_mentor, chr(10) || '\\[ADMIN_REPLY\\]' || chr(10) || '.*$', chr(10) || '[ADMIN_REPLY]' || chr(10) || $1)
+           ELSE catatan_mentor || chr(10) || '[ADMIN_REPLY]' || chr(10) || $1
+         END
+       WHERE id = $2 RETURNING id, nama`,
+      [reply, req.params.id]
     );
     if (!r.rowCount) return res.status(404).json({ error: 'Jurnal tidak ditemukan' });
     res.json({ ok: true, data: r.rows[0] });
@@ -1101,8 +1131,9 @@ router.get('/laporan-sdm-analisa', authMiddleware, async (req, res) => {
         if (skor.length > 0)   bagian.push(`Catatan performa: ${skor.join(', ')}.`);
 
         // Pesan untuk mentor/secondline
-        if (j.catatan_mentor?.trim() && !j.catatan_mentor.startsWith('[ADMIN_REPLY]')) {
-          bagian.push(`Pesan: "${j.catatan_mentor}".`);
+        const pesanMember = extractPesanMember(j.catatan_mentor);
+        if (pesanMember) {
+          bagian.push(`Pesan: "${pesanMember}".`);
         }
       }
 

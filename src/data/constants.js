@@ -16,6 +16,8 @@ export const DIVISI_TO_MODUL_ID = {
   '3D Modeler':  '3d',
 };
 
+export const BOT_USERNAME = 'Creanimasihub_bot';
+
 // Konfigurasi umum studio
 export const STUDIO_CONFIG = {
   targetRevenueBulanan: 5000,    // total semua admin, dalam USD

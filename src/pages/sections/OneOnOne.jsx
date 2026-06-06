@@ -223,6 +223,11 @@ export function OneOnOne() {
       ) : (
         <div className="card">
           <div className="card-title">Riwayat sesi 1-on-1</div>
+          {sesi.length > 15 && (
+            <div style={{ fontSize:11, color:'var(--text-3)', marginBottom:8 }}>
+              Menampilkan 15 dari {sesi.length} sesi
+            </div>
+          )}
           {sesi.slice(0,15).map(s => {
             const t = TIPE_1ON1.find(x=>x.id===s.tipe) || {};
             const member = TIM.find(m=>m.nama===s.anggota);

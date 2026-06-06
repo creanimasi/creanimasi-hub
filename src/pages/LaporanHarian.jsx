@@ -7,6 +7,7 @@ import {
 import { TIM, TIPE_COLOR, DIVISI_COLOR } from '../data/tim';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../services/api';
+import { BOT_USERNAME } from '../data/constants';
 
 // ── HELPERS ────────────────────────────────────────────────────────────────────
 function parseNum(str) {
@@ -519,10 +520,12 @@ export default function LaporanHarian() {
   const [view,      setView]      = useState('today'); // 'today' | 'week' | 'all' | 'grafik'
   const [hapusId,   setHapusId]   = useState(null);
   const [hapusErr,  setHapusErr]  = useState('');
+  const [loadErr,   setLoadErr]   = useState('');
 
   const load = useCallback(async () => {
     if (view === 'grafik') return;
     setLoading(true);
+    setLoadErr('');
     try {
       const now   = new Date();
       const today = now.toISOString().slice(0,10);
@@ -541,7 +544,7 @@ export default function LaporanHarian() {
       setLaporan(lRes.data || []);
       setStats(sRes.data || []);
     } catch (err) {
-      console.error('Gagal load laporan harian:', err.message);
+      setLoadErr(err.message || 'Gagal memuat laporan. Coba refresh.');
     } finally { setLoading(false); }
   }, [view, isAdmin]);
 
@@ -560,8 +563,6 @@ export default function LaporanHarian() {
     ? laporan.filter(l => l.nama.toLowerCase().includes(filterNama.toLowerCase()))
     : laporan;
 
-  const botUsername = 'Creanimasihub_bot';
-
   return (
     <div>
       {/* Header */}
@@ -569,7 +570,7 @@ export default function LaporanHarian() {
         <div>
           <div style={{ fontSize:15, fontWeight:800 }}>📋 Laporan Harian Tim</div>
           <div style={{ fontSize:12, color:'var(--text-2)', marginTop:2 }}>
-            Laporan harian dari Telegram Bot @{botUsername}
+            Laporan harian dari Telegram Bot @{BOT_USERNAME}
           </div>
         </div>
         <div style={{
@@ -579,10 +580,10 @@ export default function LaporanHarian() {
         }}>
           <span style={{ fontSize:16 }}>🤖</span>
           <div>
-            <div style={{ fontWeight:700 }}>@{botUsername}</div>
+            <div style={{ fontWeight:700 }}>@{BOT_USERNAME}</div>
             <div style={{ color:'var(--text-3)', fontSize:10 }}>Kirim laporan harian ke bot ini</div>
           </div>
-          <a href={`https://t.me/${botUsername}`} target="_blank" rel="noreferrer"
+          <a href={`https://t.me/${BOT_USERNAME}`} target="_blank" rel="noreferrer"
             className="btn btn-sm btn-primary" style={{ fontSize:10, padding:'4px 10px' }}>
             Buka ↗
           </a>
@@ -638,6 +639,10 @@ export default function LaporanHarian() {
       {view !== 'grafik' && (
         loading ? (
           <div style={{ textAlign:'center', padding:40, color:'var(--text-2)' }}>Memuat...</div>
+        ) : loadErr ? (
+          <div className="alert alert-red" style={{ marginTop:8 }}>
+            <span>⚠️</span><div>{loadErr}</div>
+          </div>
         ) : filtered.length === 0 ? (
           <div className="empty">
             <div className="empty-icon">📋</div>
@@ -645,11 +650,11 @@ export default function LaporanHarian() {
               {view==='today' ? 'Belum ada laporan hari ini' : 'Belum ada laporan'}
             </div>
             <div className="empty-sub">
-              Anggota tim kirim laporan harian ke <strong>@{botUsername}</strong> di Telegram
+              Anggota tim kirim laporan harian ke <strong>@{BOT_USERNAME}</strong> di Telegram
             </div>
-            <a href={`https://t.me/${botUsername}`} target="_blank" rel="noreferrer"
+            <a href={`https://t.me/${BOT_USERNAME}`} target="_blank" rel="noreferrer"
               className="btn btn-primary" style={{ marginTop:12, display:'inline-block' }}>
-              Buka @{botUsername} ↗
+              Buka @{BOT_USERNAME} ↗
             </a>
           </div>
         ) : (
