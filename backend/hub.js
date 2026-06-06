@@ -1,6 +1,6 @@
 // ══════════════════════════════════════════════════
-// FLIPSPACE INTERNAL HUB — Backend API Routes
-// Tambahkan ke server Node.js Flipspace yang ada
+// CREANIMASI INTERNAL HUB — Backend API Routes
+// Tambahkan ke server Node.js CRM_Creanimasi yang ada
 // File: routes/hub.routes.js
 // ══════════════════════════════════════════════════
 
@@ -1203,7 +1203,7 @@ router.post('/laporan-mingguan', authMiddleware, async (req, res) => {
     const r = await hubPool.query(
       `INSERT INTO laporan_mingguan (tanggal, judul, kas, marketing, produksi, dibuat_oleh)
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [tanggal, judul || 'Flipspace', kas || 0, marketing, produksi, req.user.nama]
+      [tanggal, judul || 'Creanimasi', kas || 0, marketing, produksi, req.user.nama]
     );
     const id = r.rows[0].id;
 

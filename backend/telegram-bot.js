@@ -1,4 +1,4 @@
-// Flipspace Hub — Telegram Bot untuk laporan harian tim
+// Creanimasi Hub — Telegram Bot untuk laporan harian tim
 // Token disimpan di env var TELEGRAM_BOT_TOKEN
 
 import pg from 'pg';
@@ -188,7 +188,7 @@ async function handleUpdate(update) {
   if (text.startsWith('/')) {
     if (text === '/start' || text === '/help') {
       await sendMessage(chatId,
-        `👋 <b>Flipspace Hub Bot</b>\n\nKirim laporan harian kamu langsung ke sini.\n\nFormat:\n<code>Nama Lengkap\nFiverr: NamaAkun\nKamis, 4 Juni 2026\n09.00-15.30 : aktivitas\n\nCapaian hari ini:\nImpresi : 14k\nKlik : 164\nCr : 0,03%\n\nHal yang dipelajari hari ini:\n- ...\n\nChat Masuk\n- ...\n\nOrder Masuk\n- ...\n\nComplete Order\n- ...\n\nActive Order\n- filter: 1\n- vrm: 2</code>`
+        `👋 <b>Creanimasi Hub Bot</b>\n\nKirim laporan harian kamu langsung ke sini.\n\nFormat:\n<code>Nama Lengkap\nFiverr: NamaAkun\nKamis, 4 Juni 2026\n09.00-15.30 : aktivitas\n\nCapaian hari ini:\nImpresi : 14k\nKlik : 164\nCr : 0,03%\n\nHal yang dipelajari hari ini:\n- ...\n\nChat Masuk\n- ...\n\nOrder Masuk\n- ...\n\nComplete Order\n- ...\n\nActive Order\n- filter: 1\n- vrm: 2</code>`
       );
     }
     return;
@@ -227,7 +227,7 @@ async function handleUpdate(update) {
       `⏰ ${parsed.jam_mulai || '-'} – ${parsed.jam_selesai || '-'}\n` +
       `📊 Active order: ${parsed.active_order}\n` +
       (parsed.impresi ? `👁 Impresi: ${parsed.impresi} | Klik: ${parsed.click} | CR: ${parsed.cr}\n` : '') +
-      `\n🔗 hub.flipspace.id/laporan-harian (ID: #${id})` +
+      `\n🔗 hub.creanimasi.com/laporan-harian (ID: #${id})` +
       futureWarning
     );
 
@@ -258,5 +258,5 @@ async function poll() {
   setTimeout(poll, 1000);
 }
 
-console.log('[BOT] 🚀 Flipspace Hub Bot starting...');
+console.log('[BOT] 🚀 Creanimasi Hub Bot starting...');
 poll();

@@ -62,7 +62,7 @@ const RAW_TIM = [
   { id:10, nama:"Galang Ramadhan", divisi:"Illustrator", level:"Junior Team", status:"Aktif",
     tipe:"Silent Expert", kriteria:2, kepuasan:8, bergabung:"24/02/2025",
     semangat:"Mendengarkan musik", energi:"Membersihkan dapur",
-    target:"Di sini (Flipspace)", memimpin:"Belum tertarik saat ini",
+    target:"Di sini (Creanimasi)", memimpin:"Belum tertarik saat ini",
     skill:3, komunikasi:5, mentor:"-" },
   { id:11, nama:"Ridho Ramadhan", divisi:"3D Modeler", level:"Junior Team", status:"Aktif",
     tipe:"At Risk", kriteria:2, kepuasan:5, bergabung:"04/03/2025",

@@ -124,7 +124,7 @@ function Divider() {
 // ── FORM LAPORAN ───────────────────────────────────────────────────────────────
 const DEFAULT_FORM = () => ({
   tanggal:   new Date().toISOString().slice(0,10),
-  judul:     'Flipspace',
+  judul:     'Creanimasi',
   kas:       '',
   marketing: '',
   produksi:  '',
@@ -203,7 +203,7 @@ function FormLaporan({ initial, onSave, onCancel, saving, error }) {
             <label style={labelStyle}>Judul / Studio *</label>
             <input value={form.judul} required
               onChange={e=>setField('judul',e.target.value)}
-              placeholder="Flipspace / Creillustra / dll"
+              placeholder="Creanimasi / Creillustra / dll"
               style={inputStyle} />
           </div>
           <div>
@@ -229,7 +229,7 @@ function FormLaporan({ initial, onSave, onCancel, saving, error }) {
             <div style={{ display:'flex', gap:8, marginBottom:8, alignItems:'center' }}>
               <input value={a.nama_akun}
                 onChange={e=>setAkun(i,'nama_akun',e.target.value)}
-                placeholder="Nama Akun (mis: Akun Flipspace)"
+                placeholder="Nama Akun (mis: Akun Creanimasi)"
                 style={{ ...inputStyle, flex:1 }} />
               {form.akun.length > 1 && (
                 <button type="button" onClick={()=>removeAkun(i)}

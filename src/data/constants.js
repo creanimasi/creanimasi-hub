@@ -23,7 +23,7 @@ export const STUDIO_CONFIG = {
   targetRevenueBulanan: 5000,    // total semua admin, dalam USD
   targetRevenuePerAdmin: 2000,   // per admin/bulan
   seedFund: 'Rp 500rb',
-  namaStudio: 'Flipspace',
+  namaStudio: 'Creanimasi',
   emailOwner: 'creanimasi@gmail.com',
   profilingKadaluarsaHari: 90,   // hari sebelum profiling dianggap perlu update
 };
