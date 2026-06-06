@@ -14,6 +14,7 @@ export const PresenceContext = createContext({ onlineUsers: [], isOnline: () => 
 const PAGE_TITLES = {
   '/':            'Dashboard',
   '/tim':         'Tim',
+  '/anggota':      'Kelola Anggota',
   '/tim/kelola':  'Kelola Tim',
   '/users':        'Manajemen User',
   '/modul':       'Modul Belajar',
