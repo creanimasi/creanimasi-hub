@@ -5,6 +5,21 @@ import FormProfiling from '../components/FormProfiling';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../services/api';
 
+// Pisah catatan_mentor menjadi pesan member dan balasan admin.
+// Format baru: "pesan_member\n[ADMIN_REPLY]\nreply_admin"
+// Format lama (backward compat): "[ADMIN_REPLY] reply" atau "[ADMIN_REPLY]\nreply"
+function parseCatatanMentor(cm) {
+  if (!cm) return { pesanMember: '', replyAdmin: '' };
+  const SEP = '\n[ADMIN_REPLY]\n';
+  const idx = cm.indexOf(SEP);
+  if (idx !== -1) {
+    return { pesanMember: cm.slice(0, idx).trim(), replyAdmin: cm.slice(idx + SEP.length).trim() };
+  }
+  if (cm.startsWith('[ADMIN_REPLY]\n')) return { pesanMember: '', replyAdmin: cm.slice('[ADMIN_REPLY]\n'.length).trim() };
+  if (cm.startsWith('[ADMIN_REPLY] ')) return { pesanMember: '', replyAdmin: cm.slice('[ADMIN_REPLY] '.length).trim() };
+  return { pesanMember: cm.trim(), replyAdmin: '' };
+}
+
 export function PageFormJurnal() {
   const navigate    = useNavigate();
   const [submitted, setSubmitted] = useState(false);
@@ -149,13 +164,27 @@ export function PageRiwayatJurnal() {
                     <div style={{ fontSize:12 }}>{x.val}</div>
                   </div>
                 ))}
-                {j.catatan_mentor && (
-                  <div style={{ padding:'8px 12px', background:'var(--surface-2)',
-                    borderRadius:8, borderLeft:'3px solid var(--green)' }}>
-                    <div style={{ fontSize:10, fontWeight:700, color:'var(--text-3)', marginBottom:3 }}>💌 CATATAN UNTUK MENTOR</div>
-                    <div style={{ fontSize:12, fontStyle:'italic' }}>{j.catatan_mentor}</div>
-                  </div>
-                )}
+                {(() => {
+                  const { pesanMember, replyAdmin } = parseCatatanMentor(j.catatan_mentor);
+                  return (
+                    <>
+                      {pesanMember && (
+                        <div style={{ padding:'8px 12px', background:'var(--surface-2)',
+                          borderRadius:8, borderLeft:'3px solid var(--green)' }}>
+                          <div style={{ fontSize:10, fontWeight:700, color:'var(--text-3)', marginBottom:3 }}>💌 CATATAN UNTUK MENTOR</div>
+                          <div style={{ fontSize:12, fontStyle:'italic' }}>{pesanMember}</div>
+                        </div>
+                      )}
+                      {replyAdmin && (
+                        <div style={{ padding:'8px 12px', background:'var(--amber-light)',
+                          borderRadius:8, borderLeft:'3px solid var(--amber)' }}>
+                          <div style={{ fontSize:10, fontWeight:700, color:'var(--amber)', marginBottom:3 }}>📨 BALASAN KOORDINATOR</div>
+                          <div style={{ fontSize:12 }}>{replyAdmin}</div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             )}
           </div>
