@@ -1280,4 +1280,143 @@ router.delete('/laporan-mingguan/:id', authMiddleware, async (req, res) => {
   } catch { res.status(500).json({ error: 'Gagal hapus laporan' }); }
 });
 
+// ── LAPORAN ADMIN MINGGUAN ────────────────────────
+// Auto-create table on first run
+pool.query(`
+  CREATE TABLE IF NOT EXISTS laporan_admin_mingguan (
+    id                  SERIAL PRIMARY KEY,
+    tanggal             DATE NOT NULL,
+    akun                VARCHAR(200) NOT NULL,
+    periode             VARCHAR(200),
+    gigs_tags           JSONB DEFAULT '[]',
+    order_queue         JSONB DEFAULT '{}',
+    flow_new_order      INT DEFAULT 0,
+    flow_complete_order INT DEFAULT 0,
+    gigs_utama          JSONB DEFAULT '[]',
+    screenshots         JSONB DEFAULT '{}',
+    todo_list           JSONB DEFAULT '[]',
+    kendala_list        JSONB DEFAULT '[]',
+    catatan             TEXT,
+    dibuat_oleh         VARCHAR(200),
+    created_at          TIMESTAMPTZ DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ DEFAULT NOW()
+  )
+`).catch(e => console.error('laporan_admin_mingguan migration error:', e.message));
+
+async function isAdminOrMarket(req) {
+  if (req.user.role === 'admin') return true;
+  try {
+    const r = await pool.query('SELECT id FROM tim WHERE nama=$1 AND divisi=$2 LIMIT 1', [req.user.nama, 'Admin']);
+    return r.rows.length > 0;
+  } catch { return false; }
+}
+
+// GET /api/hub/laporan-admin — semua laporan (list)
+router.get('/laporan-admin', authMiddleware, async (req, res) => {
+  if (!await isAdminOrMarket(req)) return res.status(403).json({ error: 'Akses ditolak' });
+  try {
+    const r = await pool.query(
+      `SELECT id, tanggal, akun, periode, dibuat_oleh, created_at
+       FROM laporan_admin_mingguan ORDER BY tanggal DESC, created_at DESC`
+    );
+    res.json({ data: r.rows });
+  } catch { res.status(500).json({ error: 'Gagal ambil laporan' }); }
+});
+
+// GET /api/hub/laporan-admin/:id — detail laporan
+router.get('/laporan-admin/:id', authMiddleware, async (req, res) => {
+  if (!await isAdminOrMarket(req)) return res.status(403).json({ error: 'Akses ditolak' });
+  try {
+    const r = await pool.query('SELECT * FROM laporan_admin_mingguan WHERE id=$1', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Laporan tidak ditemukan' });
+    const row = r.rows[0];
+    res.json({ data: { ...row, ...row.screenshots } });
+  } catch { res.status(500).json({ error: 'Gagal ambil laporan' }); }
+});
+
+// POST /api/hub/laporan-admin — buat laporan baru
+router.post('/laporan-admin', authMiddleware, async (req, res) => {
+  if (!await isAdminOrMarket(req)) return res.status(403).json({ error: 'Akses ditolak' });
+  const {
+    tanggal, akun, periode,
+    gigs_tags, order_queue, flow_new_order, flow_complete_order,
+    gigs_utama, todo_list, kendala_list, catatan,
+    screenshot_account_status, screenshot_earnings, screenshot_active_gigs,
+    screenshot_weekly_gigs_score, screenshot_weekly_overview, screenshot_yearly_overview,
+    screenshot_total_impressions, screenshot_fiverr_ads, screenshot_porto_baru,
+  } = req.body;
+  if (!tanggal || !akun) return res.status(400).json({ error: 'Tanggal dan akun wajib diisi' });
+  const screenshots = {
+    screenshot_account_status:    screenshot_account_status    || [],
+    screenshot_earnings:          screenshot_earnings          || [],
+    screenshot_active_gigs:       screenshot_active_gigs       || [],
+    screenshot_weekly_gigs_score: screenshot_weekly_gigs_score || [],
+    screenshot_weekly_overview:   screenshot_weekly_overview   || [],
+    screenshot_yearly_overview:   screenshot_yearly_overview   || [],
+    screenshot_total_impressions: screenshot_total_impressions || [],
+    screenshot_fiverr_ads:        screenshot_fiverr_ads        || [],
+    screenshot_porto_baru:        screenshot_porto_baru        || [],
+  };
+  try {
+    const r = await pool.query(
+      `INSERT INTO laporan_admin_mingguan
+        (tanggal, akun, periode, gigs_tags, order_queue, flow_new_order, flow_complete_order,
+         gigs_utama, screenshots, todo_list, kendala_list, catatan, dibuat_oleh)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id, tanggal, akun, dibuat_oleh`,
+      [tanggal, akun, periode||'', JSON.stringify(gigs_tags||[]), JSON.stringify(order_queue||{}),
+       flow_new_order||0, flow_complete_order||0, JSON.stringify(gigs_utama||[]),
+       JSON.stringify(screenshots), JSON.stringify(todo_list||[]),
+       JSON.stringify(kendala_list||[]), catatan||'', req.user.nama]
+    );
+    res.status(201).json({ data: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: 'Gagal simpan laporan: ' + e.message }); }
+});
+
+// PUT /api/hub/laporan-admin/:id — update laporan
+router.put('/laporan-admin/:id', authMiddleware, async (req, res) => {
+  if (!await isAdminOrMarket(req)) return res.status(403).json({ error: 'Akses ditolak' });
+  const {
+    tanggal, akun, periode,
+    gigs_tags, order_queue, flow_new_order, flow_complete_order,
+    gigs_utama, todo_list, kendala_list, catatan,
+    screenshot_account_status, screenshot_earnings, screenshot_active_gigs,
+    screenshot_weekly_gigs_score, screenshot_weekly_overview, screenshot_yearly_overview,
+    screenshot_total_impressions, screenshot_fiverr_ads, screenshot_porto_baru,
+  } = req.body;
+  const screenshots = {
+    screenshot_account_status:    screenshot_account_status    || [],
+    screenshot_earnings:          screenshot_earnings          || [],
+    screenshot_active_gigs:       screenshot_active_gigs       || [],
+    screenshot_weekly_gigs_score: screenshot_weekly_gigs_score || [],
+    screenshot_weekly_overview:   screenshot_weekly_overview   || [],
+    screenshot_yearly_overview:   screenshot_yearly_overview   || [],
+    screenshot_total_impressions: screenshot_total_impressions || [],
+    screenshot_fiverr_ads:        screenshot_fiverr_ads        || [],
+    screenshot_porto_baru:        screenshot_porto_baru        || [],
+  };
+  try {
+    await pool.query(
+      `UPDATE laporan_admin_mingguan SET
+        tanggal=$1, akun=$2, periode=$3, gigs_tags=$4, order_queue=$5,
+        flow_new_order=$6, flow_complete_order=$7, gigs_utama=$8, screenshots=$9,
+        todo_list=$10, kendala_list=$11, catatan=$12, updated_at=NOW()
+       WHERE id=$13`,
+      [tanggal, akun, periode||'', JSON.stringify(gigs_tags||[]), JSON.stringify(order_queue||{}),
+       flow_new_order||0, flow_complete_order||0, JSON.stringify(gigs_utama||[]),
+       JSON.stringify(screenshots), JSON.stringify(todo_list||[]),
+       JSON.stringify(kendala_list||[]), catatan||'', req.params.id]
+    );
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: 'Gagal update: ' + e.message }); }
+});
+
+// DELETE /api/hub/laporan-admin/:id
+router.delete('/laporan-admin/:id', authMiddleware, async (req, res) => {
+  if (!await isAdminOrMarket(req)) return res.status(403).json({ error: 'Akses ditolak' });
+  try {
+    await pool.query('DELETE FROM laporan_admin_mingguan WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch { res.status(500).json({ error: 'Gagal hapus' }); }
+});
+
 module.exports = router;
