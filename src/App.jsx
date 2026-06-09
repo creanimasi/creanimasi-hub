@@ -25,7 +25,7 @@ function AdminRoute({ children }) {
 
 function AdminOrMarketRoute({ children }) {
   const { user } = useAuth();
-  if (user?.role !== 'admin' && user?.divisi !== 'Admin') return <Navigate to="/" replace />;
+  if (user?.role !== 'admin' && !user?.divisi?.toLowerCase().includes('admin')) return <Navigate to="/" replace />;
   return children;
 }
 
