@@ -66,11 +66,14 @@ router.post('/auth/login', async (req, res) => {
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(401).json({ error: 'Username atau password salah' });
 
+    const timR = await pool.query(`SELECT divisi FROM tim WHERE nama = $1 LIMIT 1`, [user.nama]);
+    const divisi = timR.rows[0]?.divisi || null;
+
     const token = jwt.sign(
-      { id: user.id, nama: user.nama, username: user.username, role: user.role },
+      { id: user.id, nama: user.nama, username: user.username, role: user.role, divisi },
       JWT_SECRET, { expiresIn: '7d' }
     );
-    res.json({ success: true, token, user: { id: user.id, nama: user.nama, username: user.username, role: user.role, tema: user.tema || 'dark' } });
+    res.json({ success: true, token, user: { id: user.id, nama: user.nama, username: user.username, role: user.role, divisi, tema: user.tema || 'dark' } });
   } catch (err) {
     res.status(500).json({ error: 'Gagal login' });
   }
