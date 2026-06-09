@@ -70,6 +70,13 @@ export const api = {
   updateLaporan:    (id, d) => request('PUT',  `/laporan-mingguan/${id}`, d),
   hapusLaporan:     (id)    => request('DELETE', `/laporan-mingguan/${id}`),
 
+  // Laporan Mingguan Admin (analitik per-akun Fiverr)
+  getLaporanAdmin:       ()      => request('GET', '/laporan-admin'),
+  getLaporanAdminById:   (id)    => request('GET', `/laporan-admin/${id}`),
+  buatLaporanAdmin:      (data)  => request('POST', '/laporan-admin', data),
+  updateLaporanAdmin:    (id, d) => request('PUT',  `/laporan-admin/${id}`, d),
+  hapusLaporanAdmin:     (id)    => request('DELETE', `/laporan-admin/${id}`),
+
   // Performa historis
   getPerforma: (periode = 'minggu', limit = 12) =>
     request('GET', `/performa?periode=${periode}&limit=${limit}`),

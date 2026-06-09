@@ -31,7 +31,8 @@ const PAGE_TITLES = {
   '/kader':       'Kader Potensial',
   '/friday-win':  'Friday Win',
   '/performa':    'Grafik Performa Tim',
-  '/laporan':        'Laporan Mingguan',
+  '/laporan-mentor': 'Laporan Mingguan Mentor',
+  '/laporan-admin':  'Laporan Mingguan Admin',
   '/laporan-harian': 'Laporan Harian Tim',
   '/kalender':    'Kalender Kegiatan',
 };

@@ -13,6 +13,7 @@ import { PageFormJurnal, PageFormProfiling, PageRiwayatJurnal } from './pages/Fo
 import Profil from './pages/Profil';
 import Performa from './pages/Performa';
 import LaporanMingguan from './pages/LaporanMingguan';
+import LaporanAdminMingguan from './pages/LaporanAdminMingguan';
 import LaporanHarian from './pages/LaporanHarian';
 import Kalender from './pages/Kalender';
 
@@ -64,7 +65,8 @@ function ProtectedRoutes() {
         <Route path="/1on1"         element={<AdminRoute><OneOnOne /></AdminRoute>} />
         <Route path="/workshop"     element={<AdminRoute><Workshop /></AdminRoute>} />
         <Route path="/friday-win"   element={<AdminRoute><FridayWin /></AdminRoute>} />
-        <Route path="/laporan"          element={<AdminRoute><LaporanMingguan /></AdminRoute>} />
+        <Route path="/laporan-mentor"   element={<AdminRoute><LaporanMingguan /></AdminRoute>} />
+        <Route path="/laporan-admin"    element={<AdminRoute><LaporanAdminMingguan /></AdminRoute>} />
         <Route path="/laporan-harian"   element={<AdminRoute><LaporanHarian /></AdminRoute>} />
         <Route path="/kalender"     element={<AdminRoute><Kalender /></AdminRoute>} />
 
