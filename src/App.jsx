@@ -23,6 +23,12 @@ function AdminRoute({ children }) {
   return children;
 }
 
+function AdminOrMarketRoute({ children }) {
+  const { user } = useAuth();
+  if (user?.role !== 'admin' && user?.divisi !== 'Admin') return <Navigate to="/" replace />;
+  return children;
+}
+
 function ProtectedRoutes() {
   const { user, loading } = useAuth();
   const location = useLocation();
@@ -66,7 +72,7 @@ function ProtectedRoutes() {
         <Route path="/workshop"     element={<AdminRoute><Workshop /></AdminRoute>} />
         <Route path="/friday-win"   element={<AdminRoute><FridayWin /></AdminRoute>} />
         <Route path="/laporan-mentor"   element={<AdminRoute><LaporanMingguan /></AdminRoute>} />
-        <Route path="/laporan-admin"    element={<AdminRoute><LaporanAdminMingguan /></AdminRoute>} />
+        <Route path="/laporan-admin"    element={<AdminOrMarketRoute><LaporanAdminMingguan /></AdminOrMarketRoute>} />
         <Route path="/laporan-harian"   element={<AdminRoute><LaporanHarian /></AdminRoute>} />
         <Route path="/kalender"     element={<AdminRoute><Kalender /></AdminRoute>} />
 

@@ -12,6 +12,7 @@ const NAV_ADMIN = [
   { path: '/modul',      label: 'Modul Belajar',       badge: null,              badgeType: '' },
   { path: '/jurnal',     label: 'Jurnal Refleksi',     badge: null,              badgeType: '' },
   { section: 'Form' },
+  { path: '/laporan-admin',  label: 'Laporan Mingguan Admin',  badge: null, badgeType: '' },
   { path: '/jurnal/isi', label: 'Isi Jurnal Mingguan', badge: null, badgeType: '' },
   { path: '/profiling',  label: 'Form Profiling Tim',  badge: null, badgeType: '' },
   { section: 'Operasional' },
@@ -22,7 +23,6 @@ const NAV_ADMIN = [
   { path: '/performa',   label: 'Grafik Performa',     badge: null, badgeType: '' },
   { path: '/laporan-harian', label: 'Laporan Harian',   badge: null, badgeType: '' },
   { path: '/laporan-mentor', label: 'Laporan Mingguan Mentor', badge: null, badgeType: '' },
-  { path: '/laporan-admin',  label: 'Laporan Mingguan Admin',  badge: null, badgeType: '' },
   { section: 'Pengembangan' },
   { path: '/friday-win', label: 'Friday Win',          badge: null, badgeType: '' },
   { path: '/kalender',   label: 'Kalender',             badge: null, badgeType: '' },
@@ -81,7 +81,15 @@ export default function Sidebar({ isOpen, onClose }) {
   const { user, logout } = useAuth();
   const { isOnline }   = useContext(PresenceContext);
   const isAdmin        = user?.role === 'admin';
-  const NAV            = isAdmin ? NAV_ADMIN : NAV_MEMBER;
+  const isAdminDivisi  = user?.divisi === 'Admin';
+  const baseNav        = isAdmin ? NAV_ADMIN : NAV_MEMBER;
+  const NAV            = (!isAdmin && isAdminDivisi)
+    ? baseNav.map(item =>
+        item.path === '/jurnal/isi'
+          ? [{ path: '/laporan-admin', label: 'Laporan Mingguan Admin', badge: null, badgeType: '' }, item]
+          : item
+      ).flat()
+    : baseNav;
 
   const goTo = (path) => { navigate(path); onClose?.(); };
 
