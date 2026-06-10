@@ -385,6 +385,41 @@ router.patch('/skb/:id', async (req, res) => {
 
 // ── MANAJEMEN TIM ─────────────────────────────────
 
+// Auto-migration: tambah kolom profiling ke tabel tim + backfill 11 anggota awal
+pool.query(`
+  ALTER TABLE tim
+    ADD COLUMN IF NOT EXISTS status     VARCHAR(50)  DEFAULT 'Aktif',
+    ADD COLUMN IF NOT EXISTS kriteria   INT          DEFAULT 3,
+    ADD COLUMN IF NOT EXISTS kepuasan   INT          DEFAULT 7,
+    ADD COLUMN IF NOT EXISTS bergabung  VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS semangat   TEXT         DEFAULT '-',
+    ADD COLUMN IF NOT EXISTS energi     TEXT         DEFAULT '-',
+    ADD COLUMN IF NOT EXISTS target     TEXT         DEFAULT '-',
+    ADD COLUMN IF NOT EXISTS memimpin   VARCHAR(100) DEFAULT 'Belum tertarik saat ini',
+    ADD COLUMN IF NOT EXISTS skill      INT          DEFAULT 3,
+    ADD COLUMN IF NOT EXISTS komunikasi INT          DEFAULT 3,
+    ADD COLUMN IF NOT EXISTS mentor     VARCHAR(100) DEFAULT '-'
+`).then(() => pool.query(`UPDATE tim SET bergabung = TO_CHAR(created_at, 'DD/MM/YYYY') WHERE bergabung IS NULL`))
+  .then(() => pool.query(`
+    UPDATE tim SET status=d.status, kriteria=d.kriteria, kepuasan=d.kepuasan, bergabung=d.bergabung,
+      semangat=d.semangat, energi=d.energi, target=d.target, memimpin=d.memimpin,
+      skill=d.skill, komunikasi=d.komunikasi, mentor=d.mentor
+    FROM (VALUES
+      ('Ariel Tegar','Aktif',5,10,'21/09/2025','Mencapai tujuan dan impian awal','Handle klien awam teknis','Memiliki beberapa unit usaha sendiri','Ya, sangat tertarik',4,5,'-'),
+      ('Ryan Cavallera','Aktif',4,8,'25/04/2025','Mendapatkan ilmu baru dan bonus','Revisi berulang, komplain klien','Memimpin 1 tim dengan 2 akun marketplace','Ya, sangat tertarik',4,5,'-'),
+      ('Nanda Cahya Bintang','Probation',3,5,'27/03/2026','Uang dan pemahaman baru','Sinyal dan device ngelag','Tempat yang lebih tinggi lagi','Ya, sangat tertarik',3,4,'Ariel Tegar'),
+      ('Dina Syavina','Aktif',3,7,'30/08/2023','Uang','Ngomong sama orang','Admin studio sendiri','Mungkin kalau sudah siap',3,2,'-'),
+      ('Tsania Lathifa','Probation',4,7,'02/03/2026','Gajian dan ketemu teman-teman','Ngerti mood orang lain','Berkembang skill dan karier','Ya, sangat tertarik',4,5,'Dina Syavina'),
+      ('Ahmad Fathurrahman','Aktif',4,8,'05/01/2025','Lingkungan dan pikiran tenang','Revisi tanpa kejelasan','Menetap dan kembangkan skill','Mungkin kalau sudah siap',5,4,'-'),
+      ('Raynar Harits','Aktif',3,7,'13/04/2025','Lingkungan','Jobdesk yang over','Masih di Semarang karena kuliah','Mungkin kalau sudah siap',3,4,'-'),
+      ('Aditya Tri Prakoso','Aktif',3,7,'21/06/2025','Uang','Ngelag dan internet lemot','Improve skill, punya passive income','Ya, sangat tertarik',4,3,'-'),
+      ('Noval Faqihudin Zaky','Aktif',3,8,'01/01/2025','Entertain dan ketemu teman','Revisi yang sudah lewat stepnya','Illustrator yang lebih baik','Mungkin kalau sudah siap',4,5,'-'),
+      ('Galang Ramadhan','Aktif',2,8,'24/02/2025','Mendengarkan musik','Membersihkan dapur','Di sini (Creanimasi)','Belum tertarik saat ini',3,5,'-'),
+      ('Ridho Ramadhan','Aktif',2,5,'04/03/2025','Instruksi jelas','Tidak ada instruksi','Intel Arc B580','Mungkin kalau sudah siap',4,3,'-')
+    ) AS d(nama,status,kriteria,kepuasan,bergabung,semangat,energi,target,memimpin,skill,komunikasi,mentor)
+    WHERE tim.nama = d.nama AND tim.kriteria = 3 AND tim.skill = 3 AND tim.komunikasi = 3 AND tim.kepuasan = 7
+  `)).catch(e => console.error('tim profiling migration error:', e.message));
+
 // GET /api/hub/tim — semua anggota aktif
 router.get('/tim', async (req, res) => {
   try {

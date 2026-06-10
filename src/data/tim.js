@@ -1,5 +1,5 @@
 // Hitung lama bergabung otomatis dari format DD/MM/YYYY
-function hitungLama(bergabung) {
+export function hitungLama(bergabung) {
   const [d, m, y] = bergabung.split('/').map(Number);
   const mulai = new Date(y, m - 1, d);
   const now   = new Date();

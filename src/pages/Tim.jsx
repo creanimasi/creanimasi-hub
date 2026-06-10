@@ -1,6 +1,7 @@
-import { useState, useEffect, useContext } from 'react';
-import { TIM, TIPE_COLOR, DIVISI_COLOR } from '../data/tim';
+import { useState, useEffect, useContext, useCallback } from 'react';
+import { TIPE_COLOR, DIVISI_COLOR, hitungLama } from '../data/tim';
 import { PresenceContext } from '../components/Layout';
+import { api } from '../services/api';
 
 const RANK_CFG = {
   'Rising Star':    { icon: '⭐', color: 'var(--green)',  bg: 'var(--green-light)'  },
@@ -167,14 +168,14 @@ function MiniCard({ m, onClick }) {
 }
 
 // ── POPUP MODAL ───────────────────────────────────────────────────────────────
-function CharacterModal({ m, onClose }) {
+function CharacterModal({ m, tim, onClose }) {
   const tc    = TIPE_COLOR[m.tipe]     || { bg: 'var(--surface-2)', text: 'var(--text-2)' };
   const dc    = DIVISI_COLOR[m.divisi] || { bg: 'var(--surface-2)', text: 'var(--text-2)', icon: '👤' };
   const rank  = RANK_CFG[m.tipe]       || { icon: '👤', color: 'var(--text-2)', bg: 'var(--surface-2)' };
   const score = calcScore(m);
   const inits = m.nama.split(' ').slice(0, 2).map(w => w[0]).join('');
 
-  const avg = (key) => TIM.reduce((s, t) => s + (t[key] || 0), 0) / TIM.length;
+  const avg = (key) => tim.reduce((s, t) => s + (t[key] || 0), 0) / tim.length;
   const AVG = {
     skill:      Math.round(avg('skill')      * 10) / 10,
     komunikasi: Math.round(avg('komunikasi') * 10) / 10,
@@ -397,33 +398,54 @@ function InfoChip({ label, value, color }) {
 
 // ── MAIN ──────────────────────────────────────────────────────────────────────
 export default function Tim() {
+  const [tim,      setTim]      = useState([]);
+  const [loading,  setLoading]  = useState(true);
   const [filter,   setFilter]   = useState('Semua');
   const [search,   setSearch]   = useState('');
   const [tipeFilter, setTipe]   = useState('Semua');
   const [selected, setSelected] = useState(null);
 
+  const load = useCallback(async () => {
+    try {
+      const res = await api.getTim();
+      setTim(res.data.map(m => ({ ...m, lama: m.bergabung ? hitungLama(m.bergabung) : '-' })));
+    } catch {
+      setTim([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
   const divisis   = ['Semua', 'Admin', 'PM', 'Rigger', 'Illustrator', '3D Modeler'];
   const tipes     = ['Semua', 'Rising Star', 'High Potential', 'Silent Expert', 'At Risk'];
 
-  const filtered = TIM.filter(t => {
+  const filtered = tim.filter(t => {
     const matchDiv  = filter === 'Semua' || t.divisi === filter;
     const matchTipe = tipeFilter === 'Semua' || t.tipe === tipeFilter;
     const q         = search.toLowerCase();
-    const matchQ    = !q || t.nama.toLowerCase().includes(q) || t.divisi.toLowerCase().includes(q) || t.tipe.toLowerCase().includes(q);
+    const matchQ    = !q || t.nama.toLowerCase().includes(q) || t.divisi.toLowerCase().includes(q) || (t.tipe || '').toLowerCase().includes(q);
     return matchDiv && matchTipe && matchQ;
   });
+
+  if (loading) return (
+    <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-2)' }}>
+      <div style={{ fontSize: 13 }}>Memuat data tim...</div>
+    </div>
+  );
 
   return (
     <div>
       {/* Summary metrics */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
         {[
-          { label: 'Total Tim',      val: TIM.length,                                                color: 'var(--text)'   },
-          { label: 'Rising Star',    val: TIM.filter(t => t.tipe === 'Rising Star').length,          color: 'var(--green)'  },
-          { label: 'High Potential', val: TIM.filter(t => t.tipe === 'High Potential').length,       color: 'var(--purple)' },
-          { label: 'Silent Expert',  val: TIM.filter(t => t.tipe === 'Silent Expert').length,        color: 'var(--amber)'  },
-          { label: 'At Risk',        val: TIM.filter(t => t.tipe === 'At Risk').length,              color: 'var(--red)'    },
-          { label: 'Avg Score',      val: Math.round(TIM.reduce((s,m) => s + calcScore(m), 0) / TIM.length), color: 'var(--blue)' },
+          { label: 'Total Tim',      val: tim.length,                                                color: 'var(--text)'   },
+          { label: 'Rising Star',    val: tim.filter(t => t.tipe === 'Rising Star').length,          color: 'var(--green)'  },
+          { label: 'High Potential', val: tim.filter(t => t.tipe === 'High Potential').length,       color: 'var(--purple)' },
+          { label: 'Silent Expert',  val: tim.filter(t => t.tipe === 'Silent Expert').length,        color: 'var(--amber)'  },
+          { label: 'At Risk',        val: tim.filter(t => t.tipe === 'At Risk').length,              color: 'var(--red)'    },
+          { label: 'Avg Score',      val: tim.length ? Math.round(tim.reduce((s,m) => s + calcScore(m), 0) / tim.length) : 0, color: 'var(--blue)' },
         ].map(s => (
           <div key={s.label} className="metric" style={{ flex: 1, minWidth: 72, padding: '10px 12px' }}>
             <div style={{ fontSize: 20, fontWeight: 700, color: s.color }}>{s.val}</div>
@@ -456,7 +478,7 @@ export default function Tim() {
           <div key={d} className={`tab ${filter === d ? 'active' : ''}`}
             onClick={() => setFilter(d)}>
             {d} <span style={{ fontSize: 10, opacity: .7 }}>
-              ({d === 'Semua' ? TIM.length : TIM.filter(t => t.divisi === d).length})
+              ({d === 'Semua' ? tim.length : tim.filter(t => t.divisi === d).length})
             </span>
           </div>
         ))}
@@ -491,7 +513,7 @@ export default function Tim() {
         <>
           {(search || filter !== 'Semua' || tipeFilter !== 'Semua') && (
             <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10 }}>
-              Menampilkan {filtered.length} dari {TIM.length} anggota
+              Menampilkan {filtered.length} dari {tim.length} anggota
             </div>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
@@ -502,7 +524,7 @@ export default function Tim() {
         </>
       )}
 
-      {selected && <CharacterModal m={selected} onClose={() => setSelected(null)} />}
+      {selected && <CharacterModal m={selected} tim={tim} onClose={() => setSelected(null)} />}
     </div>
   );
 }
