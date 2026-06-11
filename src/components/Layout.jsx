@@ -16,7 +16,6 @@ const PAGE_TITLES = {
   '/tim':         'Tim',
   '/anggota':      'Kelola Anggota',
   '/tim/kelola':  'Kelola Tim',
-  '/users':        'Manajemen User',
   '/modul':       'Modul Belajar',
   '/jurnal':      'Jurnal Refleksi',
   '/jurnal/isi':     'Isi Jurnal Mingguan',

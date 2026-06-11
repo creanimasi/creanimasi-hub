@@ -108,14 +108,6 @@ export const api = {
   // Modul Progress (legacy — tidak dipakai, digantikan modul-topik)
   // getModulProgress / updateModulProgress dihapus
 
-  // User management (admin)
-  getUsers:          ()        => request('GET', '/users'),
-  tambahUser:        (data)    => request('POST', '/users', data),
-  updateUser:        (id, data) => request('PATCH', `/users/${id}`, data),
-  nonaktifkanUser:   (id)      => request('DELETE', `/users/${id}`),
-  aktifkanUser:      (id)      => request('PATCH', `/users/${id}/aktifkan`),
-  resetPasswordUser: (id, pw)  => request('PATCH', `/users/${id}/reset-password`, pw ? { password_baru: pw } : {}),
-
   // Tim
   getTim:          (semua) => request('GET', `/tim${semua ? '?semua=1' : ''}`),
   tambahTim:       (data)  => request('POST', '/tim', data),

@@ -7,7 +7,6 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Tim from './pages/Tim';
 import ManajemenTim from './pages/ManajemenTim';
-import ManajemenUser from './pages/ManajemenUser';
 import KelolAnggota from './pages/KelolAnggota';
 import { Modul, Jurnal, SOP, Reward, Workshop, Kader, SKB, OneOnOne, FridayWin } from './pages/Pages';
 import { PageFormJurnal, PageFormProfiling, PageRiwayatJurnal } from './pages/FormPages';
@@ -66,7 +65,6 @@ function ProtectedRoutes() {
         <Route path="/tim"          element={<AdminRoute><Tim /></AdminRoute>} />
         <Route path="/anggota"      element={<AdminRoute><KelolAnggota /></AdminRoute>} />
         <Route path="/tim/kelola"   element={<AdminRoute><ManajemenTim /></AdminRoute>} />
-        <Route path="/users"        element={<AdminRoute><ManajemenUser /></AdminRoute>} />
         <Route path="/jurnal"       element={<AdminRoute><Jurnal /></AdminRoute>} />
         <Route path="/kader"        element={<AdminRoute><Kader /></AdminRoute>} />
         <Route path="/reward"       element={<AdminRoute><Reward /></AdminRoute>} />
