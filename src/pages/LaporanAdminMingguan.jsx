@@ -805,22 +805,23 @@ export default function LaporanAdminMingguan() {
       const slices = [];
       let start = 0;
       while (start < totalH) {
-        const idealEnd = Math.min(start + pageHeightPx, totalH);
-        if (idealEnd >= totalH) { slices.push({ start, end: totalH }); break; }
+        const pageStart = start;
+        const idealEnd = Math.min(pageStart + pageHeightPx, totalH);
+        if (idealEnd >= totalH) { slices.push({ start: pageStart, end: totalH }); break; }
 
         // Forced break: always start a new page at these positions
         let breakAt = idealEnd;
-        const nextForced = [...forcedBreaks].find(f => f > start && f < idealEnd);
+        const nextForced = [...forcedBreaks].find(f => f > pageStart && f < idealEnd);
         if (nextForced !== undefined) {
           breakAt = nextForced;
         } else {
           // Soft break: if a section starts in the bottom 40% of this page, break before it
-          const threshold = start + pageHeightPx * 0.60;
+          const threshold = pageStart + pageHeightPx * 0.60;
           for (const bp of breakPoints) {
             if (bp > threshold && bp < idealEnd) { breakAt = bp; break; }
           }
         }
-        slices.push({ start, end: breakAt });
+        slices.push({ start: pageStart, end: breakAt });
         start = breakAt;
       }
 

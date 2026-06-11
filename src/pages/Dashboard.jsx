@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RadialBarChart, RadialBar, ResponsiveContainer } from 'recharts';
-import { TIM, TIPE_COLOR, DIVISI_COLOR } from '../data/tim';
+import { TIM, TIPE_COLOR, DIVISI_COLOR, hitungLama } from '../data/tim';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../services/api';
 import { STUDIO_CONFIG } from '../data/constants';
@@ -63,7 +63,18 @@ function Avatar({ nama, bg, color, size = 28 }) {
 // ── DASHBOARD MEMBER ──────────────────────────────────────────────────────────
 function DashboardMember({ user }) {
   const navigate  = useNavigate();
-  const member    = TIM.find(t => t.nama === user.nama);
+  const [timDB, setTimDB] = useState([]);
+
+  useEffect(() => {
+    api.getTim(true)
+      .then(res => setTimDB(res.data || []))
+      .catch(() => {});
+  }, []);
+
+  const memberRaw = timDB.find(t => t.nama === user.nama) || TIM.find(t => t.nama === user.nama);
+  const member    = memberRaw && !memberRaw.lama
+    ? { ...memberRaw, lama: memberRaw.bergabung ? hitungLama(memberRaw.bergabung) : '-' }
+    : memberRaw;
   const tc        = member ? (TIPE_COLOR[member.tipe] || {}) : {};
   const dc        = member ? (DIVISI_COLOR[member.divisi] || {}) : {};
   const inits     = user.nama.split(' ').slice(0, 2).map(w => w[0]).join('');
@@ -330,7 +341,8 @@ export default function Dashboard() {
 
   // useMemo HARUS sebelum conditional return (Rules of Hooks)
   const secondlineTop = useMemo(() => {
-    return TIM
+    const sumber = timDB.length > 0 ? timDB : TIM;
+    return sumber
       .filter(t => ['Rising Star','High Potential'].includes(t.tipe))
       .map(m => {
         const p = profiling.find(x => x.nama === m.nama);
@@ -345,7 +357,7 @@ export default function Dashboard() {
       })
       .sort((a, b) => b.score - a.score)
       .slice(0, 3);
-  }, [profiling]);
+  }, [profiling, timDB]);
 
   if (user?.role !== 'admin') return <DashboardMember user={user} />;
 

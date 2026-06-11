@@ -482,6 +482,46 @@ router.delete('/tim/:id', async (req, res) => {
   }
 });
 
+// PATCH /api/hub/tim/:id/aktifkan — aktifkan kembali anggota nonaktif
+router.patch('/tim/:id/aktifkan', async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+  try {
+    const result = await query(
+      `UPDATE tim SET aktif=TRUE, updated_at=NOW() WHERE id=$1 RETURNING *`,
+      [req.params.id]
+    );
+    if (!result.rowCount) return res.status(404).json({ error: 'Anggota tidak ditemukan' });
+    res.json({ success: true, data: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal mengaktifkan anggota' });
+  }
+});
+
+// POST /api/hub/tim/:id/buat-akun — buat akun login untuk anggota yang belum punya akses
+router.post('/tim/:id/buat-akun', async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+  const { username, password, role } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Username dan password wajib diisi' });
+  if (password.length < 8) return res.status(400).json({ error: 'Password minimal 8 karakter' });
+  try {
+    const timR = await query('SELECT nama FROM tim WHERE id=$1', [req.params.id]);
+    if (!timR.rows.length) return res.status(404).json({ error: 'Anggota tidak ditemukan' });
+    const nama = timR.rows[0].nama;
+
+    const exists = await query('SELECT id FROM hub_users WHERE nama=$1 OR username=$2', [nama, username]);
+    if (exists.rows.length) return res.status(409).json({ error: 'Anggota ini sudah punya akun atau username sudah dipakai' });
+
+    const hashed = await bcrypt.hash(password, 10);
+    const result = await query(
+      `INSERT INTO hub_users (nama, username, password, role) VALUES ($1,$2,$3,$4) RETURNING id, nama, username, role`,
+      [nama, username, hashed, role === 'admin' ? 'admin' : 'member']
+    );
+    res.status(201).json({ success: true, data: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal membuat akun' });
+  }
+});
+
 // ── MODUL PROGRESS ───────────────────────────────
 
 // GET /api/hub/modul — semua progress (bisa filter ?modul_id=admin)
