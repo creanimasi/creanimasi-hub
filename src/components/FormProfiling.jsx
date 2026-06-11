@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
-import { TIM } from '../data/tim';
+import { useTim } from '../hooks/useTim';
 import { DIVISI_TO_PROFILING_ID } from '../data/constants';
 
 const NAMA_TO_DIVISI_ID = DIVISI_TO_PROFILING_ID;
@@ -323,7 +323,8 @@ const defaultForm = () => ({
 
 export default function FormProfiling({ onSuccess }) {
   const { user } = useAuth();
-  const timData = TIM.find(t => t.nama === user?.nama);
+  const tim = useTim();
+  const timData = tim.find(t => t.nama === user?.nama);
   const autoDiv = timData ? (NAMA_TO_DIVISI_ID[timData.divisi] || '') : '';
 
   const [divisi, setDivisi] = useState(autoDiv);
@@ -334,11 +335,11 @@ export default function FormProfiling({ onSuccess }) {
 
   useEffect(() => {
     if (user?.nama) {
-      const t = TIM.find(x => x.nama === user.nama);
+      const t = tim.find(x => x.nama === user.nama);
       setForm(f => ({ ...f, nama: user.nama, level_karier: t?.level || '' }));
       setDivisi(NAMA_TO_DIVISI_ID[t?.divisi] || '');
     }
-  }, [user]);
+  }, [user, tim]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 

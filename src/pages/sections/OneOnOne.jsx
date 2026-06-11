@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { TIM, TIPE_COLOR } from '../../data/tim';
+import { TIPE_COLOR } from '../../data/tim';
+import { useTim } from '../../hooks/useTim';
 import { api } from '../../services/api';
 
 const TIPE_1ON1 = [
@@ -11,6 +12,7 @@ const TIPE_1ON1 = [
 ];
 
 export function OneOnOne() {
+  const tim = useTim();
   const [sesi,      setSesi]     = useState([]);
   const [profiling, setProfiling]= useState([]);
   const [loading,   setLoading]  = useState(true);
@@ -58,7 +60,7 @@ export function OneOnOne() {
     if (m.tipe === 'High Potential') return 40;
     return 0;
   };
-  const PRIORITAS = TIM
+  const PRIORITAS = tim
     .map(m => ({ ...m, prioritasScore: getPrioritasScore(m) }))
     .filter(m => m.prioritasScore > 0)
     .sort((a, b) => b.prioritasScore - a.prioritasScore);
@@ -111,7 +113,7 @@ export function OneOnOne() {
                   letterSpacing:'.05em', display:'block', marginBottom:5 }}>Anggota *</label>
                 <select value={form.anggota} required onChange={e=>setForm(f=>({...f,anggota:e.target.value}))}>
                   <option value="">— Pilih anggota —</option>
-                  {TIM.map(t=><option key={t.id} value={t.nama}>{t.nama}</option>)}
+                  {tim.map(t=><option key={t.id} value={t.nama}>{t.nama}</option>)}
                 </select>
               </div>
             </div>
@@ -230,7 +232,7 @@ export function OneOnOne() {
           )}
           {sesi.slice(0,15).map(s => {
             const t = TIPE_1ON1.find(x=>x.id===s.tipe) || {};
-            const member = TIM.find(m=>m.nama===s.anggota);
+            const member = tim.find(m=>m.nama===s.anggota);
             const tc = member ? (TIPE_COLOR[member.tipe]||{}) : {};
             const moodDelta = s.mood_sesudah && s.mood_sebelum ? s.mood_sesudah - s.mood_sebelum : null;
             return (

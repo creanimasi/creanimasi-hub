@@ -1,13 +1,14 @@
 import { useContext } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { TIM, TIPE_COLOR } from '../data/tim';
+import { TIPE_COLOR } from '../data/tim';
 import { useAuth } from '../hooks/useAuth';
+import { useTim } from '../hooks/useTim';
 import { PresenceContext } from './Layout';
 
 const NAV_ADMIN = [
   { section: 'Utama' },
   { path: '/',           label: 'Dashboard',           badge: null,              badgeType: '' },
-  { path: '/tim',        label: 'Tim',                 badge: TIM.length,        badgeType: 'green' },
+  { path: '/tim',        label: 'Tim',                 badge: null,              badgeType: 'green' },
   { path: '/anggota',    label: 'Kelola Anggota',       badge: null,              badgeType: '' },
   { path: '/modul',      label: 'Modul Belajar',       badge: null,              badgeType: '' },
   { path: '/jurnal',     label: 'Jurnal Refleksi',     badge: null,              badgeType: '' },
@@ -71,16 +72,14 @@ const ICONS = {
   '/kalender':   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>,
 };
 
-// Top 5 tim berdasarkan tipe prioritas untuk ditampilkan di sidebar
-const TEAM_PREVIEW = TIM.slice(0, 5);
-
 export default function Sidebar({ isOpen, onClose }) {
   const location       = useLocation();
   const navigate       = useNavigate();
   const { user, logout } = useAuth();
   const { isOnline }   = useContext(PresenceContext);
+  const tim            = useTim();
   const isAdmin        = user?.role === 'admin';
-  const isAdminDivisi  = !isAdmin && TIM.some(m => m.nama === user?.nama && m.divisi === 'Admin');
+  const isAdminDivisi  = !isAdmin && tim.some(m => m.nama === user?.nama && m.divisi === 'Admin');
   const baseNav        = isAdmin ? NAV_ADMIN : NAV_MEMBER;
   const NAV            = (!isAdmin && isAdminDivisi)
     ? baseNav.map(item =>
@@ -89,6 +88,9 @@ export default function Sidebar({ isOpen, onClose }) {
           : item
       ).flat()
     : baseNav;
+
+  // Top 5 tim untuk preview strip
+  const teamPreview = tim.slice(0, 5);
 
   const goTo = (path) => { navigate(path); onClose?.(); };
 
@@ -125,8 +127,10 @@ export default function Sidebar({ isOpen, onClose }) {
               onClick={() => goTo(item.path)}>
               {ICONS[item.path]}
               {item.label}
-              {item.badge && (
-                <span className={`nav-badge ${item.badgeType}`}>{item.badge}</span>
+              {(item.path === '/tim' ? tim.length : item.badge) > 0 && (
+                <span className={`nav-badge ${item.badgeType}`}>
+                  {item.path === '/tim' ? tim.length : item.badge}
+                </span>
               )}
             </div>
           )
@@ -144,7 +148,7 @@ export default function Sidebar({ isOpen, onClose }) {
           Tim Aktif
         </div>
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          {TEAM_PREVIEW.map(m => {
+          {teamPreview.map(m => {
             const tc     = TIPE_COLOR[m.tipe] || { bg: 'var(--surface-2)', text: 'var(--text-2)' };
             const inits  = m.nama.split(' ').slice(0, 2).map(w => w[0]).join('');
             const online = isOnline(m.nama);
@@ -179,7 +183,7 @@ export default function Sidebar({ isOpen, onClose }) {
               </div>
             );
           })}
-          {TIM.length > 5 && (
+          {tim.length > 5 && (
             <div onClick={() => goTo('/tim')} style={{
               width: 28, height: 28, borderRadius: 8,
               background: 'var(--surface-2)', color: 'var(--text-3)',
@@ -187,7 +191,7 @@ export default function Sidebar({ isOpen, onClose }) {
               fontSize: 9, fontWeight: 700, cursor: 'pointer',
               border: '1px solid var(--border)',
             }}>
-              +{TIM.length - 5}
+              +{tim.length - 5}
             </div>
           )}
         </div>

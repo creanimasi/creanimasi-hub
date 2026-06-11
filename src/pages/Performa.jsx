@@ -4,8 +4,9 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { TIM, TIPE_COLOR, DIVISI_COLOR } from '../data/tim';
+import { TIPE_COLOR, DIVISI_COLOR } from '../data/tim';
 import { useAuth } from '../hooks/useAuth';
+import { useTim } from '../hooks/useTim';
 import { api } from '../services/api';
 
 const METRIK = [
@@ -37,9 +38,9 @@ function CustomTooltip({ active, payload, label }) {
 }
 
 // Komponen chart untuk satu anggota
-function MemberChart({ nama, data, metrikKey, periode }) {
+function MemberChart({ nama, data, metrikKey, periode, tim }) {
   const metrik   = METRIK.find(m => m.key === metrikKey) || METRIK[0];
-  const member   = TIM.find(t => t.nama === nama);
+  const member   = tim.find(t => t.nama === nama);
   const tc       = member ? (TIPE_COLOR[member.tipe] || {}) : {};
   const dc       = member ? (DIVISI_COLOR[member.divisi] || {}) : {};
   const inits    = nama.split(' ').slice(0, 2).map(w => w[0]).join('');
@@ -161,6 +162,7 @@ function TeamCompareChart({ data, metrikKey, periode }) {
 // ── MAIN PAGE ──────────────────────────────────────────────────────────────────
 export default function Performa() {
   const { user }    = useAuth();
+  const tim         = useTim();
   const isAdmin     = user?.role === 'admin';
   const [data,      setData]      = useState({});
   const [loading,   setLoading]   = useState(true);
@@ -176,12 +178,12 @@ export default function Performa() {
       .finally(() => setLoading(false));
   }, [periode]);
 
-  const divisiList = ['Semua', ...new Set(TIM.map(t => t.divisi))];
+  const divisiList = ['Semua', ...new Set(tim.map(t => t.divisi))];
 
   const filteredNames = isAdmin
     ? Object.keys(data).filter(nama => {
         if (filter === 'Semua') return true;
-        const m = TIM.find(t => t.nama === nama);
+        const m = tim.find(t => t.nama === nama);
         return m?.divisi === filter;
       })
     : Object.keys(data);
@@ -273,6 +275,7 @@ export default function Performa() {
                 data={data[nama] || []}
                 metrikKey={metrikKey}
                 periode={periode}
+                tim={tim}
               />
             ))}
           </div>

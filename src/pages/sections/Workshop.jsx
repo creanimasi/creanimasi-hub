@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
-import { WORKSHOP_JRUHUB, TIM, TIPE_COLOR, DIVISI_COLOR } from '../../data/tim';
+import { WORKSHOP_JRUHUB, TIPE_COLOR, DIVISI_COLOR } from '../../data/tim';
 import { api } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
+import { useTim } from '../../hooks/useTim';
 import { downloadCsv } from '../../utils/exportCsv';
 
 // ── WORKSHOP ───────────────────────────────────────────────────────────────
 export function Workshop() {
   const { user }    = useAuth();
+  const tim         = useTim();
   const isAdmin     = user?.role === 'admin';
   const [kehadiran, setKehadiran] = useState([]);
   const [loading,   setLoading]   = useState(true);
@@ -42,11 +44,11 @@ export function Workshop() {
 
   // Statistik keseluruhan
   const totalSesi  = WORKSHOP_JRUHUB.reduce((s, w) => s + w.items.length, 0); // 19
-  const totalSlot  = TIM.length * totalSesi;
+  const totalSlot  = tim.length * totalSesi;
   const totalHadir = kehadiran.filter(r => r.hadir).length;
   const grandPct   = totalSlot > 0 ? Math.round(totalHadir / totalSlot * 100) : 0;
 
-  const anggota = isAdmin ? TIM : TIM.filter(t => t.nama === user?.nama);
+  const anggota = isAdmin ? tim : tim.filter(t => t.nama === user?.nama);
 
   if (loading) return (
     <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-2)' }}>Memuat data workshop...</div>
@@ -72,7 +74,7 @@ export function Workshop() {
       <div style={{ textAlign:'right', marginBottom:12 }}>
         <button className="btn btn-sm" onClick={() => {
           const rows = [];
-          TIM.forEach(t => WORKSHOP_JRUHUB.forEach(w => w.items.forEach((item, idx) => {
+          tim.forEach(t => WORKSHOP_JRUHUB.forEach(w => w.items.forEach((item, idx) => {
             const h = !!(kehadiran.find(r => r.nama===t.nama && r.layer_id===w.id && r.sesi_idx===idx)?.hadir);
             rows.push({ nama:t.nama, divisi:t.divisi, layer:w.label, sesi_no:idx+1, sesi_nama:item, hadir:h?'Ya':'Tidak' });
           })));
@@ -137,16 +139,16 @@ export function Workshop() {
                 </div>
 
                 {/* Baris per anggota */}
-                {anggota.map(tim => {
-                  const tc    = TIPE_COLOR[tim.tipe] || {};
-                  const dc    = DIVISI_COLOR[tim.divisi] || {};
-                  const inits = tim.nama.split(' ').slice(0, 2).map(x => x[0]).join('');
-                  const hadirCount = w.items.filter((_, idx) => isHadir(tim.nama, w.id, idx)).length;
+                {anggota.map(m => {
+                  const tc    = TIPE_COLOR[m.tipe] || {};
+                  const dc    = DIVISI_COLOR[m.divisi] || {};
+                  const inits = m.nama.split(' ').slice(0, 2).map(x => x[0]).join('');
+                  const hadirCount = w.items.filter((_, idx) => isHadir(m.nama, w.id, idx)).length;
                   const pctMember  = Math.round(hadirCount / w.items.length * 100);
                   const barColor   = pctMember >= 80 ? 'var(--green)' : pctMember >= 50 ? 'var(--amber)' : 'var(--red)';
 
                   return (
-                    <div key={tim.id} style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 6 }}>
+                    <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 6 }}>
                       {/* Avatar + nama */}
                       <div style={{ width: 170, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, paddingRight: 8 }}>
                         <div style={{
@@ -159,23 +161,23 @@ export function Workshop() {
                         <div>
                           <div style={{ fontSize: 11, fontWeight: 600, lineHeight: 1.2, whiteSpace: 'nowrap',
                             overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 120 }}>
-                            {tim.nama.split(' ')[0]}
+                            {m.nama.split(' ')[0]}
                           </div>
-                          <div style={{ fontSize: 9, color: dc.text || 'var(--text-3)' }}>{dc.icon} {tim.divisi}</div>
+                          <div style={{ fontSize: 9, color: dc.text || 'var(--text-3)' }}>{dc.icon} {m.divisi}</div>
                         </div>
                       </div>
 
                       {/* Checkbox per sesi */}
                       {w.items.map((_, sesiIdx) => {
-                        const hadir  = isHadir(tim.nama, w.id, sesiIdx);
-                        const key    = `${tim.nama}|${w.id}|${sesiIdx}`;
+                        const hadir  = isHadir(m.nama, w.id, sesiIdx);
+                        const key    = `${m.nama}|${w.id}|${sesiIdx}`;
                         const isBusy = !!saving[key];
                         return (
                           <div key={sesiIdx} style={{ width: 36, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
                             <button
                               disabled={isBusy || !isAdmin}
-                              onClick={() => toggle(tim.nama, w.id, sesiIdx, hadir)}
-                              title={`${tim.nama} — ${w.items[sesiIdx]}: ${hadir ? 'hadir' : 'tidak hadir'}`}
+                              onClick={() => toggle(m.nama, w.id, sesiIdx, hadir)}
+                              title={`${m.nama} — ${w.items[sesiIdx]}: ${hadir ? 'hadir' : 'tidak hadir'}`}
                               style={{
                                 width: 22, height: 22, borderRadius: 6, border: 'none',
                                 background: hadir ? w.warna : 'var(--surface-2)',

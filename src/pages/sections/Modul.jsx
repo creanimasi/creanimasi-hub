@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
-import { MODUL_LIST, TIM, TIPE_COLOR, DIVISI_COLOR } from '../../data/tim';
+import { MODUL_LIST, TIPE_COLOR, DIVISI_COLOR } from '../../data/tim';
 import { DIVISI_TO_MODUL_ID } from '../../data/constants';
 import { api } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
+import { useTim } from '../../hooks/useTim';
 
 const DIVISI_TO_MODUL = DIVISI_TO_MODUL_ID;
 
 // ── MODUL ──────────────────────────────────────────────────────────────────
 export function Modul() {
   const { user }    = useAuth();
+  const tim         = useTim();
   const isAdmin     = user?.role === 'admin';
   const [topik,     setTopik]    = useState([]);
   const [topikNama, setTopikNama]= useState({}); // { 'modulId|idx': 'nama custom' }
@@ -80,15 +82,15 @@ export function Modul() {
   const getAnggota = (modulId) => {
     const divisiId = Object.entries(DIVISI_TO_MODUL).find(([,v]) => v === modulId)?.[0];
     return isAdmin
-      ? TIM.filter(t => {
+      ? tim.filter(t => {
           if (modulId === 'secondline') return ['Rising Star','High Potential'].includes(t.tipe);
           return t.divisi === divisiId;
         })
-      : TIM.filter(t => t.nama === user?.nama);
+      : tim.filter(t => t.nama === user?.nama);
   };
 
   const memberModulId = !isAdmin && user
-    ? DIVISI_TO_MODUL[TIM.find(t => t.nama === user.nama)?.divisi]
+    ? DIVISI_TO_MODUL[tim.find(t => t.nama === user.nama)?.divisi]
     : null;
 
   const visibleModul = isAdmin

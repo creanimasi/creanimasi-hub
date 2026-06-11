@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../services/api';
-import { TIM } from '../data/tim';
+import { useTim } from '../hooks/useTim';
 import { useAuth } from '../hooks/useAuth';
 
 function StarRating({ label, name, value, onChange }) {
@@ -49,9 +49,10 @@ function MoodSlider({ value, onChange }) {
 
 export default function FormJurnal({ onSuccess }) {
   const { user } = useAuth();
+  const tim = useTim();
 
   // Cari data anggota berdasarkan user yang login
-  const timData = TIM.find(t => t.nama === user?.nama);
+  const timData = tim.find(t => t.nama === user?.nama);
 
   const [form, setForm] = useState({
     nama: user?.nama || '',
@@ -68,11 +69,11 @@ export default function FormJurnal({ onSuccess }) {
 
   useEffect(() => {
     if (user?.nama) {
-      const t = TIM.find(x => x.nama === user.nama);
+      const t = tim.find(x => x.nama === user.nama);
       setForm(f => ({ ...f, nama: user.nama, divisi: t?.divisi || '', level_karier: t?.level || '' }));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.nama]);
+  }, [user?.nama, tim]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 

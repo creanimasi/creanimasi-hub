@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { TIM } from '../data/tim';
+import { useTim } from '../hooks/useTim';
 import { api } from '../services/api';
 
 // ── PREVIEW PDF ────────────────────────────────────────────────────────────────
@@ -122,18 +122,18 @@ function Divider() {
 }
 
 // ── FORM LAPORAN ───────────────────────────────────────────────────────────────
-const DEFAULT_FORM = () => ({
+const DEFAULT_FORM = (tim) => ({
   tanggal:   new Date().toISOString().slice(0,10),
   judul:     'Creanimasi',
   kas:       '',
   marketing: '',
   produksi:  '',
   akun:      [{ nama_akun:'', available_withdraw:'', payment_clearing:'', active_order:'', total_withdraw:'' }],
-  sdm:       TIM.map(t => ({ nama: t.nama, catatan: '' })),
+  sdm:       tim.map(t => ({ nama: t.nama, catatan: '' })),
 });
 
-function FormLaporan({ initial, onSave, onCancel, saving, error }) {
-  const [form,        setForm]       = useState(initial || DEFAULT_FORM());
+function FormLaporan({ initial, tim, onSave, onCancel, saving, error }) {
+  const [form,        setForm]       = useState(initial || DEFAULT_FORM(tim));
   const [analisa,     setAnalisa]    = useState(false);
   const [analisaInfo, setAnalisaInfo]= useState('');
   const [localErr,    setLocalErr]   = useState('');
@@ -326,6 +326,7 @@ function FormLaporan({ initial, onSave, onCancel, saving, error }) {
 
 // ── MAIN PAGE ──────────────────────────────────────────────────────────────────
 export default function LaporanMingguan() {
+  const tim = useTim();
   const [daftar,   setDaftar]   = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [view,     setView]     = useState('list');   // 'list' | 'form' | 'preview'
@@ -357,10 +358,10 @@ export default function LaporanMingguan() {
     try {
     const r = await api.getLaporanById(id);
     const d = r.data;
-    // Map SDM: pastikan semua anggota TIM ada (merge dengan data tersimpan)
+    // Map SDM: pastikan semua anggota tim ada (merge dengan data tersimpan)
     const sdmMap = {};
     (d.sdm || []).forEach(s => { sdmMap[s.nama] = s.catatan; });
-    const sdm = TIM.map(t => ({ nama: t.nama, catatan: sdmMap[t.nama] || '' }));
+    const sdm = tim.map(t => ({ nama: t.nama, catatan: sdmMap[t.nama] || '' }));
     setEditData({ ...d, sdm });
     setFormErr('');
     setView('form');
@@ -528,6 +529,7 @@ export default function LaporanMingguan() {
       </div>
       <FormLaporan
         initial={editData}
+        tim={tim}
         onSave={handleSave}
         onCancel={() => setView('list')}
         saving={saving}

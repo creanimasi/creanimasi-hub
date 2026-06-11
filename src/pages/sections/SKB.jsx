@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { TIM } from '../../data/tim';
 import { api } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
+import { useTim } from '../../hooks/useTim';
 
 // ── SKB ────────────────────────────────────────────────────────────────────
 const SKB_TEMPLATES = [
@@ -21,8 +21,9 @@ const SKB_STATUS = {
 
 export function SKB() {
   const { user }    = useAuth();
+  const tim         = useTim();
   const isAdmin     = user?.role === 'admin';
-  const timData     = TIM.find(t => t.nama === user?.nama);
+  const timData     = tim.find(t => t.nama === user?.nama);
   const [list,      setList]      = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [showForm,  setShowForm]  = useState(false);

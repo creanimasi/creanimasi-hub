@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import './index.css';
 import { AuthProvider, useAuth } from './hooks/useAuth';
-import { TIM } from './data/tim';
+import { useTim } from './hooks/useTim';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -25,7 +25,8 @@ function AdminRoute({ children }) {
 
 function AdminOrMarketRoute({ children }) {
   const { user } = useAuth();
-  const isAdminDiv = TIM.some(m => m.nama === user?.nama && m.divisi === 'Admin');
+  const tim = useTim();
+  const isAdminDiv = tim.some(m => m.nama === user?.nama && m.divisi === 'Admin');
   if (user?.role !== 'admin' && !isAdminDiv) return <Navigate to="/" replace />;
   return children;
 }

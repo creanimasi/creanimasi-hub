@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { TIM, TIPE_COLOR, DIVISI_COLOR } from '../data/tim';
+import { TIPE_COLOR, DIVISI_COLOR } from '../data/tim';
+import { useTim } from '../hooks/useTim';
 import { DIVISI_TO_PROFILING_ID } from '../data/constants';
 import { api } from '../services/api';
 
 export default function Profil() {
   const { user, logout } = useAuth();
   const navigate         = useNavigate();
-  const member           = TIM.find(t => t.nama === user?.nama);
+  const tim              = useTim();
+  const member           = tim.find(t => t.nama === user?.nama);
   const tc               = member ? (TIPE_COLOR[member.tipe]  || {}) : {};
   const dc               = member ? (DIVISI_COLOR[member.divisi] || {}) : {};
   const inits            = user?.nama?.split(' ').slice(0, 2).map(w => w[0]).join('') || '?';
@@ -41,7 +43,7 @@ export default function Profil() {
         .catch(() => {});
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [member?.divisi]);
 
   const handleSaveInfo = async (e) => {
     e.preventDefault();

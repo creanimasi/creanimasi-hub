@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { REWARD_LIST, TIM, TIPE_COLOR } from '../../data/tim';
+import { REWARD_LIST, TIPE_COLOR } from '../../data/tim';
 import { STUDIO_CONFIG, REWARD_PERSONAL } from '../../data/constants';
 import { useAuth } from '../../hooks/useAuth';
+import { useTim } from '../../hooks/useTim';
 import { api } from '../../services/api';
 
 const ADMIN_COLORS = ['#00D68F','#9B8FFF','#FFB84B'];  // warna per admin
@@ -10,6 +11,7 @@ const ADMIN_COLORS = ['#00D68F','#9B8FFF','#FFB84B'];  // warna per admin
 // ── REWARD ─────────────────────────────────────────────────────────────────
 export function Reward() {
   const { user: _u } = useAuth();
+  const tim       = useTim();
   const isAdmin   = _u?.role === 'admin';
   const now       = new Date();
   const [bulan, setBulan] = useState(now.getMonth() + 1);
@@ -23,7 +25,7 @@ export function Reward() {
   const [rewardForm, setRewardForm] = useState({ tanggal: now.toISOString().slice(0,10), nama:'', kategori:'', trigger:'', bentuk:'', nominal:'', catatan:'' });
   const [savingReward, setSavingReward] = useState(false);
 
-  const ADMIN_LIST = TIM.filter(t => t.divisi === 'Admin');
+  const ADMIN_LIST = tim.filter(t => t.divisi === 'Admin');
   const TARGET_PER_ADMIN = STUDIO_CONFIG.targetRevenuePerAdmin;
 
   const loadRevenue = useCallback(() => {
@@ -267,7 +269,7 @@ export function Reward() {
                   <label style={{ fontSize:10, fontWeight:700, color:'var(--text-3)', textTransform:'uppercase', letterSpacing:'.05em', display:'block', marginBottom:4 }}>Penerima *</label>
                   <select value={rewardForm.nama} required onChange={e=>setRewardForm(f=>({...f,nama:e.target.value}))}>
                     <option value="">— Pilih anggota —</option>
-                    {TIM.map(t=><option key={t.id} value={t.nama}>{t.nama}</option>)}
+                    {tim.map(t=><option key={t.id} value={t.nama}>{t.nama}</option>)}
                   </select>
                 </div>
                 <div>
@@ -313,7 +315,7 @@ export function Reward() {
           ) : (
           <>
           {rewardList.slice(0,10).map(r => {
-            const member = TIM.find(t => t.nama === r.nama);
+            const member = tim.find(t => t.nama === r.nama);
             const tc = member ? (TIPE_COLOR[member.tipe]||{}) : {};
             return (
               <div key={r.id} className="member-row" style={{ alignItems:'flex-start', padding:'8px 0' }}>

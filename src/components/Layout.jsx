@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { useAuth } from '../hooks/useAuth';
-import { TIM } from '../data/tim';
+import { useTim } from '../hooks/useTim';
 import { api } from '../services/api';
 import { useNotifications } from '../hooks/useNotifications';
 import { usePresence } from '../hooks/usePresence';
@@ -211,6 +211,7 @@ export default function Layout({ children, path }) {
 
   // Real-time presence
   const presence  = usePresence(user);
+  const tim       = useTim();
 
   return (
     <PresenceContext.Provider value={presence}>
@@ -254,7 +255,7 @@ export default function Layout({ children, path }) {
               boxShadow: '0 0 6px var(--green)', animation: 'pulseGlow 2s infinite' }} />
             {presence.onlineUsers.length > 0
               ? `${presence.onlineUsers.length} Online`
-              : `${TIM.length} Tim`}
+              : `${tim.length} Tim`}
           </div>
 
           <div className="topbar-date" style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0 }}>{getNow()}</div>

@@ -4,8 +4,9 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { TIM, TIPE_COLOR, DIVISI_COLOR } from '../data/tim';
+import { TIPE_COLOR, DIVISI_COLOR } from '../data/tim';
 import { useAuth } from '../hooks/useAuth';
+import { useTim } from '../hooks/useTim';
 import { api } from '../services/api';
 import { BOT_USERNAME } from '../data/constants';
 
@@ -331,8 +332,8 @@ function GrafikPanel() {
 }
 
 // ── STAT CARD ─────────────────────────────────────────────────────────────────
-function StatCard({ stat }) {
-  const member = TIM.find(t => t.nama === stat.nama);
+function StatCard({ stat, tim }) {
+  const member = tim.find(t => t.nama === stat.nama);
   const tc     = member ? (TIPE_COLOR[member.tipe] || {}) : {};
   const dc     = member ? (DIVISI_COLOR[member.divisi] || {}) : {};
   const inits  = stat.nama.split(' ').slice(0,2).map(w=>w[0]).join('');
@@ -371,10 +372,10 @@ function StatCard({ stat }) {
 }
 
 // ── LAPORAN CARD ──────────────────────────────────────────────────────────────
-function LaporanCard({ l, expanded, onToggle, onHapus }) {
+function LaporanCard({ l, expanded, onToggle, onHapus, tim }) {
   const { user }   = useAuth();
   const isAdmin    = user?.role === 'admin';
-  const member = TIM.find(t => t.nama === l.nama);
+  const member = tim.find(t => t.nama === l.nama);
   const tc     = member ? (TIPE_COLOR[member.tipe]||{}) : {};
   const tgl    = new Date(l.tanggal);
   const inits  = l.nama.split(' ').slice(0,2).map(w=>w[0]).join('');
@@ -511,6 +512,7 @@ function LaporanCard({ l, expanded, onToggle, onHapus }) {
 // ── MAIN PAGE ──────────────────────────────────────────────────────────────────
 export default function LaporanHarian() {
   const { user }    = useAuth();
+  const tim         = useTim();
   const isAdmin     = user?.role === 'admin';
   const [laporan,   setLaporan]   = useState([]);
   const [stats,     setStats]     = useState([]);
@@ -598,7 +600,7 @@ export default function LaporanHarian() {
             Ringkasan Performa
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(320px, 1fr))', gap:8 }}>
-            {stats.map(s => <StatCard key={s.nama} stat={s} />)}
+            {stats.map(s => <StatCard key={s.nama} stat={s} tim={tim} />)}
           </div>
         </div>
       )}
@@ -669,6 +671,7 @@ export default function LaporanHarian() {
                 expanded={expanded === l.id}
                 onToggle={() => setExpanded(expanded === l.id ? null : l.id)}
                 onHapus={(id) => { setHapusId(id); setHapusErr(''); }}
+                tim={tim}
               />
             ))}
           </>

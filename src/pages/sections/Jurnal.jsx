@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { TIM, TIPE_COLOR } from '../../data/tim';
+import { TIPE_COLOR } from '../../data/tim';
+import { useTim } from '../../hooks/useTim';
 import { api } from '../../services/api';
 import { downloadCsv } from '../../utils/exportCsv';
 
@@ -20,6 +21,7 @@ function parseCatatanMentor(cm) {
 
 // ── JURNAL ─────────────────────────────────────────────────────────────────
 export function Jurnal() {
+  const tim = useTim();
   const [entries,    setEntries]    = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [expanded,   setExpanded]   = useState(null);
@@ -69,8 +71,8 @@ export function Jurnal() {
       byNama[e.nama] = e;
   });
 
-  // Gabung dengan daftar TIM untuk tampilkan yang belum isi
-  const data = TIM.map(t => ({
+  // Gabung dengan daftar tim untuk tampilkan yang belum isi
+  const data = tim.map(t => ({
     ...t,
     jurnal: byNama[t.nama] || null,
     isi: !!byNama[t.nama],
@@ -240,7 +242,7 @@ export function Jurnal() {
               <select value={filterNama} onChange={e => { setFilterNama(e.target.value); setShowLimit(10); }}
                 style={{ fontSize:11, padding:'3px 8px', width:'auto' }}>
                 <option value="">Semua anggota</option>
-                {TIM.map(t => <option key={t.id} value={t.nama}>{t.nama.split(' ')[0]}</option>)}
+                {tim.map(t => <option key={t.id} value={t.nama}>{t.nama.split(' ')[0]}</option>)}
               </select>
               <button className="btn btn-sm no-print" onClick={() => {
                 const rows = entries.map(e => ({

@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { TIM, TIPE_COLOR } from '../../data/tim';
+import { TIPE_COLOR } from '../../data/tim';
+import { useTim } from '../../hooks/useTim';
 import { api } from '../../services/api';
 
 // ── KADER ──────────────────────────────────────────────────────────────────
 export function Kader() {
+  const tim = useTim();
   const [profiling, setProfiling] = useState([]);
   const [sesi1on1,  setSesi1on1]  = useState([]);
   const [topik,     setTopik]     = useState([]);
@@ -21,7 +23,7 @@ export function Kader() {
   }, []);
 
   // Hitung skor kader dari profiling + 1-on-1 delta + modul progress
-  const kaderData = TIM.map(m => {
+  const kaderData = tim.map(m => {
     const p = profiling.find(x => x.nama === m.nama);
     const pilarRaw = p?.tertarik_memimpin || '';
     const pilar = pilarRaw.toLowerCase().includes('ya') ? 5
@@ -47,7 +49,7 @@ export function Kader() {
   }).sort((a, b) => b.score - a.score);
 
   const candidates = kaderData.filter(m => ['Rising Star','High Potential'].includes(m.tipe));
-  const byTipe = (t) => TIM.filter(m => m.tipe === t).length;
+  const byTipe = (t) => tim.filter(m => m.tipe === t).length;
 
   return (
     <div>

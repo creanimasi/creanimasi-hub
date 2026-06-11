@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
-import { TIM, TIPE_COLOR } from '../../data/tim';
+import { TIPE_COLOR } from '../../data/tim';
 import { api } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
+import { useTim } from '../../hooks/useTim';
 
 // ── FRIDAY WIN ─────────────────────────────────────────────────────────────
 export function FridayWin() {
   const { user }   = useAuth();
+  const tim        = useTim();
   const [list,     setList]     = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -68,7 +70,7 @@ export function FridayWin() {
                   letterSpacing:'.05em', display:'block', marginBottom:5 }}>Penerima apresiasi</label>
                 <select value={form.penerima} onChange={e => setForm(f=>({...f,penerima:e.target.value}))}>
                   <option value="">— Tim / Semua —</option>
-                  {TIM.map(t => <option key={t.id} value={t.nama}>{t.nama}</option>)}
+                  {tim.map(t => <option key={t.id} value={t.nama}>{t.nama}</option>)}
                 </select>
               </div>
             </div>
@@ -107,7 +109,7 @@ export function FridayWin() {
           <div className="empty-sub">Mulai rayakan pencapaian tim setiap Jumat!</div>
         </div>
       ) : list.map(w => {
-        const member = TIM.find(t => t.nama === w.penerima);
+        const member = tim.find(t => t.nama === w.penerima);
         const tc = member ? (TIPE_COLOR[member.tipe]||{}) : {};
         const inits = w.penerima ? w.penerima.split(' ').slice(0,2).map(x=>x[0]).join('') : '🏆';
         return (

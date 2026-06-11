@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
-import { TIM } from '../data/tim';
+import { useTim } from './useTim';
 
 const STORAGE_KEY = 'hub_notif_read';
 const getRead = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; } };
@@ -10,6 +10,7 @@ export function useNotifications(user) {
   const [notifs,  setNotifs]  = useState([]);
   const [loading, setLoading] = useState(false);
   const isAdmin = user?.role === 'admin';
+  const tim = useTim();
 
   const build = useCallback(async () => {
     if (!user) return;
@@ -34,7 +35,7 @@ export function useNotifications(user) {
             .filter(j => new Date(j.tanggal_jurnal || j.created_at) >= weekAgo)
             .map(j => j.nama)
         );
-        const belum = TIM.filter(t => !isiMingguIni.has(t.nama));
+        const belum = tim.filter(t => !isiMingguIni.has(t.nama));
         if (belum.length > 0) {
           const id = `jurnal_belum_${now.toISOString().slice(0,10)}`;
           list.push({ id, type: 'jurnal', icon: '📓', unread: !read.includes(id),
@@ -54,7 +55,7 @@ export function useNotifications(user) {
         }
 
         // 3. Sesi 1-on-1 belum dengan At Risk
-        const atRisk = TIM.filter(t => t.tipe === 'At Risk');
+        const atRisk = tim.filter(t => t.tipe === 'At Risk');
         if (atRisk.length > 0) {
           const recently = new Set(
             (sesiRes.data || [])
@@ -78,7 +79,7 @@ export function useNotifications(user) {
           if (!profilingByNama[p.nama] || new Date(p.created_at) > new Date(profilingByNama[p.nama].created_at))
             profilingByNama[p.nama] = p;
         });
-        const kadaluarsa = TIM.filter(t => {
+        const kadaluarsa = tim.filter(t => {
           const p = profilingByNama[t.nama];
           return !p || new Date(p.created_at) < now90;
         });
@@ -122,7 +123,7 @@ export function useNotifications(user) {
 
     setNotifs(list);
     setLoading(false);
-  }, [user, isAdmin]);
+  }, [user, isAdmin, tim]);
 
   useEffect(() => {
     build();
