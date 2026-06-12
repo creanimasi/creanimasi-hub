@@ -276,7 +276,19 @@ CREATE TABLE IF NOT EXISTS tim (
   tipe        VARCHAR(50),
   aktif       BOOLEAN DEFAULT TRUE,
   created_at  TIMESTAMPTZ DEFAULT NOW(),
-  updated_at  TIMESTAMPTZ DEFAULT NOW()
+  updated_at  TIMESTAMPTZ DEFAULT NOW(),
+  status      VARCHAR(50)  DEFAULT 'Aktif',
+  kriteria    INTEGER      DEFAULT 3,
+  kepuasan    INTEGER      DEFAULT 7,
+  bergabung   VARCHAR(20),
+  semangat    TEXT         DEFAULT '-',
+  energi      TEXT         DEFAULT '-',
+  target      TEXT         DEFAULT '-',
+  memimpin    VARCHAR(100) DEFAULT 'Belum tertarik saat ini',
+  skill       INTEGER      DEFAULT 3,
+  komunikasi  INTEGER      DEFAULT 3,
+  mentor      VARCHAR(100) DEFAULT '-',
+  entitas     VARCHAR(50)  DEFAULT 'Creanimasi Studio'
 );
 
 -- ── LAPORAN HARIAN (Telegram bot) ────────────────────────────
