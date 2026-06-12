@@ -226,6 +226,16 @@ const PROFILING_DIVISI_COLUMNS = {
   ],
 };
 
+// Pemetaan field profiling -> kolom skor di tabel tim (untuk kartu Tim)
+// tim.skill & tim.komunikasi: skala 0-5, tim.kriteria: skala 0-5, tim.kepuasan: skala 1-10
+const PROFILING_TO_TIM_SKOR = {
+  admin:       { skill: 'skill_copywriting', komunikasi: 'skor_komunikasi' },
+  pm:          { skill: 'skill_komunikasi', komunikasi: 'skor_komunikasi_klien' },
+  illustrator: { skill: 'skill_level_csp', komunikasi: 'skor_komunikasi' },
+  rigger:      { skill: 'skill_level_live2d', komunikasi: 'skor_komunikasi' },
+  '3d':        { skill: 'skill_level_blender', komunikasi: 'skor_komunikasi' },
+};
+
 // POST /api/hub/profiling/:divisi — simpan profiling
 router.post('/profiling/:divisi', async (req, res) => {
   const { divisi } = req.params;
@@ -254,6 +264,30 @@ router.post('/profiling/:divisi', async (req, res) => {
        ON CONFLICT DO NOTHING RETURNING *`,
       values
     );
+
+    // Sinkronkan skor ke tabel tim agar kartu Tim ikut update
+    const skorMap = PROFILING_TO_TIM_SKOR[divisiKey];
+    if (result.rows[0] && req.body.nama) {
+      const skillVal      = req.body[skorMap.skill];
+      const komunikasiVal = req.body[skorMap.komunikasi];
+      const kriteriaVal   = req.body.skor_kerja_tim;
+      const kepuasanVal   = req.body.kepuasan_diri;
+
+      const setClauses = [];
+      const setValues  = [];
+      if (skillVal      != null) { setValues.push(skillVal);      setClauses.push(`skill = $${setValues.length}`); }
+      if (komunikasiVal != null) { setValues.push(komunikasiVal); setClauses.push(`komunikasi = $${setValues.length}`); }
+      if (kriteriaVal   != null) { setValues.push(kriteriaVal);   setClauses.push(`kriteria = $${setValues.length}`); }
+      if (kepuasanVal   != null) { setValues.push(kepuasanVal);   setClauses.push(`kepuasan = $${setValues.length}`); }
+
+      if (setClauses.length > 0) {
+        setValues.push(req.body.nama);
+        await query(
+          `UPDATE tim SET ${setClauses.join(', ')} WHERE nama = $${setValues.length}`,
+          setValues
+        );
+      }
+    }
 
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (err) {
