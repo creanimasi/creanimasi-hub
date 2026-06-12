@@ -192,6 +192,40 @@ router.get('/jurnal/stats', async (req, res) => {
 
 // ── PROFILING ─────────────────────────────────────
 
+// Kolom umum yang ada di semua tabel profiling_*
+const PROFILING_COMMON_COLUMNS = [
+  'nama', 'usia', 'tanggal_bergabung', 'domisili', 'level_karier',
+  'produktif_waktu', 'gaya_kerja', 'respons_feedback', 'deadline_mepet',
+  'skor_kerja_tim',
+  'semangat_kerja', 'penguras_energi', 'target_1_tahun',
+  'skill_ingin_dikuasai', 'tertarik_memimpin', 'alasan_bergabung',
+  'ingin_diubah', 'kepuasan_diri',
+];
+
+// Kolom khusus per divisi (lihat database/schema.sql)
+const PROFILING_DIVISI_COLUMNS = {
+  admin: [
+    'platform_dikuasai', 'skill_copywriting', 'skor_komunikasi', 'pengalaman_komplain',
+    'bisa_konten_sosmed', 'tools_desain',
+  ],
+  pm: [
+    'tools_project', 'pengalaman_koordinasi', 'skill_komunikasi',
+    'skor_komunikasi_klien', 'prioritas_project', 'bahasa_dikuasai',
+  ],
+  illustrator: [
+    'software_utama', 'skill_level_csp', 'spesialisasi',
+    'waktu_1_karakter', 'kapasitas_paralel', 'link_portofolio', 'skor_komunikasi',
+  ],
+  rigger: [
+    'software_rigging', 'skill_level_live2d', 'bisa_physics_expr',
+    'pengalaman_project', 'waktu_rigging', 'link_portofolio', 'skor_komunikasi',
+  ],
+  '3d': [
+    'software_3d', 'skill_level_blender', 'jenis_output',
+    'bisa_vrm_export', 'bisa_3d_print', 'pernah_ar_filter', 'waktu_vrm', 'skor_komunikasi',
+  ],
+};
+
 // POST /api/hub/profiling/:divisi — simpan profiling
 router.post('/profiling/:divisi', async (req, res) => {
   const { divisi } = req.params;
@@ -203,14 +237,14 @@ router.post('/profiling/:divisi', async (req, res) => {
     '3d': 'profiling_3d',
   };
 
-  const table = TABLE_MAP[divisi.toLowerCase()];
+  const divisiKey = divisi.toLowerCase();
+  const table = TABLE_MAP[divisiKey];
   if (!table) return res.status(400).json({ error: 'Divisi tidak valid' });
 
   try {
-    // Hanya izinkan nama kolom yang aman: huruf kecil, angka, underscore saja
-    const fields = Object.keys(req.body).filter(k =>
-      k !== 'id' && k !== 'created_at' && /^[a-z][a-z0-9_]*$/.test(k)
-    );
+    // Hanya izinkan kolom yang benar-benar ada di tabel divisi ini
+    const allowedColumns = [...PROFILING_COMMON_COLUMNS, ...PROFILING_DIVISI_COLUMNS[divisiKey]];
+    const fields = Object.keys(req.body).filter(k => allowedColumns.includes(k));
     if (fields.length === 0) return res.status(400).json({ error: 'Tidak ada field valid yang dikirim' });
     const values = fields.map(f => req.body[f]);
     const placeholders = fields.map((_, i) => `$${i + 1}`).join(', ');
