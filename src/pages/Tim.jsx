@@ -10,20 +10,28 @@ const RANK_CFG = {
   'At Risk':        { icon: '⚠️', color: 'var(--coral)',  bg: 'var(--coral-light)'  },
 };
 
+function hasProfilScore(m) {
+  return [m.skill, m.komunikasi, m.kriteria, m.kepuasan].every(v => typeof v === 'number');
+}
+
 function calcScore(m) {
+  if (!hasProfilScore(m)) return null;
   return Math.round(((m.skill + m.komunikasi + m.kriteria) / 15 + m.kepuasan / 10) / 2 * 100);
 }
 
 function scoreColor(s) {
+  if (s == null) return 'var(--text-3)';
   return s >= 75 ? 'var(--green)' : s >= 55 ? 'var(--amber)' : 'var(--red)';
 }
 
 // ── STAT BAR ─────────────────────────────────────────────────────────────────
 function StatBar({ label, value, max, showAvg, avg }) {
-  const pct     = (value / max) * 100;
-  const avgPct  = avg ? (avg / max) * 100 : null;
-  const above   = avg != null ? value >= avg : null;
-  const barColor = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--blue)' : pct >= 40 ? 'var(--amber)' : 'var(--red)';
+  const hasValue = typeof value === 'number';
+  const pct       = hasValue ? (value / max) * 100 : 0;
+  const avgPct    = avg ? (avg / max) * 100 : null;
+  const above     = hasValue && avg != null ? value >= avg : null;
+  const barColor  = !hasValue ? 'var(--text-3)'
+    : pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--blue)' : pct >= 40 ? 'var(--amber)' : 'var(--red)';
 
   return (
     <div style={{ marginBottom: 10 }}>
@@ -36,7 +44,7 @@ function StatBar({ label, value, max, showAvg, avg }) {
             </span>
           )}
           <span style={{ fontWeight: 700, color: barColor }}>
-            {value}<span style={{ color: 'var(--text-3)', fontWeight: 400, fontSize: 11 }}>/{max}</span>
+            {hasValue ? value : '—'}<span style={{ color: 'var(--text-3)', fontWeight: 400, fontSize: 11 }}>/{max}</span>
           </span>
         </div>
       </div>
@@ -123,7 +131,7 @@ function MiniCard({ m, onClick }) {
             <div style={{ fontSize: 10, color: 'var(--text-2)' }}>{m.divisi} · {m.level}</div>
           </div>
           <div style={{ textAlign: 'center', flexShrink: 0 }}>
-            <div style={{ fontSize: 20, fontWeight: 800, color: scoreColor(score), lineHeight: 1 }}>{score}</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: scoreColor(score), lineHeight: 1 }}>{score ?? '—'}</div>
             <div style={{ fontSize: 8, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>skor</div>
           </div>
         </div>
@@ -146,12 +154,14 @@ function MiniCard({ m, onClick }) {
             { l: 'PIL', v: m.kriteria,    max: 5  },
             { l: 'PUA', v: m.kepuasan,    max: 10 },
           ].map(s => {
-            const pct = (s.v / s.max) * 100;
-            const c   = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--blue)' : pct >= 40 ? 'var(--amber)' : 'var(--red)';
+            const hasValue = typeof s.v === 'number';
+            const pct = hasValue ? (s.v / s.max) * 100 : 0;
+            const c   = !hasValue ? 'var(--text-3)'
+              : pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--blue)' : pct >= 40 ? 'var(--amber)' : 'var(--red)';
             return (
               <div key={s.l} style={{ textAlign: 'center', background: 'var(--surface-2)',
                 borderRadius: 8, padding: '5px 4px', border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: c }}>{s.v}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: c }}>{hasValue ? s.v : '—'}</div>
                 <div style={{ fontSize: 8, color: 'var(--text-3)', marginTop: 1 }}>{s.l}</div>
               </div>
             );
@@ -273,7 +283,7 @@ function CharacterModal({ m, tim, onClose }) {
               background: 'var(--surface)',
               boxShadow: `0 0 16px ${scoreColor(score)}40`,
             }}>
-              <div style={{ fontSize: 20, fontWeight: 800, color: scoreColor(score), lineHeight: 1 }}>{score}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: scoreColor(score), lineHeight: 1 }}>{score ?? '—'}</div>
               <div style={{ fontSize: 8, color: 'var(--text-3)', textTransform: 'uppercase' }}>score</div>
             </div>
           </div>
@@ -333,8 +343,8 @@ function CharacterModal({ m, tim, onClose }) {
                 <strong>{m.target}</strong>
               </div>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                <InfoChip label="Minat memimpin" value={m.memimpin}
-                  color={m.memimpin.includes('sangat') ? 'var(--green)' : m.memimpin.includes('Mungkin') ? 'var(--amber)' : 'var(--text-2)'} />
+                <InfoChip label="Minat memimpin" value={m.memimpin || '-'}
+                  color={m.memimpin?.includes('sangat') ? 'var(--green)' : m.memimpin?.includes('Mungkin') ? 'var(--amber)' : 'var(--text-2)'} />
                 <InfoChip label="Status" value={m.status}
                   color={m.status === 'Aktif' ? 'var(--green)' : 'var(--amber)'} />
               </div>
@@ -351,13 +361,15 @@ function CharacterModal({ m, tim, onClose }) {
                 { l: 'Kriteria',   v: m.kriteria,   max: 5,  icon: '📋' },
                 { l: 'Kepuasan',   v: m.kepuasan,   max: 10, icon: '😊' },
               ].map(s => {
-                const pct = (s.v / s.max) * 100;
-                const c   = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--blue)' : pct >= 40 ? 'var(--amber)' : 'var(--red)';
+                const hasValue = typeof s.v === 'number';
+                const pct = hasValue ? (s.v / s.max) * 100 : 0;
+                const c   = !hasValue ? 'var(--text-3)'
+                  : pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--blue)' : pct >= 40 ? 'var(--amber)' : 'var(--red)';
                 return (
                   <div key={s.l} style={{ textAlign: 'center', background: 'var(--surface-2)',
                     borderRadius: 10, padding: '10px 6px', border: '1px solid var(--border)' }}>
                     <div style={{ fontSize: 18 }}>{s.icon}</div>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: c, lineHeight: 1.2 }}>{s.v}</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: c, lineHeight: 1.2 }}>{hasValue ? s.v : '—'}</div>
                     <div style={{ fontSize: 9, color: 'var(--text-3)' }}>/{s.max}</div>
                     <div style={{ fontSize: 10, color: 'var(--text-2)', marginTop: 3 }}>{s.l}</div>
                   </div>
@@ -445,7 +457,10 @@ export default function Tim() {
           { label: 'High Potential', val: tim.filter(t => t.tipe === 'High Potential').length,       color: 'var(--purple)' },
           { label: 'Silent Expert',  val: tim.filter(t => t.tipe === 'Silent Expert').length,        color: 'var(--amber)'  },
           { label: 'At Risk',        val: tim.filter(t => t.tipe === 'At Risk').length,              color: 'var(--red)'    },
-          { label: 'Avg Score',      val: tim.length ? Math.round(tim.reduce((s,m) => s + calcScore(m), 0) / tim.length) : 0, color: 'var(--blue)' },
+          { label: 'Avg Score',      val: (() => {
+            const scores = tim.map(calcScore).filter(s => s != null);
+            return scores.length ? Math.round(scores.reduce((s, v) => s + v, 0) / scores.length) : '—';
+          })(), color: 'var(--blue)' },
         ].map(s => (
           <div key={s.label} className="metric" style={{ flex: 1, minWidth: 72, padding: '10px 12px' }}>
             <div style={{ fontSize: 20, fontWeight: 700, color: s.color }}>{s.val}</div>
