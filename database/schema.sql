@@ -279,6 +279,30 @@ CREATE TABLE IF NOT EXISTS tim (
   updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ── LAPORAN HARIAN (Telegram bot) ────────────────────────────
+-- Diisi otomatis oleh telegram-bot.js dari laporan harian tim di grup
+CREATE TABLE IF NOT EXISTS laporan_harian (
+  id              SERIAL PRIMARY KEY,
+  nama            VARCHAR(100) NOT NULL,
+  akun            VARCHAR(100),
+  tanggal         DATE NOT NULL DEFAULT CURRENT_DATE,
+  jam_mulai       VARCHAR(10),
+  jam_selesai     VARCHAR(10),
+  aktivitas       TEXT,
+  yang_didapat    TEXT,
+  impresi         VARCHAR(50),
+  click           VARCHAR(50),
+  cr              VARCHAR(50),
+  chat_masuk      TEXT,
+  order_masuk     TEXT,
+  complete_order  TEXT,
+  active_order    INTEGER DEFAULT 0,
+  detail_order    JSONB DEFAULT '{}',
+  raw_text        TEXT,
+  telegram_user   VARCHAR(100),
+  created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ── LAPORAN MINGGUAN (PDF) ───────────────────────────────────
 CREATE TABLE IF NOT EXISTS laporan_mingguan (
   id            SERIAL PRIMARY KEY,

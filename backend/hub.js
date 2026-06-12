@@ -29,26 +29,6 @@ function authMiddleware(req, res, next) {
   }
 }
 
-// Ekstrak pesan asli member dari catatan_mentor (pisahkan dari admin reply)
-function extractPesanMember(cm) {
-  if (!cm) return '';
-  const SEP = '\n[ADMIN_REPLY]\n';
-  const idx = cm.indexOf(SEP);
-  if (idx !== -1) return cm.slice(0, idx).trim();
-  if (cm.startsWith('[ADMIN_REPLY]')) return ''; // reply tanpa pesan asli (record lama)
-  return cm.trim();
-}
-
-function extractReplyAdmin(cm) {
-  if (!cm) return '';
-  const SEP = '\n[ADMIN_REPLY]\n';
-  const idx = cm.indexOf(SEP);
-  if (idx !== -1) return cm.slice(idx + SEP.length).trim();
-  if (cm.startsWith('[ADMIN_REPLY]\n')) return cm.slice('[ADMIN_REPLY]\n'.length).trim();
-  if (cm.startsWith('[ADMIN_REPLY] ')) return cm.slice('[ADMIN_REPLY] '.length).trim(); // format lama
-  return '';
-}
-
 // ── AUTH ──────────────────────────────────────────
 
 // POST /api/hub/auth/login
@@ -66,14 +46,11 @@ router.post('/auth/login', async (req, res) => {
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(401).json({ error: 'Username atau password salah' });
 
-    const timR = await pool.query(`SELECT divisi FROM tim WHERE nama = $1 LIMIT 1`, [user.nama]);
-    const divisi = timR.rows[0]?.divisi || null;
-
     const token = jwt.sign(
-      { id: user.id, nama: user.nama, username: user.username, role: user.role, divisi },
+      { id: user.id, nama: user.nama, username: user.username, role: user.role },
       JWT_SECRET, { expiresIn: '7d' }
     );
-    res.json({ success: true, token, user: { id: user.id, nama: user.nama, username: user.username, role: user.role, divisi, tema: user.tema || 'dark' } });
+    res.json({ success: true, token, user: { id: user.id, nama: user.nama, username: user.username, role: user.role, tema: user.tema || 'dark' } });
   } catch (err) {
     res.status(500).json({ error: 'Gagal login' });
   }
@@ -383,143 +360,132 @@ router.patch('/skb/:id', async (req, res) => {
   }
 });
 
-// ── MANAJEMEN TIM ─────────────────────────────────
+// ── MANAJEMEN TIM (Kelola Anggota) ───────────────────────────────────────────
 
-// Auto-migration: tambah kolom profiling ke tabel tim + backfill 11 anggota awal
-pool.query(`
-  ALTER TABLE tim
-    ADD COLUMN IF NOT EXISTS status     VARCHAR(50)  DEFAULT 'Aktif',
-    ADD COLUMN IF NOT EXISTS kriteria   INT          DEFAULT 3,
-    ADD COLUMN IF NOT EXISTS kepuasan   INT          DEFAULT 7,
-    ADD COLUMN IF NOT EXISTS bergabung  VARCHAR(20),
-    ADD COLUMN IF NOT EXISTS semangat   TEXT         DEFAULT '-',
-    ADD COLUMN IF NOT EXISTS energi     TEXT         DEFAULT '-',
-    ADD COLUMN IF NOT EXISTS target     TEXT         DEFAULT '-',
-    ADD COLUMN IF NOT EXISTS memimpin   VARCHAR(100) DEFAULT 'Belum tertarik saat ini',
-    ADD COLUMN IF NOT EXISTS skill      INT          DEFAULT 3,
-    ADD COLUMN IF NOT EXISTS komunikasi INT          DEFAULT 3,
-    ADD COLUMN IF NOT EXISTS mentor     VARCHAR(100) DEFAULT '-'
-`).then(() => pool.query(`UPDATE tim SET bergabung = TO_CHAR(created_at, 'DD/MM/YYYY') WHERE bergabung IS NULL`))
-  .then(() => pool.query(`
-    UPDATE tim SET status=d.status, kriteria=d.kriteria, kepuasan=d.kepuasan, bergabung=d.bergabung,
-      semangat=d.semangat, energi=d.energi, target=d.target, memimpin=d.memimpin,
-      skill=d.skill, komunikasi=d.komunikasi, mentor=d.mentor
-    FROM (VALUES
-      ('Ariel Tegar','Aktif',5,10,'21/09/2025','Mencapai tujuan dan impian awal','Handle klien awam teknis','Memiliki beberapa unit usaha sendiri','Ya, sangat tertarik',4,5,'-'),
-      ('Ryan Cavallera','Aktif',4,8,'25/04/2025','Mendapatkan ilmu baru dan bonus','Revisi berulang, komplain klien','Memimpin 1 tim dengan 2 akun marketplace','Ya, sangat tertarik',4,5,'-'),
-      ('Nanda Cahya Bintang','Probation',3,5,'27/03/2026','Uang dan pemahaman baru','Sinyal dan device ngelag','Tempat yang lebih tinggi lagi','Ya, sangat tertarik',3,4,'Ariel Tegar'),
-      ('Dina Syavina','Aktif',3,7,'30/08/2023','Uang','Ngomong sama orang','Admin studio sendiri','Mungkin kalau sudah siap',3,2,'-'),
-      ('Tsania Lathifa','Probation',4,7,'02/03/2026','Gajian dan ketemu teman-teman','Ngerti mood orang lain','Berkembang skill dan karier','Ya, sangat tertarik',4,5,'Dina Syavina'),
-      ('Ahmad Fathurrahman','Aktif',4,8,'05/01/2025','Lingkungan dan pikiran tenang','Revisi tanpa kejelasan','Menetap dan kembangkan skill','Mungkin kalau sudah siap',5,4,'-'),
-      ('Raynar Harits','Aktif',3,7,'13/04/2025','Lingkungan','Jobdesk yang over','Masih di Semarang karena kuliah','Mungkin kalau sudah siap',3,4,'-'),
-      ('Aditya Tri Prakoso','Aktif',3,7,'21/06/2025','Uang','Ngelag dan internet lemot','Improve skill, punya passive income','Ya, sangat tertarik',4,3,'-'),
-      ('Noval Faqihudin Zaky','Aktif',3,8,'01/01/2025','Entertain dan ketemu teman','Revisi yang sudah lewat stepnya','Illustrator yang lebih baik','Mungkin kalau sudah siap',4,5,'-'),
-      ('Galang Ramadhan','Aktif',2,8,'24/02/2025','Mendengarkan musik','Membersihkan dapur','Di sini (Creanimasi)','Belum tertarik saat ini',3,5,'-'),
-      ('Ridho Ramadhan','Aktif',2,5,'04/03/2025','Instruksi jelas','Tidak ada instruksi','Intel Arc B580','Mungkin kalau sudah siap',4,3,'-')
-    ) AS d(nama,status,kriteria,kepuasan,bergabung,semangat,energi,target,memimpin,skill,komunikasi,mentor)
-    WHERE tim.nama = d.nama AND tim.kriteria = 3 AND tim.skill = 3 AND tim.komunikasi = 3 AND tim.kepuasan = 7
-  `)).catch(e => console.error('tim profiling migration error:', e.message));
-
-// GET /api/hub/tim — semua anggota aktif
-router.get('/tim', async (req, res) => {
+// Startup migration — jalankan sekali, aman dengan IF NOT EXISTS
+(async () => {
   try {
-    const { semua } = req.query;
-    const q = semua
-      ? `SELECT * FROM tim ORDER BY divisi, nama`
-      : `SELECT * FROM tim WHERE aktif = TRUE ORDER BY divisi, nama`;
-    const result = await query(q);
+    await hubPool.query("ALTER TABLE tim ADD COLUMN IF NOT EXISTS entitas VARCHAR(50) DEFAULT 'Creanimasi Studio'");
+    await hubPool.query("ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS tim_id INTEGER REFERENCES tim(id)");
+    await hubPool.query("UPDATE hub_users u SET tim_id = t.id FROM tim t WHERE t.nama = u.nama AND u.tim_id IS NULL");
+  } catch (e) { /* column may already exist */ }
+})();
+
+// GET /api/hub/tim
+router.get('/tim', authMiddleware, async (req, res) => {
+  try {
+    const { semua, entitas } = req.query;
+    const params = [];
+    let where = 'WHERE 1=1';
+    if (!semua) { where += ' AND t.aktif = TRUE'; }
+    if (entitas) { params.push(entitas); where += ` AND t.entitas = $${params.length}`; }
+    const q = `
+      SELECT t.*, u.username, u.role, u.id as user_id
+      FROM tim t
+      LEFT JOIN hub_users u ON u.tim_id = t.id OR (u.tim_id IS NULL AND u.nama = t.nama)
+      ${where}
+      ORDER BY t.entitas, t.divisi, t.nama
+    `;
+    const result = await hubPool.query(q, params);
     res.json({ success: true, data: result.rows });
   } catch (err) {
     res.status(500).json({ error: 'Gagal mengambil data tim' });
   }
 });
 
-// POST /api/hub/tim — tambah anggota baru
-router.post('/tim', async (req, res) => {
+// POST /api/hub/tim — tambah anggota + buat akun sekaligus
+router.post('/tim', authMiddleware, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+  const { nama, divisi, level, tipe, entitas, username, password, role } = req.body;
+  if (!nama || !divisi || !entitas || !username || !password)
+    return res.status(400).json({ error: 'Nama, divisi, entitas, username, dan password wajib diisi' });
+  if (password.length < 8)
+    return res.status(400).json({ error: 'Password minimal 8 karakter' });
+  const client = await hubPool.connect();
   try {
-    const { nama, divisi, level, tipe } = req.body;
-    if (!nama || !divisi) return res.status(400).json({ error: 'Nama dan divisi wajib diisi' });
-    const result = await query(
-      `INSERT INTO tim (nama, divisi, level, tipe) VALUES ($1,$2,$3,$4) RETURNING *`,
-      [nama, divisi, level || '', tipe || '']
+    await client.query('BEGIN');
+    const timR = await client.query(
+      'INSERT INTO tim (nama, divisi, level, tipe, entitas) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+      [nama, divisi, level || '', tipe || '', entitas]
     );
-    res.status(201).json({ success: true, data: result.rows[0] });
-  } catch (err) {
-    res.status(500).json({ error: 'Gagal menambah anggota tim' });
-  }
-});
-
-// PATCH /api/hub/tim/:id — edit anggota
-router.patch('/tim/:id', async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
-  try {
-    const { nama, divisi, level, tipe, aktif } = req.body;
-    const result = await query(
-      `UPDATE tim SET nama=$1, divisi=$2, level=$3, tipe=$4, aktif=$5, updated_at=NOW()
-       WHERE id=$6 RETURNING *`,
-      [nama, divisi, level, tipe, aktif !== undefined ? aktif : true, req.params.id]
-    );
-    if (!result.rowCount) return res.status(404).json({ error: 'Anggota tidak ditemukan' });
-    res.json({ success: true, data: result.rows[0] });
-  } catch (err) {
-    res.status(500).json({ error: 'Gagal mengupdate data tim' });
-  }
-});
-
-// DELETE /api/hub/tim/:id — nonaktifkan anggota (soft delete)
-router.delete('/tim/:id', async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
-  try {
-    const result = await query(
-      `UPDATE tim SET aktif=FALSE, updated_at=NOW() WHERE id=$1 RETURNING *`,
-      [req.params.id]
-    );
-    if (!result.rowCount) return res.status(404).json({ error: 'Anggota tidak ditemukan' });
-    res.json({ success: true, data: result.rows[0] });
-  } catch (err) {
-    res.status(500).json({ error: 'Gagal menonaktifkan anggota' });
-  }
-});
-
-// PATCH /api/hub/tim/:id/aktifkan — aktifkan kembali anggota nonaktif
-router.patch('/tim/:id/aktifkan', async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
-  try {
-    const result = await query(
-      `UPDATE tim SET aktif=TRUE, updated_at=NOW() WHERE id=$1 RETURNING *`,
-      [req.params.id]
-    );
-    if (!result.rowCount) return res.status(404).json({ error: 'Anggota tidak ditemukan' });
-    res.json({ success: true, data: result.rows[0] });
-  } catch (err) {
-    res.status(500).json({ error: 'Gagal mengaktifkan anggota' });
-  }
-});
-
-// POST /api/hub/tim/:id/buat-akun — buat akun login untuk anggota yang belum punya akses
-router.post('/tim/:id/buat-akun', async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
-  const { username, password, role } = req.body;
-  if (!username || !password) return res.status(400).json({ error: 'Username dan password wajib diisi' });
-  if (password.length < 8) return res.status(400).json({ error: 'Password minimal 8 karakter' });
-  try {
-    const timR = await query('SELECT nama FROM tim WHERE id=$1', [req.params.id]);
-    if (!timR.rows.length) return res.status(404).json({ error: 'Anggota tidak ditemukan' });
-    const nama = timR.rows[0].nama;
-
-    const exists = await query('SELECT id FROM hub_users WHERE nama=$1 OR username=$2', [nama, username]);
-    if (exists.rows.length) return res.status(409).json({ error: 'Anggota ini sudah punya akun atau username sudah dipakai' });
-
+    const timId = timR.rows[0].id;
     const hashed = await bcrypt.hash(password, 10);
-    const result = await query(
-      `INSERT INTO hub_users (nama, username, password, role) VALUES ($1,$2,$3,$4) RETURNING id, nama, username, role`,
-      [nama, username, hashed, role === 'admin' ? 'admin' : 'member']
+    const userR = await client.query(
+      'INSERT INTO hub_users (nama, username, password, role, aktif, tim_id) VALUES ($1,$2,$3,$4,TRUE,$5) RETURNING id, username, role',
+      [nama, username.toLowerCase().trim(), hashed, role || 'member', timId]
     );
-    res.status(201).json({ success: true, data: result.rows[0] });
+    await client.query('COMMIT');
+    res.status(201).json({ success: true, data: { ...timR.rows[0], username: userR.rows[0].username, role: userR.rows[0].role } });
   } catch (err) {
-    res.status(500).json({ error: 'Gagal membuat akun' });
+    await client.query('ROLLBACK');
+    if (err.code === '23505') return res.status(409).json({ error: 'Username sudah digunakan' });
+    res.status(500).json({ error: 'Gagal menambah anggota' });
+  } finally {
+    client.release();
   }
+});
+
+// PATCH /api/hub/tim/:id — edit data anggota + akun
+router.patch('/tim/:id', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+  const { nama, divisi, level, tipe, aktif, entitas, username, role } = req.body;
+  if (!nama || !divisi || !entitas)
+    return res.status(400).json({ error: 'Nama, divisi, dan entitas wajib diisi' });
+  const client = await hubPool.connect();
+  try {
+    await client.query('BEGIN');
+    const timR = await client.query(
+      'UPDATE tim SET nama=$1, divisi=$2, level=$3, tipe=$4, aktif=$5, entitas=$6, updated_at=NOW() WHERE id=$7 RETURNING *',
+      [nama, divisi, level || '', tipe || '', aktif !== undefined ? aktif : true, entitas, req.params.id]
+    );
+    if (!timR.rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Anggota tidak ditemukan' }); }
+    let userInfo = {};
+    if (username || role) {
+      const userR = await client.query(
+        'UPDATE hub_users SET nama=$1, username=COALESCE($2, username), role=COALESCE($3, role) WHERE tim_id=$4 OR (tim_id IS NULL AND nama=$1) RETURNING username, role',
+        [nama, username ? username.toLowerCase().trim() : null, role || null, req.params.id]
+      );
+      if (userR.rows.length) userInfo = { username: userR.rows[0].username, role: userR.rows[0].role };
+    }
+    await client.query('COMMIT');
+    res.json({ success: true, data: { ...timR.rows[0], ...userInfo } });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    if (err.code === '23505') return res.status(409).json({ error: 'Username sudah digunakan' });
+    res.status(500).json({ error: 'Gagal update anggota' });
+  } finally {
+    client.release();
+  }
+});
+
+// DELETE /api/hub/tim/:id — nonaktifkan anggota + akun
+router.delete('/tim/:id', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+  const client = await hubPool.connect();
+  try {
+    await client.query('BEGIN');
+    const timR = await client.query('UPDATE tim SET aktif=FALSE, updated_at=NOW() WHERE id=$1 RETURNING *', [req.params.id]);
+    if (!timR.rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Anggota tidak ditemukan' }); }
+    await client.query('UPDATE hub_users SET aktif=FALSE WHERE tim_id=$1 OR (tim_id IS NULL AND nama=$2)', [req.params.id, timR.rows[0].nama]);
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch { await client.query('ROLLBACK'); res.status(500).json({ error: 'Gagal nonaktifkan anggota' }); }
+  finally { client.release(); }
+});
+
+// PATCH /api/hub/tim/:id/aktifkan — aktifkan kembali
+router.patch('/tim/:id/aktifkan', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+  const client = await hubPool.connect();
+  try {
+    await client.query('BEGIN');
+    const timR = await client.query('UPDATE tim SET aktif=TRUE, updated_at=NOW() WHERE id=$1 RETURNING *', [req.params.id]);
+    if (!timR.rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Anggota tidak ditemukan' }); }
+    await client.query('UPDATE hub_users SET aktif=TRUE WHERE tim_id=$1 OR (tim_id IS NULL AND nama=$2)', [req.params.id, timR.rows[0].nama]);
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch { await client.query('ROLLBACK'); res.status(500).json({ error: 'Gagal mengaktifkan anggota' }); }
+  finally { client.release(); }
 });
 
 // ── MODUL PROGRESS ───────────────────────────────
@@ -666,20 +632,51 @@ router.post('/sesi-1on1', authMiddleware, async (req, res) => {
   } catch { res.status(500).json({ error: 'Gagal simpan sesi 1-on-1' }); }
 });
 
-// PATCH /api/hub/tim/:id/reset-password — admin reset password member
+
+// POST /api/hub/tim/:id/buat-akun — buat akun login untuk anggota yang belum punya
+router.post('/tim/:id/buat-akun', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+  const { username, password, role } = req.body;
+  if (!username || !username.trim()) return res.status(400).json({ error: 'Username wajib diisi' });
+  if (!password || password.length < 8) return res.status(400).json({ error: 'Password minimal 8 karakter' });
+  try {
+    const timR = await hubPool.query('SELECT * FROM tim WHERE id=$1', [req.params.id]);
+    if (!timR.rows.length) return res.status(404).json({ error: 'Anggota tidak ditemukan' });
+    const { nama } = timR.rows[0];
+    // Cek sudah punya akun belum
+    const existing = await hubPool.query('SELECT id FROM hub_users WHERE tim_id=$1 OR nama=$2', [req.params.id, nama]);
+    if (existing.rows.length) return res.status(409).json({ error: 'Anggota sudah punya akun login' });
+    const hashed = await bcrypt.hash(password, 10);
+    const r = await hubPool.query(
+      'INSERT INTO hub_users (nama, username, password, role, aktif, tim_id) VALUES ($1,$2,$3,$4,TRUE,$5) RETURNING id, username, role',
+      [nama, username.trim().toLowerCase(), hashed, role || 'member', req.params.id]
+    );
+    res.status(201).json({ ok: true, data: r.rows[0] });
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Username sudah digunakan' });
+    res.status(500).json({ error: 'Gagal membuat akun' });
+  }
+});
+
+// PATCH /api/hub/tim/:id/reset-password
 router.patch('/tim/:id/reset-password', authMiddleware, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
   const { password_baru } = req.body;
-  // Jika tidak ada password_baru, generate temp password acak
-  const pw = password_baru || Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6).toUpperCase();
+  if (!password_baru || !password_baru.trim())
+    return res.status(400).json({ error: 'Password baru wajib diisi' });
+  if (password_baru.trim().length < 8)
+    return res.status(400).json({ error: 'Password minimal 8 karakter' });
   try {
     const timR = await hubPool.query('SELECT nama FROM tim WHERE id=$1', [req.params.id]);
     if (!timR.rows.length) return res.status(404).json({ error: 'Anggota tidak ditemukan' });
     const nama = timR.rows[0].nama;
-    const hashed = await bcrypt.hash(pw, 10);
-    const r = await hubPool.query('UPDATE hub_users SET password=$1 WHERE nama=$2 RETURNING username', [hashed, nama]);
-    if (!r.rows.length) return res.status(404).json({ error: 'User tidak ditemukan di hub_users' });
-    res.json({ ok: true, username: r.rows[0].username, password_temp: pw });
+    const hashed = await bcrypt.hash(password_baru.trim(), 10);
+    const r = await hubPool.query(
+      'UPDATE hub_users SET password=$1 WHERE (tim_id=$2 OR (tim_id IS NULL AND nama=$3)) RETURNING username',
+      [hashed, req.params.id, nama]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'User tidak ditemukan' });
+    res.json({ ok: true, username: r.rows[0].username });
   } catch { res.status(500).json({ error: 'Gagal reset password' }); }
 });
 
@@ -785,21 +782,11 @@ router.patch('/jurnal/:id/reply', authMiddleware, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
   const { reply } = req.body;
   try {
-    // Simpan reply ke catatan_mentor sambil pertahankan pesan asli member.
-    // Format: "pesan_member\n[ADMIN_REPLY]\nreply_admin"
-    // Jika sudah ada reply sebelumnya, timpa bagian reply saja.
+    // Simpan reply ke kolom catatan_mentor (repurpose untuk admin reply)
+    // Prefix dengan marker agar bisa dibedakan dari catatan member
     const r = await hubPool.query(
-      `UPDATE jurnal_mingguan
-       SET catatan_mentor =
-         CASE
-           WHEN catatan_mentor IS NULL OR catatan_mentor = '' OR catatan_mentor LIKE '[ADMIN_REPLY]%'
-           THEN '[ADMIN_REPLY]' || chr(10) || $1
-           WHEN catatan_mentor LIKE '%' || chr(10) || '[ADMIN_REPLY]' || chr(10) || '%'
-           THEN regexp_replace(catatan_mentor, chr(10) || '\\[ADMIN_REPLY\\]' || chr(10) || '.*$', chr(10) || '[ADMIN_REPLY]' || chr(10) || $1)
-           ELSE catatan_mentor || chr(10) || '[ADMIN_REPLY]' || chr(10) || $1
-         END
-       WHERE id = $2 RETURNING id, nama`,
-      [reply, req.params.id]
+      `UPDATE jurnal_mingguan SET catatan_mentor = $1 WHERE id = $2 RETURNING id, nama`,
+      [`[ADMIN_REPLY] ${reply}`, req.params.id]
     );
     if (!r.rowCount) return res.status(404).json({ error: 'Jurnal tidak ditemukan' });
     res.json({ ok: true, data: r.rows[0] });
@@ -1209,9 +1196,8 @@ router.get('/laporan-sdm-analisa', authMiddleware, async (req, res) => {
         if (skor.length > 0)   bagian.push(`Catatan performa: ${skor.join(', ')}.`);
 
         // Pesan untuk mentor/secondline
-        const pesanMember = extractPesanMember(j.catatan_mentor);
-        if (pesanMember) {
-          bagian.push(`Pesan: "${pesanMember}".`);
+        if (j.catatan_mentor?.trim() && !j.catatan_mentor.startsWith('[ADMIN_REPLY]')) {
+          bagian.push(`Pesan: "${j.catatan_mentor}".`);
         }
       }
 
@@ -1355,28 +1341,118 @@ router.delete('/laporan-mingguan/:id', authMiddleware, async (req, res) => {
   } catch { res.status(500).json({ error: 'Gagal hapus laporan' }); }
 });
 
+
+// ── USER MANAGEMENT ──────────────────────────────────────────────────────────
+
+// GET /api/hub/users
+router.get('/users', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+  try {
+    const result = await hubPool.query(
+      'SELECT id, nama, username, role, aktif FROM hub_users ORDER BY aktif DESC, nama ASC'
+    );
+    res.json({ data: result.rows });
+  } catch { res.status(500).json({ error: 'Gagal memuat user' }); }
+});
+
+// POST /api/hub/users
+router.post('/users', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+  const { nama, username, password, role } = req.body;
+  if (!nama || !nama.trim() || !username || !username.trim() || !password || !role)
+    return res.status(400).json({ error: 'Nama, username, password, dan role wajib diisi' });
+  if (password.length < 8)
+    return res.status(400).json({ error: 'Password minimal 8 karakter' });
+  if (role !== 'admin' && role !== 'member')
+    return res.status(400).json({ error: 'Role tidak valid' });
+  try {
+    const hashed = await bcrypt.hash(password, 10);
+    const result = await hubPool.query(
+      'INSERT INTO hub_users (nama, username, password, role, aktif) VALUES ($1, $2, $3, $4, TRUE) RETURNING id, nama, username, role, aktif',
+      [nama.trim(), username.trim().toLowerCase(), hashed, role]
+    );
+    res.status(201).json({ ok: true, data: result.rows[0] });
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Username sudah digunakan' });
+    res.status(500).json({ error: 'Gagal membuat user' });
+  }
+});
+
+// PATCH /api/hub/users/:id
+router.patch('/users/:id', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+  const { nama, username, role } = req.body;
+  if (!nama || !nama.trim() || !username || !username.trim() || !role)
+    return res.status(400).json({ error: 'Nama, username, dan role wajib diisi' });
+  if (role !== 'admin' && role !== 'member')
+    return res.status(400).json({ error: 'Role tidak valid' });
+  try {
+    const result = await hubPool.query(
+      'UPDATE hub_users SET nama=$1, username=$2, role=$3 WHERE id=$4 RETURNING id, nama, username, role, aktif',
+      [nama.trim(), username.trim().toLowerCase(), role, req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'User tidak ditemukan' });
+    res.json({ ok: true, data: result.rows[0] });
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Username sudah digunakan' });
+    res.status(500).json({ error: 'Gagal update user' });
+  }
+});
+
+// DELETE /api/hub/users/:id
+router.delete('/users/:id', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+  if (Number(req.params.id) === req.user.id)
+    return res.status(400).json({ error: 'Tidak bisa nonaktifkan akun sendiri' });
+  try {
+    const result = await hubPool.query(
+      'UPDATE hub_users SET aktif=FALSE WHERE id=$1 RETURNING id',
+      [req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'User tidak ditemukan' });
+    res.json({ ok: true });
+  } catch { res.status(500).json({ error: 'Gagal nonaktifkan user' }); }
+});
+
+// PATCH /api/hub/users/:id/aktifkan
+router.patch('/users/:id/aktifkan', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+  try {
+    const result = await hubPool.query(
+      'UPDATE hub_users SET aktif=TRUE WHERE id=$1 RETURNING id',
+      [req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'User tidak ditemukan' });
+    res.json({ ok: true });
+  } catch { res.status(500).json({ error: 'Gagal mengaktifkan user' }); }
+});
+
+// PATCH /api/hub/users/:id/reset-password
+router.patch('/users/:id/reset-password', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+  const { password_baru } = req.body;
+  const pw = (password_baru && password_baru.trim()) ||
+    (Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 5).toUpperCase());
+  if (pw.length < 8) return res.status(400).json({ error: 'Password minimal 8 karakter' });
+  try {
+    const hashed = await bcrypt.hash(pw, 10);
+    const result = await hubPool.query(
+      'UPDATE hub_users SET password=$1 WHERE id=$2 RETURNING username',
+      [hashed, req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'User tidak ditemukan' });
+    res.json({ ok: true, username: result.rows[0].username, password_temp: pw });
+  } catch { res.status(500).json({ error: 'Gagal reset password' }); }
+});
+
 // ── LAPORAN ADMIN MINGGUAN ────────────────────────
-// Auto-create table on first run
-pool.query(`
-  CREATE TABLE IF NOT EXISTS laporan_admin_mingguan (
-    id                  SERIAL PRIMARY KEY,
-    tanggal             DATE NOT NULL,
-    akun                VARCHAR(200) NOT NULL,
-    periode             VARCHAR(200),
-    gigs_tags           JSONB DEFAULT '[]',
-    order_queue         JSONB DEFAULT '{}',
-    flow_new_order      INT DEFAULT 0,
-    flow_complete_order INT DEFAULT 0,
-    gigs_utama          JSONB DEFAULT '[]',
-    screenshots         JSONB DEFAULT '{}',
-    todo_list           JSONB DEFAULT '[]',
-    kendala_list        JSONB DEFAULT '[]',
-    catatan             TEXT,
-    dibuat_oleh         VARCHAR(200),
-    created_at          TIMESTAMPTZ DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ DEFAULT NOW()
-  )
-`).catch(e => console.error('laporan_admin_mingguan migration error:', e.message));
+// Tabel laporan_admin_mingguan didefinisikan di database/schema.sql
+
+const LAPORAN_ADMIN_SCREENSHOT_FIELDS = [
+  'screenshot_account_status', 'screenshot_earnings', 'screenshot_active_gigs',
+  'screenshot_weekly_gigs_score', 'screenshot_weekly_overview', 'screenshot_yearly_overview',
+  'screenshot_total_impressions', 'screenshot_fiverr_ads', 'screenshot_porto_baru',
+];
 
 async function isAdminOrMarket(req) {
   if (req.user.role === 'admin') return true;
@@ -1404,8 +1480,7 @@ router.get('/laporan-admin/:id', authMiddleware, async (req, res) => {
   try {
     const r = await pool.query('SELECT * FROM laporan_admin_mingguan WHERE id=$1', [req.params.id]);
     if (!r.rows.length) return res.status(404).json({ error: 'Laporan tidak ditemukan' });
-    const row = r.rows[0];
-    res.json({ data: { ...row, ...row.screenshots } });
+    res.json({ data: r.rows[0] });
   } catch { res.status(500).json({ error: 'Gagal ambil laporan' }); }
 });
 
@@ -1416,35 +1491,27 @@ router.post('/laporan-admin', authMiddleware, async (req, res) => {
     tanggal, akun, periode,
     gigs_tags, order_queue, flow_new_order, flow_complete_order,
     gigs_utama, todo_list, kendala_list, catatan,
-    screenshot_account_status, screenshot_earnings, screenshot_active_gigs,
-    screenshot_weekly_gigs_score, screenshot_weekly_overview, screenshot_yearly_overview,
-    screenshot_total_impressions, screenshot_fiverr_ads, screenshot_porto_baru,
   } = req.body;
   if (!tanggal || !akun) return res.status(400).json({ error: 'Tanggal dan akun wajib diisi' });
-  const screenshots = {
-    screenshot_account_status:    screenshot_account_status    || [],
-    screenshot_earnings:          screenshot_earnings          || [],
-    screenshot_active_gigs:       screenshot_active_gigs       || [],
-    screenshot_weekly_gigs_score: screenshot_weekly_gigs_score || [],
-    screenshot_weekly_overview:   screenshot_weekly_overview   || [],
-    screenshot_yearly_overview:   screenshot_yearly_overview   || [],
-    screenshot_total_impressions: screenshot_total_impressions || [],
-    screenshot_fiverr_ads:        screenshot_fiverr_ads        || [],
-    screenshot_porto_baru:        screenshot_porto_baru        || [],
-  };
+  const screenshotCols = LAPORAN_ADMIN_SCREENSHOT_FIELDS;
+  const screenshotVals = screenshotCols.map(f => JSON.stringify(req.body[f] || []));
   try {
     const r = await pool.query(
       `INSERT INTO laporan_admin_mingguan
         (tanggal, akun, periode, gigs_tags, order_queue, flow_new_order, flow_complete_order,
-         gigs_utama, screenshots, todo_list, kendala_list, catatan, dibuat_oleh)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id, tanggal, akun, dibuat_oleh`,
+         gigs_utama, todo_list, kendala_list, catatan, dibuat_oleh, ${screenshotCols.join(', ')})
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+       RETURNING id, tanggal, akun, dibuat_oleh`,
       [tanggal, akun, periode||'', JSON.stringify(gigs_tags||[]), JSON.stringify(order_queue||{}),
        flow_new_order||0, flow_complete_order||0, JSON.stringify(gigs_utama||[]),
-       JSON.stringify(screenshots), JSON.stringify(todo_list||[]),
-       JSON.stringify(kendala_list||[]), catatan||'', req.user.nama]
+       JSON.stringify(todo_list||[]), JSON.stringify(kendala_list||[]), catatan||'', req.user.nama,
+       ...screenshotVals]
     );
     res.status(201).json({ data: r.rows[0] });
-  } catch (e) { res.status(500).json({ error: 'Gagal simpan laporan: ' + e.message }); }
+  } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'Laporan untuk akun dan tanggal ini sudah ada' });
+    res.status(500).json({ error: 'Gagal simpan laporan: ' + e.message });
+  }
 });
 
 // PUT /api/hub/laporan-admin/:id — update laporan
@@ -1454,35 +1521,28 @@ router.put('/laporan-admin/:id', authMiddleware, async (req, res) => {
     tanggal, akun, periode,
     gigs_tags, order_queue, flow_new_order, flow_complete_order,
     gigs_utama, todo_list, kendala_list, catatan,
-    screenshot_account_status, screenshot_earnings, screenshot_active_gigs,
-    screenshot_weekly_gigs_score, screenshot_weekly_overview, screenshot_yearly_overview,
-    screenshot_total_impressions, screenshot_fiverr_ads, screenshot_porto_baru,
   } = req.body;
-  const screenshots = {
-    screenshot_account_status:    screenshot_account_status    || [],
-    screenshot_earnings:          screenshot_earnings          || [],
-    screenshot_active_gigs:       screenshot_active_gigs       || [],
-    screenshot_weekly_gigs_score: screenshot_weekly_gigs_score || [],
-    screenshot_weekly_overview:   screenshot_weekly_overview   || [],
-    screenshot_yearly_overview:   screenshot_yearly_overview   || [],
-    screenshot_total_impressions: screenshot_total_impressions || [],
-    screenshot_fiverr_ads:        screenshot_fiverr_ads        || [],
-    screenshot_porto_baru:        screenshot_porto_baru        || [],
-  };
+  const screenshotCols = LAPORAN_ADMIN_SCREENSHOT_FIELDS;
+  const screenshotSets = screenshotCols.map((f, i) => `${f}=$${13 + i}`);
+  const screenshotVals = screenshotCols.map(f => JSON.stringify(req.body[f] || []));
   try {
-    await pool.query(
+    const result = await pool.query(
       `UPDATE laporan_admin_mingguan SET
         tanggal=$1, akun=$2, periode=$3, gigs_tags=$4, order_queue=$5,
-        flow_new_order=$6, flow_complete_order=$7, gigs_utama=$8, screenshots=$9,
-        todo_list=$10, kendala_list=$11, catatan=$12, updated_at=NOW()
-       WHERE id=$13`,
+        flow_new_order=$6, flow_complete_order=$7, gigs_utama=$8,
+        todo_list=$9, kendala_list=$10, catatan=$11, ${screenshotSets.join(', ')}
+       WHERE id=$12`,
       [tanggal, akun, periode||'', JSON.stringify(gigs_tags||[]), JSON.stringify(order_queue||{}),
        flow_new_order||0, flow_complete_order||0, JSON.stringify(gigs_utama||[]),
-       JSON.stringify(screenshots), JSON.stringify(todo_list||[]),
-       JSON.stringify(kendala_list||[]), catatan||'', req.params.id]
+       JSON.stringify(todo_list||[]), JSON.stringify(kendala_list||[]), catatan||'',
+       req.params.id, ...screenshotVals]
     );
+    if (!result.rowCount) return res.status(404).json({ error: 'Laporan tidak ditemukan' });
     res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: 'Gagal update: ' + e.message }); }
+  } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'Laporan untuk akun dan tanggal ini sudah ada' });
+    res.status(500).json({ error: 'Gagal update: ' + e.message });
+  }
 });
 
 // DELETE /api/hub/laporan-admin/:id
