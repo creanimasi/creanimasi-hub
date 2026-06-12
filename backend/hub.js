@@ -226,6 +226,20 @@ const PROFILING_DIVISI_COLUMNS = {
   ],
 };
 
+// Hitung skor 0-100 dari skill/komunikasi/kriteria (0-5) + kepuasan (1-10), sama seperti calcScore() di Tim.jsx
+function hitungSkorTim({ skill, komunikasi, kriteria, kepuasan }) {
+  return Math.round(((skill + komunikasi + kriteria) / 15 + kepuasan / 10) / 2 * 100);
+}
+
+// Klasifikasikan tipe anggota dari skor & komponen, sinkron dengan kategori di halaman Tim
+function hitungTipeTim({ skill, komunikasi, kriteria, kepuasan }) {
+  if (skill >= 4 && komunikasi <= 2) return 'Silent Expert';
+  const skor = hitungSkorTim({ skill, komunikasi, kriteria, kepuasan });
+  if (skor >= 75) return 'Rising Star';
+  if (skor >= 55) return 'High Potential';
+  return 'At Risk';
+}
+
 // Pemetaan field profiling -> kolom skor di tabel tim (untuk kartu Tim)
 // tim.skill & tim.komunikasi: skala 0-5, tim.kriteria: skala 0-5, tim.kepuasan: skala 1-10
 const PROFILING_TO_TIM_SKOR = {
@@ -282,10 +296,16 @@ router.post('/profiling/:divisi', async (req, res) => {
 
       if (setClauses.length > 0) {
         setValues.push(req.body.nama);
-        await query(
-          `UPDATE tim SET ${setClauses.join(', ')} WHERE nama = $${setValues.length}`,
+        const timR = await query(
+          `UPDATE tim SET ${setClauses.join(', ')} WHERE nama = $${setValues.length}
+           RETURNING skill, komunikasi, kriteria, kepuasan`,
           setValues
         );
+
+        if (timR.rows[0]) {
+          const tipeBaru = hitungTipeTim(timR.rows[0]);
+          await query(`UPDATE tim SET tipe = $1 WHERE nama = $2`, [tipeBaru, req.body.nama]);
+        }
       }
     }
 
