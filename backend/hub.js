@@ -270,7 +270,8 @@ router.post('/profiling/:divisi', async (req, res) => {
     const allowedColumns = [...PROFILING_COMMON_COLUMNS, ...PROFILING_DIVISI_COLUMNS[divisiKey]];
     const fields = Object.keys(req.body).filter(k => allowedColumns.includes(k));
     if (fields.length === 0) return res.status(400).json({ error: 'Tidak ada field valid yang dikirim' });
-    const values = fields.map(f => req.body[f]);
+    // String kosong tidak valid utk kolom numerik (SMALLINT/INTEGER) -> ubah ke NULL
+    const values = fields.map(f => (req.body[f] === '' ? null : req.body[f]));
     const placeholders = fields.map((_, i) => `$${i + 1}`).join(', ');
 
     const result = await query(
