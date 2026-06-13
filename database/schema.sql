@@ -358,6 +358,8 @@ CREATE TABLE IF NOT EXISTS laporan_admin_mingguan (
   order_queue                   JSONB DEFAULT '{}',
   flow_new_order                INTEGER DEFAULT 0,
   flow_complete_order           INTEGER DEFAULT 0,
+  -- Kolom di bawah ini reserved untuk metrik akun Fiverr (rating, success score, dll),
+  -- belum dibaca/ditulis oleh backend maupun form — jangan dihapus tanpa cek penggunaan.
   level                         VARCHAR(50),
   success_score                 NUMERIC(5,2),
   rating                        NUMERIC(3,2),
