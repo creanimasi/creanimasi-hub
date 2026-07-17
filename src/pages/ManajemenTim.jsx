@@ -5,7 +5,7 @@ import { TIPE_COLOR } from '../data/tim';
 const DIVISI_OPTIONS = ['Admin', 'PM', 'Illustrator', 'Rigger', '3D Modeler'];
 const LEVEL_OPTIONS  = ['Magang / Probation', 'Junior', 'Senior', 'Admin (L4)', 'Secondline', 'Koordinator'];
 
-const emptyForm = { nama: '', divisi: '', level: '' };
+const emptyForm = { nama: '', divisi: '', level: '', entitas: '', username: '', password: '' };
 
 function Badge({ tipe }) {
   const s = TIPE_COLOR[tipe] || { bg: 'var(--surface-2)', text: 'var(--text-2)' };
@@ -18,6 +18,7 @@ function Badge({ tipe }) {
 }
 
 function FormModal({ initial, onSave, onClose }) {
+  const isEdit = !!initial;
   const [form, setForm] = useState(initial || emptyForm);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
@@ -26,6 +27,12 @@ function FormModal({ initial, onSave, onClose }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.nama.trim() || !form.divisi) { setError('Nama dan divisi wajib diisi'); return; }
+    if (!form.entitas.trim()) { setError('Entitas wajib diisi'); return; }
+    if (!isEdit && (!form.username.trim() || !form.password.trim())) {
+      setError('Username dan password wajib diisi untuk anggota baru');
+      return;
+    }
+    if (!isEdit && form.password.length < 8) { setError('Password minimal 8 karakter'); return; }
     setLoading(true); setError('');
     try { await onSave(form); onClose(); }
     catch (err) { setError(err.message); }
@@ -42,7 +49,7 @@ function FormModal({ initial, onSave, onClose }) {
         width: '100%', maxWidth: 440, boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
       }}>
         <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 18 }}>
-          {initial ? '✏️ Edit Anggota' : '➕ Tambah Anggota Baru'}
+          {isEdit ? '✏️ Edit Anggota' : '➕ Tambah Anggota Baru'}
         </div>
         {error && (
           <div className="alert alert-red" style={{ marginBottom: 14 }}>
@@ -70,6 +77,25 @@ function FormModal({ initial, onSave, onClose }) {
               </select>
             </div>
           </div>
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 5 }}>Entitas *</label>
+            <input value={form.entitas} onChange={e => set('entitas', e.target.value)}
+              placeholder="cth: Inhouse / Remote / Magang" required />
+          </div>
+          {!isEdit && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 5 }}>Username *</label>
+                <input value={form.username} onChange={e => set('username', e.target.value)}
+                  placeholder="username login" autoComplete="off" required />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 5 }}>Password *</label>
+                <input type="password" value={form.password} onChange={e => set('password', e.target.value)}
+                  placeholder="min. 8 karakter" autoComplete="new-password" required />
+              </div>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 10 }}>
             <button type="button" onClick={onClose}
               style={{ flex: 1, padding: '9px', borderRadius: 8, border: '1px solid var(--border-2)',
@@ -151,8 +177,11 @@ export default function ManajemenTim() {
 
   const handleEdit = async (form) => {
     await api.updateTim(modal.data.id, {
-      ...form,
-      tipe: modal.data.tipe, // tipe tidak diubah manual, dipertahankan dari data existing
+      nama: form.nama,
+      divisi: form.divisi,
+      level: form.level,
+      entitas: form.entitas,
+      tipe: modal.data.tipe,
       aktif: modal.data.aktif,
     });
     notify(`Data ${form.nama} berhasil diupdate`);
@@ -178,7 +207,7 @@ export default function ManajemenTim() {
 
   const handleAktifkan = async (anggota) => {
     try {
-      await api.updateTim(anggota.id, { ...anggota, aktif: true });
+      await api.aktifkanAnggota(anggota.id);
       notify(`${anggota.nama} diaktifkan kembali`);
       load();
     } catch (err) {
