@@ -78,6 +78,7 @@ export default function Sidebar({ isOpen, onClose }) {
   const { user, logout } = useAuth();
   const { isOnline }   = useContext(PresenceContext);
   const tim            = useTim();
+  const timAktif       = tim.filter(t => t.aktif !== false);
   const isAdmin        = user?.role === 'admin';
   const isAdminDivisi  = !isAdmin && tim.some(m => m.nama === user?.nama && m.divisi === 'Admin');
   const baseNav        = isAdmin ? NAV_ADMIN : NAV_MEMBER;
@@ -127,9 +128,9 @@ export default function Sidebar({ isOpen, onClose }) {
               onClick={() => goTo(item.path)}>
               {ICONS[item.path]}
               {item.label}
-              {(item.path === '/tim' ? tim.length : item.badge) > 0 && (
+              {(item.path === '/tim' ? timAktif.length : item.badge) > 0 && (
                 <span className={`nav-badge ${item.badgeType}`}>
-                  {item.path === '/tim' ? tim.length : item.badge}
+                  {item.path === '/tim' ? timAktif.length : item.badge}
                 </span>
               )}
             </div>
@@ -183,7 +184,7 @@ export default function Sidebar({ isOpen, onClose }) {
               </div>
             );
           })}
-          {tim.length > 5 && (
+          {timAktif.length > 5 && (
             <div onClick={() => goTo('/tim')} style={{
               width: 28, height: 28, borderRadius: 8,
               background: 'var(--surface-2)', color: 'var(--text-3)',
@@ -191,7 +192,7 @@ export default function Sidebar({ isOpen, onClose }) {
               fontSize: 9, fontWeight: 700, cursor: 'pointer',
               border: '1px solid var(--border)',
             }}>
-              +{tim.length - 5}
+              +{timAktif.length - 5}
             </div>
           )}
         </div>
