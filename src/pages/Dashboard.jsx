@@ -362,7 +362,7 @@ export default function Dashboard() {
   if (user?.role !== 'admin') return <DashboardMember user={user} />;
 
   const isiMingguIni = dbStats?.jurnal?.minggu_ini ?? 0;
-  const timAktif     = timDB.length > 0 ? timDB : TIM;
+  const timAktif     = (timDB.length > 0 ? timDB : TIM).filter(t => t.aktif !== false);
   const belumJurnal  = timAktif.length - isiMingguIni;
   const rising       = timAktif.filter(t => t.tipe === 'Rising Star');
   // At Risk: tampilkan alert HANYA jika belum ada sesi 1-on-1 dalam 14 hari terakhir
