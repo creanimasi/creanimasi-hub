@@ -4,7 +4,7 @@ import { TIM, hitungLama } from '../data/tim';
 
 // Data tim dari DB (termasuk anggota baru), fallback ke data statis
 // selama fetch belum selesai atau gagal.
-export function useTim(semua = true) {
+export function useTim(semua = false) {
   const [tim, setTim] = useState(TIM);
 
   useEffect(() => {

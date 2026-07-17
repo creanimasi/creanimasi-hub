@@ -78,7 +78,7 @@ export default function Sidebar({ isOpen, onClose }) {
   const { user, logout } = useAuth();
   const { isOnline }   = useContext(PresenceContext);
   const tim            = useTim();
-  const timAktif       = tim.filter(t => t.aktif !== false);
+  const timAktif       = tim;
   const isAdmin        = user?.role === 'admin';
   const isAdminDivisi  = !isAdmin && tim.some(m => m.nama === user?.nama && m.divisi === 'Admin');
   const baseNav        = isAdmin ? NAV_ADMIN : NAV_MEMBER;
