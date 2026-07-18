@@ -20,6 +20,7 @@ const NAV_ADMIN = [
   { path: '/sop',        label: 'SOP Brief',           badge: null, badgeType: '' },
   { path: '/reward',     label: 'Reward & KPI',        badge: null, badgeType: '' },
   { path: '/workshop',   label: 'Workshop JRUHUB',     badge: null, badgeType: '' },
+  { path: '/absensi',   label: 'Absensi Tim',          badge: null, badgeType: '' },
   { section: 'Analitik' },
   { path: '/performa',   label: 'Grafik Performa',     badge: null, badgeType: '' },
   { path: '/laporan-harian', label: 'Laporan Harian',   badge: null, badgeType: '' },
@@ -70,6 +71,7 @@ const ICONS = {
   '/laporan-mentor': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>,
   '/laporan-admin':  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>,
   '/kalender':   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>,
+  '/absensi':    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><polyline points="9,15 11,17 15,13"/></svg>,
 };
 
 export default function Sidebar({ isOpen, onClose }) {

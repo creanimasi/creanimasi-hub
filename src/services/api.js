@@ -122,6 +122,13 @@ export const api = {
   updateWorkshop:       (nama, layerId, sesiIdx, hadir) =>
     request('PATCH', `/workshop/${encodeURIComponent(nama)}/${layerId}/${sesiIdx}`, { hadir }),
 
+  // Absensi Tim
+  getSesiAbsensi:    ()                               => request('GET', '/absensi/sesi'),
+  getDetailAbsensi:  (id)                             => request('GET', `/absensi/sesi/${id}`),
+  createSesiAbsensi: (data)                           => request('POST', '/absensi/sesi', data),
+  updateAbsensi:     (sesiId, nama, status, catatan)  =>
+    request('PATCH', `/absensi/${sesiId}/${encodeURIComponent(nama)}`, { status, catatan }),
+
   // Friday Win
   getFridayWin:    ()       => request('GET', '/friday-win'),
   postFridayWin:   (data)   => request('POST', '/friday-win', data),

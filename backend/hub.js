@@ -640,6 +640,110 @@ router.patch('/workshop/:nama/:layer_id/:sesi_idx', authMiddleware, async (req, 
   }
 });
 
+// ── ABSENSI TIM ───────────────────────────────────────────────────────────────
+
+// Startup migration — idempotent
+(async () => {
+  try {
+    await hubPool.query(`
+      CREATE TABLE IF NOT EXISTS absensi_sesi (
+        id         SERIAL PRIMARY KEY,
+        label      VARCHAR(200) NOT NULL,
+        tanggal    DATE NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await hubPool.query(`
+      CREATE TABLE IF NOT EXISTS absensi_kehadiran (
+        id         SERIAL PRIMARY KEY,
+        sesi_id    INTEGER NOT NULL REFERENCES absensi_sesi(id) ON DELETE CASCADE,
+        nama       VARCHAR(100) NOT NULL,
+        status     VARCHAR(20) NOT NULL DEFAULT 'tidak_hadir'
+                     CHECK (status IN ('hadir','terlambat','izin','sakit','tidak_hadir')),
+        catatan    TEXT,
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (sesi_id, nama)
+      )
+    `);
+    await hubPool.query(`
+      CREATE INDEX IF NOT EXISTS idx_absensi_kehadiran_sesi_id ON absensi_kehadiran (sesi_id)
+    `);
+  } catch (e) { /* tables may already exist */ }
+})();
+
+// GET /api/hub/absensi/sesi — list semua sesi, newest first
+router.get('/absensi/sesi', authMiddleware, async (req, res) => {
+  try {
+    const r = await hubPool.query(
+      'SELECT * FROM absensi_sesi ORDER BY tanggal DESC, id DESC'
+    );
+    res.json({ success: true, data: r.rows });
+  } catch { res.status(500).json({ error: 'Gagal mengambil sesi absensi' }); }
+});
+
+// GET /api/hub/absensi/sesi/:id — detail sesi + kehadiran
+router.get('/absensi/sesi/:id', authMiddleware, async (req, res) => {
+  try {
+    const sesiR = await hubPool.query('SELECT * FROM absensi_sesi WHERE id=$1', [req.params.id]);
+    if (!sesiR.rows.length) return res.status(404).json({ error: 'Sesi tidak ditemukan' });
+    const keR = await hubPool.query(
+      'SELECT nama, status, catatan FROM absensi_kehadiran WHERE sesi_id=$1 ORDER BY nama',
+      [req.params.id]
+    );
+    res.json({ success: true, data: { ...sesiR.rows[0], kehadiran: keR.rows } });
+  } catch { res.status(500).json({ error: 'Gagal mengambil detail absensi' }); }
+});
+
+// POST /api/hub/absensi/sesi — buat sesi baru + auto-populate semua anggota aktif
+router.post('/absensi/sesi', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const { label, tanggal } = req.body;
+  if (!label || !tanggal) return res.status(400).json({ error: 'Label dan tanggal wajib diisi' });
+  const client = await hubPool.connect();
+  try {
+    await client.query('BEGIN');
+    const sesiR = await client.query(
+      'INSERT INTO absensi_sesi (label, tanggal) VALUES ($1, $2) RETURNING *',
+      [label, tanggal]
+    );
+    const sesiId = sesiR.rows[0].id;
+    const timR = await client.query('SELECT nama FROM tim WHERE aktif = TRUE ORDER BY nama');
+    if (timR.rows.length > 0) {
+      const vals = timR.rows.map((_, i) => `($1, $${i + 2}, 'tidak_hadir', NOW())`).join(', ');
+      const params = [sesiId, ...timR.rows.map(r => r.nama)];
+      await client.query(
+        `INSERT INTO absensi_kehadiran (sesi_id, nama, status, updated_at) VALUES ${vals} ON CONFLICT DO NOTHING`,
+        params
+      );
+    }
+    await client.query('COMMIT');
+    res.status(201).json({ success: true, data: sesiR.rows[0], anggota: timR.rows.length });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: 'Gagal membuat sesi absensi' });
+  } finally {
+    client.release();
+  }
+});
+
+// PATCH /api/hub/absensi/:sesi_id/:nama — upsert status 1 anggota
+router.patch('/absensi/:sesi_id/:nama', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const { sesi_id, nama } = req.params;
+  const { status, catatan } = req.body;
+  const VALID = ['hadir', 'terlambat', 'izin', 'sakit', 'tidak_hadir'];
+  if (!VALID.includes(status)) return res.status(400).json({ error: 'Status tidak valid' });
+  try {
+    await hubPool.query(`
+      INSERT INTO absensi_kehadiran (sesi_id, nama, status, catatan, updated_at)
+      VALUES ($1, $2, $3, $4, NOW())
+      ON CONFLICT (sesi_id, nama)
+      DO UPDATE SET status=$3, catatan=$4, updated_at=NOW()
+    `, [parseInt(sesi_id), nama, status, catatan || null]);
+    res.json({ ok: true });
+  } catch { res.status(500).json({ error: 'Gagal update absensi' }); }
+});
+
 // ── FRIDAY WIN ────────────────────────────────────────────────────────────────
 router.get('/friday-win', authMiddleware, async (req, res) => {
   try {

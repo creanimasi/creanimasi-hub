@@ -9,3 +9,4 @@ export { Kader }     from './sections/Kader';
 export { SKB }       from './sections/SKB';
 export { FridayWin } from './sections/FridayWin';
 export { OneOnOne }  from './sections/OneOnOne';
+export { Absensi }   from './sections/Absensi';
