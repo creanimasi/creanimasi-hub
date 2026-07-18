@@ -180,8 +180,11 @@ export default function Performa() {
 
   const divisiList = ['Semua', ...new Set(tim.map(t => t.divisi))];
 
+  const timAktifNames = new Set(tim.map(t => t.nama));
+
   const filteredNames = isAdmin
     ? Object.keys(data).filter(nama => {
+        if (!timAktifNames.has(nama)) return false;
         if (filter === 'Semua') return true;
         const m = tim.find(t => t.nama === nama);
         return m?.divisi === filter;
