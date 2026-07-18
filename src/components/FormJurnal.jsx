@@ -80,6 +80,9 @@ export default function FormJurnal({ onSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.nama || !form.mood) { setError('Nama dan mood wajib diisi'); return; }
+    if (!form.skor_karya || !form.skor_waktu || !form.skor_komunikasi || !form.skor_skill) {
+      setError('Pilih skor untuk semua self-assessment (karya, waktu, komunikasi, skill)'); return;
+    }
     setLoading(true); setError('');
     try {
       await api.simpanJurnal(form);
