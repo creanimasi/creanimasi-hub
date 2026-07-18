@@ -410,7 +410,7 @@ export default function Dashboard() {
       {/* Metrics real-time */}
       <div className="metrics-grid">
         <div className="metric">
-          <div className="metric-val">{timAktif.filter(t => t.status === 'Aktif' || t.aktif).length}</div>
+          <div className="metric-val">{timAktif.length}</div>
           <div className="metric-lbl">Anggota aktif</div>
           <div className="metric-sub text-muted">+{timAktif.filter(t => t.status === 'Probation' || (t.level || '').toLowerCase().includes('probation')).length} probation</div>
         </div>

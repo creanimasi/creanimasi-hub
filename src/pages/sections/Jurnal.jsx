@@ -102,7 +102,7 @@ export function Jurnal() {
           </div>
           <div className="metric-lbl">Rata-rata mood</div>
         </div>
-        <div className="metric"><div className="metric-val">{Math.round(sudahIsi.length / data.length * 100)}%</div><div className="metric-lbl">Konsistensi</div></div>
+        <div className="metric"><div className="metric-val">{data.length > 0 ? Math.round(sudahIsi.length / data.length * 100) : 0}%</div><div className="metric-lbl">Konsistensi</div></div>
       </div>
 
       <div className="card">

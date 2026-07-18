@@ -145,13 +145,13 @@ export function OneOnOne() {
                 <label style={{ fontSize:11, fontWeight:700, color:'var(--text-2)', textTransform:'uppercase',
                   letterSpacing:'.05em', display:'block', marginBottom:5 }}>Mood sebelum (1-10)</label>
                 <input type="number" value={form.mood_sebelum} min={1} max={10}
-                  onChange={e=>setForm(f=>({...f,mood_sebelum:parseInt(e.target.value)}))} />
+                  onChange={e=>setForm(f=>({...f,mood_sebelum:e.target.value===''?'':parseInt(e.target.value)}))} />
               </div>
               <div>
                 <label style={{ fontSize:11, fontWeight:700, color:'var(--text-2)', textTransform:'uppercase',
                   letterSpacing:'.05em', display:'block', marginBottom:5 }}>Mood sesudah (1-10)</label>
                 <input type="number" value={form.mood_sesudah} min={1} max={10}
-                  onChange={e=>setForm(f=>({...f,mood_sesudah:parseInt(e.target.value)}))} />
+                  onChange={e=>setForm(f=>({...f,mood_sesudah:e.target.value===''?'':parseInt(e.target.value)}))} />
               </div>
             </div>
 

@@ -15,6 +15,8 @@ export default function Kalender() {
   const [selected, setSelected] = useState(null);
 
   useEffect(() => {
+    let cancelled = false;
+    setSelected(null);
     const fetchAll = async () => {
       const evs = [];
       try {
@@ -23,6 +25,7 @@ export default function Kalender() {
           api.getSesi1on1(),
           api.getSKB(),
         ]);
+        if (cancelled) return;
         (fw.data||[]).forEach(w => evs.push({
           date: w.tanggal?.slice(0,10), type:'fw', icon:'🏆', color:'var(--amber)',
           label: w.headline, sub: w.penerima || 'Tim'
@@ -37,6 +40,7 @@ export default function Kalender() {
         }));
       } catch {}
 
+      if (cancelled) return;
       // Tambah Jumat otomatis sebagai reminder jurnal
       const d = daysInMonth(tahun, bulan);
       for (let day = 1; day <= d; day++) {
@@ -50,6 +54,7 @@ export default function Kalender() {
       setEvents(evs);
     };
     fetchAll();
+    return () => { cancelled = true; };
   }, [tahun, bulan]);
 
   const days = daysInMonth(tahun, bulan);

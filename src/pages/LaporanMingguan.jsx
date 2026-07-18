@@ -358,10 +358,13 @@ export default function LaporanMingguan() {
     try {
     const r = await api.getLaporanById(id);
     const d = r.data;
-    // Map SDM: pastikan semua anggota tim ada (merge dengan data tersimpan)
-    const sdmMap = {};
-    (d.sdm || []).forEach(s => { sdmMap[s.nama] = s.catatan; });
-    const sdm = tim.map(t => ({ nama: t.nama, catatan: sdmMap[t.nama] || '' }));
+    // Mulai dari SDM tersimpan (preserve anggota nonaktif), lalu tambah anggota aktif baru
+    const savedSdm = d.sdm || [];
+    const savedNames = new Set(savedSdm.map(s => s.nama));
+    const sdm = [
+      ...savedSdm,
+      ...tim.filter(t => !savedNames.has(t.nama)).map(t => ({ nama: t.nama, catatan: '' })),
+    ];
     setEditData({ ...d, sdm });
     setFormErr('');
     setView('form');
