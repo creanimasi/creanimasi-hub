@@ -211,6 +211,7 @@ body {
   border-radius: var(--radius-md);
   transition: background .15s, color .15s, box-shadow .15s;
   user-select: none;
+  position: relative;
 }
 .nav-item:hover {
   background: var(--surface-2);

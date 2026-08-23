@@ -1,15 +1,17 @@
-import { useContext, useState } from 'react';
+import { useContext, useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { TIPE_COLOR } from '../data/tim';
 import { useAuth } from '../hooks/useAuth';
 import { useTim } from '../hooks/useTim';
 import { PresenceContext } from './Layout';
+import { api } from '../services/api';
 
 const NAV_ADMIN = [
   { section: 'Utama' },
   { path: '/',              label: 'Dashboard',         badgeType: '' },
   { path: '/ai-assistant',  label: 'AI Assistant',      badgeType: '' },
   { path: '/kalender',      label: 'Kalender',          badgeType: '' },
+  { path: '/profil',        label: 'Profil Saya',       badgeType: '' },
   { section: 'Tim' },
   { path: '/tim',           label: 'Direktori Tim',     badgeType: 'green' },
   { path: '/anggota',       label: 'Kelola Anggota',    badgeType: '' },
@@ -42,6 +44,7 @@ const NAV_MEMBER = [
   { path: '/',              label: 'Dashboard',         badgeType: '' },
   { path: '/modul',         label: 'Modul Belajar',     badgeType: '' },
   { path: '/performa',      label: 'Grafik Performa',   badgeType: '' },
+  { path: '/profil',        label: 'Profil Saya',       badgeType: '' },
   { section: 'Aksi Cepat' },
   { path: '/jurnal/isi',    label: 'Isi Jurnal',        badgeType: 'green' },
   { path: '/jurnal/riwayat',label: 'Riwayat Jurnal',    badgeType: '' },
@@ -78,6 +81,7 @@ const ICONS = {
   '/ads-performance': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/><circle cx="19" cy="5" r="2" fill="currentColor" stroke="none"/></svg>,
   '/laporan-profit':  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
   '/ai-assistant':    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2a7 7 0 0 1 7 7c0 3-1.8 5.6-4.5 6.7V18H9.5v-2.3C6.8 14.6 5 12 5 9a7 7 0 0 1 7-7z"/><path d="M9 21h6M10 17.5c0-1 .5-2 1-2.5M14 17.5c0-1-.5-2-1-2.5"/><circle cx="9.5" cy="9" r="1" fill="currentColor" stroke="none"/><circle cx="14.5" cy="9" r="1" fill="currentColor" stroke="none"/></svg>,
+  '/profil':          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>,
 };
 
 export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }) {
@@ -93,6 +97,33 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
   const MARKETING_PATHS = ['/ads-performance', '/laporan-profit'];
   const [laporanOpen,   setLaporanOpen]   = useState(() => LAPORAN_PATHS.includes(location.pathname));
   const [marketingOpen, setMarketingOpen] = useState(() => MARKETING_PATHS.includes(location.pathname));
+
+  // Badge: jurnal belum isi minggu ini (member, hari Kamis-Sabtu)
+  const [jurnalBelum, setJurnalBelum] = useState(false);
+  useEffect(() => {
+    if (!user || isAdmin) return;
+    const hari = new Date().getDay();
+    if (hari < 4 || hari === 0) return; // hanya Kamis(4), Jumat(5), Sabtu(6)
+    api.getJurnal(user.nama).then(res => {
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const sudah = (res.data || []).some(j => new Date(j.tanggal_jurnal || j.created_at) >= weekAgo);
+      setJurnalBelum(!sudah);
+    }).catch(() => {});
+  }, [user, isAdmin]);
+
+  // Badge: SKB pending (admin = semua yg diajukan, member = milik sendiri yg pending)
+  const [skbCount, setSkbCount] = useState(0);
+  useEffect(() => {
+    if (!user) return;
+    api.getSKB().then(res => {
+      const all = res.data || [];
+      if (isAdmin) {
+        setSkbCount(all.filter(s => s.status === 'diajukan').length);
+      } else {
+        setSkbCount(all.filter(s => s.nama === user.nama && s.status === 'diajukan').length);
+      }
+    }).catch(() => {});
+  }, [user, isAdmin]);
 
   const baseNav = isAdmin ? NAV_ADMIN : NAV_MEMBER;
   const NAV = (!isAdmin && isAdminDivisi)
@@ -233,8 +264,12 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
           }
 
           /* Regular nav item */
-          const isActive = location.pathname === item.path;
-          const isJurnal = item.path === '/jurnal/isi';
+          const isActive  = location.pathname === item.path;
+          const isJurnal  = item.path === '/jurnal/isi';
+          const isSKB     = item.path === '/skb';
+          const isTim     = item.path === '/tim';
+          const showJurnalBadge = isJurnal && jurnalBelum;
+          const showSkbBadge   = isSKB && skbCount > 0;
           return (
             <div key={item.path}
               className={`nav-item${isActive ? ' active' : ''}${collapsed ? ' nav-item-collapsed' : ''}${isJurnal && !collapsed ? ' nav-item-accent' : ''}`}
@@ -242,8 +277,21 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
               title={collapsed ? item.label : undefined}>
               {ICONS[item.path]}
               {!collapsed && <span style={{flex:1}}>{item.label}</span>}
-              {!collapsed && item.path === '/tim' && timAktif.length > 0 && (
-                <span className={`nav-badge ${item.badgeType}`}>{timAktif.length}</span>
+              {/* Badge: Tim count */}
+              {!collapsed && isTim && timAktif.length > 0 && (
+                <span className="nav-badge green">{timAktif.length}</span>
+              )}
+              {/* Badge: jurnal belum isi */}
+              {showJurnalBadge && !collapsed && (
+                <span className="nav-badge" style={{background:'rgba(255,82,82,0.15)',color:'var(--red)',borderColor:'rgba(255,82,82,0.25)'}}>!</span>
+              )}
+              {/* Badge: SKB pending */}
+              {showSkbBadge && !collapsed && (
+                <span className="nav-badge">{skbCount}</span>
+              )}
+              {/* Collapsed badge dots */}
+              {collapsed && (showJurnalBadge || showSkbBadge) && (
+                <span style={{position:'absolute',top:4,right:4,width:7,height:7,borderRadius:'50%',background:'var(--red)',border:'1.5px solid var(--surface)'}}/>
               )}
             </div>
           );
