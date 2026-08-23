@@ -29,12 +29,12 @@ const NAV_ADMIN = [
   { path: '/sop',           label: 'SOP Brief',         badgeType: '' },
   { path: '/kader',         label: 'Kader Potensial',   badgeType: '' },
   { group: 'Laporan' },
-  { path: '/laporan-harian',   label: 'Laporan Harian',        badgeType: '', sub: true, group: 'laporan' },
-  { path: '/laporan-mentor',   label: 'Lap. Mingguan Mentor',  badgeType: '', sub: true, group: 'laporan' },
-  { path: '/laporan-bulanan',  label: 'Laporan Bulanan',       badgeType: '', sub: true, group: 'laporan' },
+  { path: '/laporan-harian',   label: 'Laporan Harian',        badgeType: '', sub: true, groupKey: 'laporan' },
+  { path: '/laporan-mentor',   label: 'Lap. Mingguan Mentor',  badgeType: '', sub: true, groupKey: 'laporan' },
+  { path: '/laporan-bulanan',  label: 'Laporan Bulanan',       badgeType: '', sub: true, groupKey: 'laporan' },
   { group: 'Marketing' },
-  { path: '/ads-performance',  label: 'Ads Performance',       badgeType: '', sub: true, group: 'marketing' },
-  { path: '/laporan-profit',   label: 'Laporan Profit',        badgeType: '', sub: true, group: 'marketing' },
+  { path: '/ads-performance',  label: 'Ads Performance',       badgeType: '', sub: true, groupKey: 'marketing' },
+  { path: '/laporan-profit',   label: 'Laporan Profit',        badgeType: '', sub: true, groupKey: 'marketing' },
 ];
 
 const NAV_MEMBER = [
@@ -214,7 +214,7 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
 
           /* Sub-items — show based on which group they belong to */
           if (item.sub) {
-            const isMarketing = item.group === 'marketing';
+            const isMarketing = item.groupKey === 'marketing';
             const isOpen      = isMarketing ? marketingOpen : laporanOpen;
             if (!isOpen && !collapsed) return null;
             return (
