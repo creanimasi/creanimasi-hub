@@ -29,11 +29,12 @@ const NAV_ADMIN = [
   { path: '/sop',           label: 'SOP Brief',         badgeType: '' },
   { path: '/kader',         label: 'Kader Potensial',   badgeType: '' },
   { group: 'Laporan' },
-  { path: '/laporan-harian',   label: 'Laporan Harian',   badgeType: '', sub: true },
-  { path: '/laporan-mentor',   label: 'Lap. Mingguan Mentor', badgeType: '', sub: true },
-  { path: '/laporan-bulanan',  label: 'Laporan Bulanan',  badgeType: '', sub: true },
-  { path: '/ads-performance',  label: 'Ads Performance',  badgeType: '', sub: true },
-  { path: '/laporan-profit',   label: 'Laporan Profit',   badgeType: '', sub: true },
+  { path: '/laporan-harian',   label: 'Laporan Harian',        badgeType: '', sub: true, group: 'laporan' },
+  { path: '/laporan-mentor',   label: 'Lap. Mingguan Mentor',  badgeType: '', sub: true, group: 'laporan' },
+  { path: '/laporan-bulanan',  label: 'Laporan Bulanan',       badgeType: '', sub: true, group: 'laporan' },
+  { group: 'Marketing' },
+  { path: '/ads-performance',  label: 'Ads Performance',       badgeType: '', sub: true, group: 'marketing' },
+  { path: '/laporan-profit',   label: 'Laporan Profit',        badgeType: '', sub: true, group: 'marketing' },
 ];
 
 const NAV_MEMBER = [
@@ -88,10 +89,10 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
   const timAktif       = tim;
   const isAdmin        = user?.role === 'admin';
   const isAdminDivisi  = !isAdmin && tim.some(m => m.nama === user?.nama && m.divisi === 'Admin');
-  const [laporanOpen, setLaporanOpen] = useState(() => {
-    const LAPORAN_PATHS = ['/laporan-harian','/laporan-mentor','/laporan-bulanan','/ads-performance','/laporan-profit'];
-    return LAPORAN_PATHS.includes(location.pathname);
-  });
+  const LAPORAN_PATHS   = ['/laporan-harian', '/laporan-mentor', '/laporan-bulanan'];
+  const MARKETING_PATHS = ['/ads-performance', '/laporan-profit'];
+  const [laporanOpen,   setLaporanOpen]   = useState(() => LAPORAN_PATHS.includes(location.pathname));
+  const [marketingOpen, setMarketingOpen] = useState(() => MARKETING_PATHS.includes(location.pathname));
 
   const baseNav = isAdmin ? NAV_ADMIN : NAV_MEMBER;
   const NAV = (!isAdmin && isAdminDivisi)
@@ -163,42 +164,59 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
             return <div key={i} className="nav-section">{item.section}</div>;
           }
 
-          /* Collapsible group header (Laporan) */
+          /* Collapsible group headers */
           if (item.group) {
-            const LAPORAN_PATHS = ['/laporan-harian','/laporan-mentor','/laporan-bulanan','/ads-performance','/laporan-profit'];
-            const anyActive = LAPORAN_PATHS.includes(location.pathname);
-            if (collapsed) return (
-              <div key={i}
-                className={`nav-item nav-item-collapsed${anyActive ? ' active' : ''}`}
-                title="Laporan"
-                onClick={() => { setLaporanOpen(o => !o); }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:18,height:18}}>
+            const isMarketing = item.group === 'Marketing';
+            const paths       = isMarketing ? MARKETING_PATHS : LAPORAN_PATHS;
+            const isOpen      = isMarketing ? marketingOpen : laporanOpen;
+            const toggle      = isMarketing ? () => setMarketingOpen(o => !o) : () => setLaporanOpen(o => !o);
+            const anyActive   = paths.includes(location.pathname);
+            const label       = item.group;
+            const icon        = isMarketing
+              ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:15,height:15,flexShrink:0}}>
+                  <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/>
+                  <circle cx="19" cy="5" r="2" fill="currentColor" stroke="none"/>
+                </svg>
+              : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:15,height:15,flexShrink:0}}>
                   <rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/>
                   <rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>
-                </svg>
+                </svg>;
+
+            if (collapsed) return (
+              <div key={`group-${label}`}
+                className={`nav-item nav-item-collapsed${anyActive ? ' active' : ''}`}
+                title={label} onClick={toggle}>
+                {isMarketing
+                  ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:18,height:18}}>
+                      <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/>
+                      <circle cx="19" cy="5" r="2" fill="currentColor" stroke="none"/>
+                    </svg>
+                  : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:18,height:18}}>
+                      <rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/>
+                      <rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>
+                    </svg>
+                }
               </div>
             );
             return (
-              <div key={i}
+              <div key={`group-${label}`}
                 className={`nav-item${anyActive ? ' active' : ''}`}
-                onClick={() => setLaporanOpen(o => !o)}
-                style={{ userSelect: 'none' }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:15,height:15,flexShrink:0}}>
-                  <rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/>
-                  <rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>
-                </svg>
-                <span style={{flex:1}}>Laporan</span>
+                onClick={toggle} style={{ userSelect: 'none' }}>
+                {icon}
+                <span style={{flex:1}}>{label}</span>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-                  style={{width:12,height:12,flexShrink:0,transition:'transform .2s',transform:laporanOpen?'rotate(180deg)':'none'}}>
+                  style={{width:12,height:12,flexShrink:0,transition:'transform .2s',transform:isOpen?'rotate(180deg)':'none'}}>
                   <polyline points="6,9 12,15 18,9"/>
                 </svg>
               </div>
             );
           }
 
-          /* Sub-items (inside Laporan group) — only show when open */
+          /* Sub-items — show based on which group they belong to */
           if (item.sub) {
-            if (!laporanOpen && !collapsed) return null;
+            const isMarketing = item.group === 'marketing';
+            const isOpen      = isMarketing ? marketingOpen : laporanOpen;
+            if (!isOpen && !collapsed) return null;
             return (
               <div key={item.path}
                 className={`nav-item${location.pathname === item.path ? ' active' : ''}${collapsed ? ' nav-item-collapsed' : ' nav-item-sub'}`}
