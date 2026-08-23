@@ -110,17 +110,19 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
   return (
     <aside className={cls}>
       {/* Logo + toggle collapse */}
-      <div className="sidebar-logo">
-        <img
-          src="/logo192.png"
-          alt="Creanimasi"
-          style={{
-            width: 30, height: 30, borderRadius: 8, flexShrink: 0,
-            background: 'var(--green-light)',
-            border: '1px solid rgba(0,214,143,0.2)',
-            objectFit: 'contain', padding: 3,
-          }}
-        />
+      <div className="sidebar-logo" style={{ justifyContent: collapsed ? 'center' : undefined }}>
+        {!collapsed && (
+          <img
+            src="/logo192.png"
+            alt="Creanimasi"
+            style={{
+              width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+              background: 'var(--green-light)',
+              border: '1px solid rgba(0,214,143,0.2)',
+              objectFit: 'contain', padding: 3,
+            }}
+          />
+        )}
         {!collapsed && (
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="sidebar-logo-name">Creanimasi</div>
@@ -131,8 +133,8 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
           onClick={onToggleCollapse}
           title={collapsed ? 'Perluas sidebar' : 'Perkecil sidebar'}
           style={{
-            marginLeft: 'auto', flexShrink: 0,
-            width: 28, height: 28, borderRadius: 8,
+            marginLeft: collapsed ? 0 : 'auto', flexShrink: 0,
+            width: 32, height: 32, borderRadius: 8,
             border: '1px solid var(--border-2)',
             background: 'transparent',
             cursor: 'pointer',
