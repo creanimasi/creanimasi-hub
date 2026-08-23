@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RadialBarChart, RadialBar, ResponsiveContainer } from 'recharts';
 import { TIM, TIPE_COLOR, DIVISI_COLOR, hitungLama } from '../data/tim';
@@ -536,6 +536,100 @@ export default function Dashboard() {
                 );
               })}
           </div>
+        </div>
+      </div>
+
+    </div>
+  );
+}
+
+function AiChatPanel() {
+  const [pesan, setPesan] = useState('');
+  const [chat, setChat] = useState([
+    { role: 'assistant', content: 'Halo! Saya AI assistant Creanimasi. Tanya apapun tentang tim, performa, ads, jurnal, atau data lainnya.' }
+  ]);
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef(null);
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chat]);
+
+  const kirim = useCallback(async (teks) => {
+    const msg = teks || pesan.trim();
+    if (!msg || loading) return;
+    setPesan('');
+    const riwayat = chat.filter(c => c.role !== 'system').slice(-6).map(c => ({ role: c.role, content: c.content }));
+    setChat(prev => [...prev, { role: 'user', content: msg }]);
+    setLoading(true);
+    try {
+      const r = await api.aiChat(msg, riwayat);
+      setChat(prev => [...prev, { role: 'assistant', content: r.jawaban }]);
+    } catch (e) {
+      setChat(prev => [...prev, { role: 'assistant', content: '❌ Gagal: ' + e.message }]);
+    } finally { setLoading(false); }
+  }, [pesan, chat, loading]);
+
+  const QUICK = [
+    'Siapa yang belum isi jurnal minggu ini?',
+    'Bagaimana performa ads bulan ini?',
+    'Anggota mana yang perlu perhatian?',
+    'Rangkum kondisi tim saat ini',
+  ];
+
+  const formatMsg = (text) => text.split('\n').map((line, i) => {
+    if (line.startsWith('**') && line.endsWith('**')) return <div key={i} style={{ fontWeight: 700, marginTop: 6 }}>{line.replace(/\*\*/g,'')}</div>;
+    if (line.startsWith('- ') || line.startsWith('• ')) return <div key={i} style={{ paddingLeft: 12 }}>• {line.slice(2).replace(/\*\*/g,'')}</div>;
+    if (line.trim() === '') return <div key={i} style={{ height: 4 }} />;
+    return <div key={i}>{line.replace(/\*\*/g,'')}</div>;
+  });
+
+  return (
+    <div style={{ margin: '24px 0 0', padding: '0 0 24px' }}>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden' }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10, background: 'linear-gradient(135deg, rgba(124,92,252,0.08), transparent)' }}>
+          <div style={{ fontSize: 20 }}>✨</div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>AI Assistant</div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Analisis data tim, ads, jurnal, dan performa secara real-time</div>
+          </div>
+        </div>
+        <div style={{ padding: '12px 16px', display: 'flex', gap: 8, flexWrap: 'wrap', borderBottom: '1px solid var(--border)' }}>
+          {QUICK.map(q => (
+            <button key={q} onClick={() => kirim(q)} disabled={loading} style={{ padding: '5px 12px', borderRadius: 20, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-2)', fontSize: 11, cursor: loading ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+              {q}
+            </button>
+          ))}
+        </div>
+        <div style={{ maxHeight: 380, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {chat.map((c, i) => (
+            <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexDirection: c.role === 'user' ? 'row-reverse' : 'row' }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, background: c.role === 'user' ? 'var(--green)' : 'rgba(124,92,252,0.15)', color: c.role === 'user' ? '#fff' : '#A78BFA', fontWeight: 700 }}>
+                {c.role === 'user' ? 'K' : '✨'}
+              </div>
+              <div style={{ maxWidth: '80%', padding: '10px 14px', borderRadius: c.role === 'user' ? '16px 4px 16px 16px' : '4px 16px 16px 16px', background: c.role === 'user' ? 'var(--green)' : 'var(--surface-2)', color: c.role === 'user' ? '#fff' : 'var(--text-1)', fontSize: 13, lineHeight: 1.6 }}>
+                {c.role === 'assistant' ? formatMsg(c.content) : c.content}
+              </div>
+            </div>
+          ))}
+          {loading && (
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(124,92,252,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>✨</div>
+              <div style={{ padding: '10px 14px', borderRadius: '4px 16px 16px 16px', background: 'var(--surface-2)', color: 'var(--text-3)', fontSize: 13 }}>Sedang menganalisis...</div>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10 }}>
+          <input
+            value={pesan}
+            onChange={e => setPesan(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && kirim()}
+            placeholder="Tanya tentang tim, ads, jurnal, performa..."
+            disabled={loading}
+            style={{ flex: 1, padding: '9px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-1)', fontSize: 13, outline: 'none' }}
+          />
+          <button onClick={() => kirim()} disabled={loading || !pesan.trim()} style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: loading || !pesan.trim() ? 'var(--surface-2)' : '#7C5CFC', color: loading || !pesan.trim() ? 'var(--text-3)' : '#fff', fontWeight: 700, cursor: loading || !pesan.trim() ? 'not-allowed' : 'pointer', fontSize: 13 }}>
+            Kirim
+          </button>
         </div>
       </div>
     </div>

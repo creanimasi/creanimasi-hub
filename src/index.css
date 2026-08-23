@@ -97,10 +97,28 @@ body {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+  transition: width .2s ease;
+}
+.sidebar-scroll {
+  flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  position: relative;
+  display: flex;
+  flex-direction: column;
 }
+.sidebar.collapsed {
+  width: 56px;
+}
+.nav-item-collapsed {
+  padding: 7px 0;
+  margin: 1px 6px;
+  justify-content: center;
+  gap: 0;
+}
+.nav-item-collapsed svg { width: 18px; height: 18px; }
+.nav-item-collapsed.active { box-shadow: none; border-left: 2px solid var(--green); }
 
 /* subtle gradient accent on sidebar top */
 .sidebar::before {
@@ -117,8 +135,13 @@ body {
 }
 
 .sidebar-logo {
-  padding: 18px 16px 14px;
+  padding: 12px 12px 10px;
   border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .sidebar-logo-name {
   font-size: 16px;
@@ -446,12 +469,16 @@ body {
 /* ── EMPTY STATE ────────────────────────────────────────────────── */
 .empty {
   text-align: center;
-  padding: 36px 20px;
+  padding: 40px 24px;
   color: var(--text-2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
 }
-.empty-icon { font-size: 36px; opacity: .2; margin-bottom: 12px; }
-.empty-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 5px; }
-.empty-sub { font-size: 12px; margin-bottom: 16px; }
+.empty-icon { font-size: 40px; opacity: .55; margin-bottom: 6px; line-height: 1; }
+.empty-title { font-size: 14px; font-weight: 700; color: var(--text); }
+.empty-sub { font-size: 12px; color: var(--text-3); line-height: 1.5; max-width: 280px; }
 
 /* ── FORMS ──────────────────────────────────────────────────────── */
 input, select, textarea {
@@ -548,6 +575,8 @@ select option { background: var(--surface-2); color: var(--text); }
   cursor: pointer; flex-direction: column;
   align-items: center; justify-content: center; gap: 4px; flex-shrink: 0;
 }
+.sidebar-collapse-btn { display: flex; }
+@media (max-width: 768px) { .sidebar-collapse-btn { display: none !important; } }
 .hamburger span {
   display: block; width: 16px; height: 2px;
   background: var(--text-2); border-radius: 99px;

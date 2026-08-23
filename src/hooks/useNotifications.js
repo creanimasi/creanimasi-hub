@@ -18,7 +18,9 @@ export function useNotifications(user) {
     const list = [];
     const read = getRead();
     const now  = new Date();
-    const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+    const weekAgo = new Date(now);
+    weekAgo.setDate(weekAgo.getDate() - (weekAgo.getDay() === 0 ? 6 : weekAgo.getDay() - 1));
+    weekAgo.setHours(0, 0, 0, 0);
 
     try {
       if (isAdmin) {
@@ -28,6 +30,22 @@ export function useNotifications(user) {
           api.getSesi1on1(),
           api.getProfilingAll(),
         ]);
+
+        // 0. Request sesi 1-on-1 dari anggota (minggu ini)
+        const request1on1 = (jRes.data || []).filter(j =>
+          j.request_1on1 && new Date(j.tanggal_jurnal || j.created_at) >= weekAgo
+        );
+        if (request1on1.length > 0) {
+          const ids = request1on1.map(j => j.id).sort().join('_');
+          const id = `request_1on1_${ids}`;
+          list.push({
+            id, type: 'urgent', icon: '🗣️', unread: !read.includes(id),
+            title: `${request1on1.length} anggota minta sesi 1-on-1`,
+            body: request1on1.map(j => `${j.nama.split(' ')[0]}${j.catatan_request ? ': ' + j.catatan_request.slice(0,40) : ''}`).join(' · '),
+            time: new Date(request1on1[0].tanggal_jurnal || request1on1[0].created_at),
+            path: '/1on1', urgent: true,
+          });
+        }
 
         // 1. Anggota belum isi jurnal minggu ini
         const isiMingguIni = new Set(

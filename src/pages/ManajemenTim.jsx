@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 import { TIPE_COLOR } from '../data/tim';
+import { useToast } from '../hooks/useToast';
 
 const DIVISI_OPTIONS = ['Admin', 'PM', 'Illustrator', 'Rigger', '3D Modeler'];
 const LEVEL_OPTIONS  = ['Magang / Probation', 'Junior', 'Senior', 'Admin (L4)', 'Secondline', 'Koordinator'];
@@ -146,12 +147,12 @@ function ConfirmModal({ nama, onConfirm, onClose }) {
 }
 
 export default function ManajemenTim() {
+  const { showToast } = useToast();
   const [tim, setTim]           = useState([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState('');
   const [showSemua, setShowSemua] = useState(false);
-  const [modal, setModal]       = useState(null); // null | {type:'add'} | {type:'edit', data} | {type:'hapus', data}
-  const [success, setSuccess]   = useState('');
+  const [modal, setModal]       = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -167,32 +168,32 @@ export default function ManajemenTim() {
 
   useEffect(() => { load(); }, [load]);
 
-  const notify = (msg) => { setSuccess(msg); setTimeout(() => setSuccess(''), 3000); };
-
   const handleTambah = async (form) => {
-    await api.tambahTim({ ...form, tipe: '' });
-    notify(`${form.nama} berhasil ditambahkan`);
-    load();
+    try {
+      await api.tambahTim({ ...form, tipe: '' });
+      showToast(`${form.nama} berhasil ditambahkan`);
+      load();
+    } catch (err) { showToast(err.message || 'Gagal menambah anggota', 'error'); }
   };
 
   const handleEdit = async (form) => {
-    await api.updateTim(modal.data.id, {
-      nama: form.nama,
-      divisi: form.divisi,
-      level: form.level,
-      entitas: form.entitas,
-      tipe: modal.data.tipe,
-      aktif: modal.data.aktif,
-    });
-    notify(`Data ${form.nama} berhasil diupdate`);
-    load();
+    try {
+      await api.updateTim(modal.data.id, {
+        nama: form.nama, divisi: form.divisi, level: form.level,
+        entitas: form.entitas, tipe: modal.data.tipe, aktif: modal.data.aktif,
+      });
+      showToast(`Data ${form.nama} berhasil diupdate`);
+      load();
+    } catch (err) { showToast(err.message || 'Gagal update', 'error'); }
   };
 
   const handleHapus = async () => {
-    await api.nonaktifkanTim(modal.data.id);
-    notify(`${modal.data.nama} dinonaktifkan`);
-    setModal(null);
-    load();
+    try {
+      await api.nonaktifkanTim(modal.data.id);
+      showToast(`${modal.data.nama} dinonaktifkan`, 'warning');
+      setModal(null);
+      load();
+    } catch (err) { showToast(err.message || 'Gagal nonaktifkan', 'error'); }
   };
 
   const handleResetPW = async () => {
@@ -200,7 +201,7 @@ export default function ManajemenTim() {
       const res = await api.resetPassword(modal.data.id);
       setModal({ type: 'reset-done', data: { nama: modal.data.nama, username: res.username, pw: res.password_temp } });
     } catch (err) {
-      notify(`Gagal reset: ${err.message}`);
+      showToast(`Gagal reset: ${err.message}`, 'error');
       setModal(null);
     }
   };
@@ -208,10 +209,10 @@ export default function ManajemenTim() {
   const handleAktifkan = async (anggota) => {
     try {
       await api.aktifkanAnggota(anggota.id);
-      notify(`${anggota.nama} diaktifkan kembali`);
+      showToast(`${anggota.nama} diaktifkan kembali`);
       load();
     } catch (err) {
-      notify(`Gagal mengaktifkan: ${err.message}`);
+      showToast(`Gagal mengaktifkan: ${err.message}`, 'error');
     }
   };
 
@@ -244,12 +245,6 @@ export default function ManajemenTim() {
         </div>
       </div>
 
-      {/* Notif */}
-      {success && (
-        <div className="alert alert-green" style={{ marginBottom: 14 }}>
-          <span>✅</span><div>{success}</div>
-        </div>
-      )}
       {error && (
         <div className="alert alert-red" style={{ marginBottom: 14 }}>
           <span>⚠️</span><div>{error}</div>
@@ -327,8 +322,10 @@ export default function ManajemenTim() {
       ))}
 
       {!loading && tim.length === 0 && (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-2)' }}>
-          Belum ada anggota tim. Klik "+ Tambah Anggota" untuk mulai.
+        <div className="empty">
+          <div className="empty-icon">👥</div>
+          <div className="empty-title">Belum ada anggota tim</div>
+          <div className="empty-sub">Klik "+ Tambah Anggota" untuk mulai mengelola tim.</div>
         </div>
       )}
 

@@ -15,6 +15,10 @@ import Performa from './pages/Performa';
 import LaporanMingguan from './pages/LaporanMingguan';
 import LaporanAdminMingguan from './pages/LaporanAdminMingguan';
 import LaporanHarian from './pages/LaporanHarian';
+import LaporanBulanan from './pages/LaporanBulanan';
+import AdsPerformance from './pages/AdsPerformance';
+import LaporanProfit from './pages/LaporanProfit';
+import AiAssistant from './pages/AiAssistant';
 import Kalender from './pages/Kalender';
 
 function AdminRoute({ children }) {
@@ -75,7 +79,11 @@ function ProtectedRoutes() {
         <Route path="/friday-win"   element={<AdminRoute><FridayWin /></AdminRoute>} />
         <Route path="/laporan-mentor"   element={<AdminRoute><LaporanMingguan /></AdminRoute>} />
         <Route path="/laporan-admin"    element={<AdminOrMarketRoute><LaporanAdminMingguan /></AdminOrMarketRoute>} />
-        <Route path="/laporan-harian"   element={<AdminRoute><LaporanHarian /></AdminRoute>} />
+        <Route path="/laporan-harian"    element={<AdminRoute><LaporanHarian /></AdminRoute>} />
+        <Route path="/laporan-bulanan"   element={<AdminRoute><LaporanBulanan /></AdminRoute>} />
+        <Route path="/ads-performance"    element={<AdminRoute><AdsPerformance /></AdminRoute>} />
+        <Route path="/laporan-profit"     element={<AdminRoute><LaporanProfit /></AdminRoute>} />
+        <Route path="/ai-assistant"       element={<AdminRoute><AiAssistant /></AdminRoute>} />
         <Route path="/kalender"     element={<AdminRoute><Kalender /></AdminRoute>} />
 
         <Route path="*"             element={<Navigate to="/" replace />} />

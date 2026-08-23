@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
+import { useToast } from '../hooks/useToast';
 
 const ENTITAS_LIST = ['Creanimasi Studio', 'Flip Studio', 'Creillustra', 'Shuyou'];
 const DIVISI_OPTIONS = ['Admin', 'PM', 'Illustrator', 'Rigger', '3D Modeler', 'Developer', 'Marketing', 'Desainer'];
@@ -397,10 +398,10 @@ function ConfirmNonaktifModal({ anggota, onConfirm, onClose }) {
 const labelStyle = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 5, color: 'var(--text-2)' };
 
 export default function KelolAnggota() {
+  const { showToast } = useToast();
   const [semua, setSemua]     = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState('');
-  const [success, setSuccess] = useState('');
+  const [loadError, setLoadError] = useState('');
   const [tab, setTab]         = useState('Semua');
   const [search, setSearch]   = useState('');
   const [showNonaktif, setShowNonaktif] = useState(false);
@@ -408,12 +409,12 @@ export default function KelolAnggota() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError('');
+    setLoadError('');
     try {
       const res = await api.getTim(true);
       setSemua(res.data);
     } catch {
-      setError('Gagal memuat data anggota');
+      setLoadError('Gagal memuat data anggota');
     } finally {
       setLoading(false);
     }
@@ -421,34 +422,44 @@ export default function KelolAnggota() {
 
   useEffect(() => { load(); }, [load]);
 
-  const notify = (msg) => { setSuccess(msg); setTimeout(() => setSuccess(''), 3500); };
-
   const handleTambah = async (form) => {
-    await api.tambahTim(form);
-    notify(`${form.nama} berhasil ditambahkan`);
-    load();
+    try {
+      await api.tambahTim(form);
+      showToast(`${form.nama} berhasil ditambahkan`);
+      load();
+    } catch (err) {
+      showToast(err.message.replace(/^\d+: /, ''), 'error');
+    }
   };
 
   const handleEdit = async (form) => {
-    await api.updateTim(modal.data.id, form);
-    notify(`Data ${form.nama} berhasil diupdate`);
-    load();
+    try {
+      await api.updateTim(modal.data.id, form);
+      showToast(`Data ${form.nama} berhasil diupdate`);
+      load();
+    } catch (err) {
+      showToast(err.message.replace(/^\d+: /, ''), 'error');
+    }
   };
 
   const handleNonaktifkan = async () => {
-    await api.nonaktifkanTim(modal.data.id);
-    notify(`${modal.data.nama} dinonaktifkan`);
-    setModal(null);
-    load();
+    try {
+      await api.nonaktifkanTim(modal.data.id);
+      showToast(`${modal.data.nama} dinonaktifkan`, 'warning');
+      setModal(null);
+      load();
+    } catch (err) {
+      showToast(err.message.replace(/^\d+: /, ''), 'error');
+    }
   };
 
   const handleAktifkan = async (a) => {
     try {
       await api.aktifkanAnggota(a.id);
-      notify(`${a.nama} diaktifkan kembali`);
+      showToast(`${a.nama} diaktifkan kembali`);
       load();
     } catch (err) {
-      notify(`Gagal: ${err.message.replace(/^\d+: /, '')}`);
+      showToast(err.message.replace(/^\d+: /, ''), 'error');
     }
   };
 
@@ -523,12 +534,8 @@ export default function KelolAnggota() {
         />
       </div>
 
-      {/* Notif */}
-      {success && (
-        <div className="alert alert-green" style={{ marginBottom: 14 }}><span>✅</span><div>{success}</div></div>
-      )}
-      {error && (
-        <div className="alert alert-red" style={{ marginBottom: 14 }}><span>⚠️</span><div>{error}</div></div>
+      {loadError && (
+        <div className="alert alert-red" style={{ marginBottom: 14 }}><span>⚠️</span><div>{loadError}</div></div>
       )}
 
       {loading && (
@@ -637,7 +644,7 @@ export default function KelolAnggota() {
         <BuatAkunModal
           anggota={modal.data}
           onClose={() => setModal(null)}
-          onSuccess={() => { notify(`Akun ${modal.data.nama} berhasil dibuat`); load(); }}
+          onSuccess={() => { showToast(`Akun ${modal.data.nama} berhasil dibuat`); load(); }}
         />
       )}
     </div>

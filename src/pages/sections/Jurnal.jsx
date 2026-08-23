@@ -3,6 +3,7 @@ import { TIPE_COLOR } from '../../data/tim';
 import { useTim } from '../../hooks/useTim';
 import { api } from '../../services/api';
 import { downloadCsv } from '../../utils/exportCsv';
+import EmptyState from '../../components/EmptyState';
 
 // Pisah catatan_mentor menjadi pesan member dan reply admin.
 // Format baru: "pesan_member\n[ADMIN_REPLY]\nreply_admin"
@@ -60,9 +61,11 @@ export function Jurnal() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Jurnal minggu ini: 7 hari terakhir
-  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const thisWeek = entries.filter(e => new Date(e.tanggal_jurnal || e.created_at) >= weekAgo);
+  // Jurnal minggu ini: sejak Senin pekan berjalan
+  const senin = new Date();
+  senin.setDate(senin.getDate() - (senin.getDay() === 0 ? 6 : senin.getDay() - 1));
+  senin.setHours(0, 0, 0, 0);
+  const thisWeek = entries.filter(e => new Date(e.tanggal_jurnal || e.created_at) >= senin);
 
   // Map nama → entri terbaru minggu ini
   const byNama = {};
@@ -281,9 +284,7 @@ export function Jurnal() {
                   </button>
                 )}
                 {filtered.length === 0 && (
-                  <div style={{ textAlign:'center', padding:'12px 0', fontSize:12, color:'var(--text-3)' }}>
-                    Belum ada jurnal dari {filterNama}.
-                  </div>
+                  <EmptyState icon="📓" title={`Belum ada jurnal dari ${filterNama}`} subtitle="Jurnal akan muncul di sini setelah anggota mengisi refleksi mingguan." />
                 )}
               </>
             );

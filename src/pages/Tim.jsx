@@ -518,11 +518,12 @@ export default function Tim() {
 
       {/* Hasil & grid */}
       {filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-2)' }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>🔍</div>
-          <div style={{ fontSize: 13 }}>Tidak ada anggota yang cocok dengan filter ini.</div>
+        <div className="empty">
+          <div className="empty-icon">🔍</div>
+          <div className="empty-title">Tidak ada anggota yang cocok</div>
+          <div className="empty-sub">Coba ubah filter atau kata kunci pencarian.</div>
           <button onClick={() => { setSearch(''); setFilter('Semua'); setTipe('Semua'); }}
-            className="btn" style={{ marginTop: 12, fontSize: 12 }}>Reset filter</button>
+            className="btn" style={{ marginTop: 8, fontSize: 12 }}>Reset Filter</button>
         </div>
       ) : (
         <>

@@ -309,8 +309,10 @@ export function Reward() {
           )}
 
           {rewardList.length === 0 ? (
-            <div style={{ textAlign:'center', padding:'20px 0', fontSize:12, color:'var(--text-3)' }}>
-              Belum ada reward yang dicatat.
+            <div className="empty">
+              <div className="empty-icon">🏅</div>
+              <div className="empty-title">Belum ada reward yang dicatat</div>
+              <div className="empty-sub">Reward akan muncul di sini setelah diisi via form di atas.</div>
             </div>
           ) : (
           <>

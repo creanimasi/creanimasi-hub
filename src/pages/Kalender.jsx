@@ -179,7 +179,8 @@ export default function Kalender() {
                 {selected} {BULAN_NAMES[bulan]} {tahun}
               </div>
               {selectedEvs.length === 0 ? (
-                <div style={{ fontSize:12, color:'var(--text-3)', textAlign:'center', padding:'12px 0' }}>
+                <div style={{ textAlign:'center', padding:'16px 0', fontSize:12, color:'var(--text-3)' }}>
+                  <div style={{ fontSize:24, marginBottom:4, opacity:.4 }}>📅</div>
                   Tidak ada kegiatan hari ini.
                 </div>
               ) : selectedEvs.map((e, i) => (
@@ -218,7 +219,8 @@ export default function Kalender() {
                 </div>
               ))}
             {events.filter(e => e.date >= todayStr).length === 0 && (
-              <div style={{ fontSize:12, color:'var(--text-3)', textAlign:'center', padding:'12px 0' }}>
+              <div style={{ textAlign:'center', padding:'16px 0', fontSize:12, color:'var(--text-3)' }}>
+                <div style={{ fontSize:24, marginBottom:4, opacity:.4 }}>🗓️</div>
                 Tidak ada kegiatan mendatang.
               </div>
             )}

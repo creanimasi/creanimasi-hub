@@ -15,9 +15,10 @@ async function request(method, path, body) {
     },
     body: body ? JSON.stringify(body) : undefined,
   });
-  const data = await res.json();
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch { data = {}; }
   if (!res.ok) {
-    // Sertakan status code agar useAuth bisa bedakan 401 vs error lain
     throw new Error(`${res.status}: ${data.error || 'Request gagal'}`);
   }
   return data;
@@ -128,6 +129,11 @@ export const api = {
   createSesiAbsensi: (data)                           => request('POST', '/absensi/sesi', data),
   updateAbsensi:     (sesiId, nama, status, catatan)  =>
     request('PATCH', `/absensi/${sesiId}/${encodeURIComponent(nama)}`, { status, catatan }),
+  editSesiAbsensi:   (id, data)                       => request('PUT', `/absensi/sesi/${id}`, data),
+  deleteSesiAbsensi: (id)                             => request('DELETE', `/absensi/sesi/${id}`),
+
+  // Laporan Bulanan
+  getLaporanBulanan: (bulan) => request('GET', `/laporan-bulanan?bulan=${bulan}`),
 
   // Friday Win
   getFridayWin:    ()       => request('GET', '/friday-win'),
@@ -137,4 +143,20 @@ export const api = {
   // Sesi 1-on-1
   getSesi1on1:  ()     => request('GET', '/sesi-1on1'),
   postSesi1on1: (data) => request('POST', '/sesi-1on1', data),
+
+  // Meta Ads
+  getMetaBrands:      ()                          => request('GET', '/meta-ads/brands'),
+  createMetaBrand:    (data)                      => request('POST', '/meta-ads/brands', data),
+  updateMetaBrand:    (id, data)                  => request('PUT', `/meta-ads/brands/${id}`, data),
+  updateMetaBrandSettings: (id, data)             => request('PUT', `/meta-ads/brands/${id}/settings`, data),
+  getMetaInsights:    (brandId, bulan)            => request('GET', `/meta-ads/insights?${brandId ? `brand_id=${brandId}&` : ''}${bulan ? `bulan=${bulan}` : ''}`),
+  saveMetaReport:     (data)                      => request('POST', '/meta-ads/report', data),
+  getMetaLaporan:     (bulan, brandId)            => request('GET', `/meta-ads/laporan?bulan=${bulan}${brandId ? `&brand_id=${brandId}` : ''}`),
+  syncMetaBrand:      (brandId, tanggal)          => request('POST', `/meta-ads/sync/${brandId}`, tanggal ? { tanggal } : {}),
+  syncMetaRange:      (brandId, dari, sampai)     => request('POST', `/meta-ads/sync-range/${brandId}`, { dari, sampai }),
+  syncAllMetaBrands:  (tanggal)                   => request('POST', '/meta-ads/sync-all', tanggal ? { tanggal } : {}),
+
+  // AI
+  getAiInsightAds: (bulan, brandId) => request('POST', '/ai/insight-ads', { bulan, ...(brandId ? { brand_id: brandId } : {}) }),
+  aiChat:          (pesan, riwayat) => request('POST', '/ai/chat', { pesan, riwayat }),
 };

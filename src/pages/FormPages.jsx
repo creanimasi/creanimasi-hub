@@ -95,11 +95,11 @@ export function PageRiwayatJurnal() {
       </div>
 
       {entries.length === 0 ? (
-        <div style={{ textAlign:'center', padding:'40px 20px' }}>
-          <div style={{ fontSize:36, marginBottom:12 }}>📓</div>
-          <div style={{ fontSize:14, fontWeight:600, marginBottom:6 }}>Belum ada jurnal</div>
-          <div style={{ fontSize:12, color:'var(--text-2)', marginBottom:16 }}>Jurnal pertamamu akan muncul di sini setelah kamu mengisinya.</div>
-          <button className="btn btn-primary" onClick={() => navigate('/jurnal/isi')}>Isi Jurnal Sekarang</button>
+        <div className="empty">
+          <div className="empty-icon">📓</div>
+          <div className="empty-title">Belum ada jurnal</div>
+          <div className="empty-sub">Jurnal pertamamu akan muncul di sini setelah kamu mengisinya.</div>
+          <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={() => navigate('/jurnal/isi')}>Isi Jurnal Sekarang</button>
         </div>
       ) : entries.map((j, i) => {
         const isOpen    = expanded === i;

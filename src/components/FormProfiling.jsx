@@ -7,7 +7,12 @@ import { DIVISI_TO_PROFILING_ID } from '../data/constants';
 const NAMA_TO_DIVISI_ID = DIVISI_TO_PROFILING_ID;
 
 // ── FIELD HELPERS ─────────────────────────────────────────────────────────
-function Field({ label, required, hint, children }) {
+function FieldError({ msg }) {
+  if (!msg) return null;
+  return <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>⚠ {msg}</div>;
+}
+
+function Field({ label, required, hint, error, children }) {
   return (
     <div style={{ marginBottom: 14 }}>
       <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 5 }}>
@@ -15,6 +20,7 @@ function Field({ label, required, hint, children }) {
         {hint && <span style={{ fontWeight: 400, color: 'var(--text-2)', marginLeft: 4 }}>— {hint}</span>}
       </label>
       {children}
+      <FieldError msg={error} />
     </div>
   );
 }
@@ -54,7 +60,7 @@ function Rating({ label, name, value, onChange, max = 5 }) {
 }
 
 // ── BAGIAN UMUM (semua divisi) ─────────────────────────────────────────────
-function BagianUmum({ form, set }) {
+function BagianUmum({ form, set, errors = {} }) {
   return (
     <div className="card" style={{ marginBottom: 14 }}>
       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--green)' }}>👤 Identitas & Latar Belakang</div>
@@ -62,8 +68,9 @@ function BagianUmum({ form, set }) {
         <Field label="Usia">
           <input type="number" value={form.usia} onChange={e => set('usia', e.target.value)} placeholder="Umur" min={15} max={60} />
         </Field>
-        <Field label="Tanggal bergabung" required>
-          <input type="date" value={form.tanggal_bergabung} onChange={e => set('tanggal_bergabung', e.target.value)} required />
+        <Field label="Tanggal bergabung" required error={errors.tanggal_bergabung}>
+          <input type="date" value={form.tanggal_bergabung} onChange={e => set('tanggal_bergabung', e.target.value)}
+            style={{ borderColor: errors.tanggal_bergabung ? 'var(--red)' : undefined }} />
         </Field>
         <Field label="Domisili kota">
           <input value={form.domisili} onChange={e => set('domisili', e.target.value)} placeholder="Kota" />
@@ -102,21 +109,23 @@ function BagianKarakter({ form, set }) {
   );
 }
 
-function BagianMotivasi({ form, set }) {
+function BagianMotivasi({ form, set, errors = {} }) {
   return (
     <div className="card" style={{ marginBottom: 14 }}>
       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--amber)' }}>🔥 Motivasi & Arah</div>
-      <Field label="Hal yang paling membuatmu semangat kerja" required>
+      <Field label="Hal yang paling membuatmu semangat kerja" required error={errors.semangat_kerja}>
         <input value={form.semangat_kerja} onChange={e => set('semangat_kerja', e.target.value)}
-          placeholder="Apa yang bikin kamu bersemangat?" required />
+          placeholder="Apa yang bikin kamu bersemangat?"
+          style={{ borderColor: errors.semangat_kerja ? 'var(--red)' : undefined }} />
       </Field>
       <Field label="Hal yang paling menguras energimu">
         <input value={form.penguras_energi} onChange={e => set('penguras_energi', e.target.value)}
           placeholder="Apa yang paling melelahkan?" />
       </Field>
-      <Field label="Di mana kamu 1 tahun lagi?" required>
+      <Field label="Di mana kamu 1 tahun lagi?" required error={errors.target_1_tahun}>
         <textarea rows={2} value={form.target_1_tahun} onChange={e => set('target_1_tahun', e.target.value)}
-          placeholder="Visi atau target kamu 1 tahun ke depan..." required style={{ resize: 'vertical', minHeight: 56 }} />
+          placeholder="Visi atau target kamu 1 tahun ke depan..."
+          style={{ resize: 'vertical', minHeight: 56, borderColor: errors.target_1_tahun ? 'var(--red)' : undefined }} />
       </Field>
       <Field label="Skill yang paling ingin dikuasai">
         <input value={form.skill_ingin_dikuasai} onChange={e => set('skill_ingin_dikuasai', e.target.value)}
@@ -126,9 +135,10 @@ function BagianMotivasi({ form, set }) {
         <Select value={form.tertarik_memimpin} onChange={v => set('tertarik_memimpin', v)}
           options={['Ya, sangat tertarik','Mungkin, kalau sudah siap','Belum tertarik saat ini']} />
       </Field>
-      <Field label="Alasan bergabung Flipspace" required>
+      <Field label="Alasan bergabung Flipspace" required error={errors.alasan_bergabung}>
         <textarea rows={2} value={form.alasan_bergabung} onChange={e => set('alasan_bergabung', e.target.value)}
-          placeholder="Kenapa kamu bergabung di Flipspace?" required style={{ resize: 'vertical', minHeight: 56 }} />
+          placeholder="Kenapa kamu bergabung di Flipspace?"
+          style={{ resize: 'vertical', minHeight: 56, borderColor: errors.alasan_bergabung ? 'var(--red)' : undefined }} />
       </Field>
       <Field label="1 hal yang ingin diubah atau diperbaiki di Flipspace">
         <textarea rows={2} value={form.ingin_diubah} onChange={e => set('ingin_diubah', e.target.value)}
@@ -332,6 +342,7 @@ export default function FormProfiling({ onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     if (user?.nama) {
@@ -341,13 +352,26 @@ export default function FormProfiling({ onSuccess }) {
     }
   }, [user, tim]);
 
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const set = (k, v) => {
+    setForm(f => ({ ...f, [k]: v }));
+    if (errors[k]) setErrors(e => ({ ...e, [k]: '' }));
+  };
+
+  const validate = () => {
+    const e = {};
+    if (!form.tanggal_bergabung) e.tanggal_bergabung = 'Tanggal bergabung wajib diisi';
+    if (!form.semangat_kerja?.trim()) e.semangat_kerja = 'Wajib diisi';
+    if (!form.target_1_tahun?.trim()) e.target_1_tahun = 'Wajib diisi';
+    if (!form.alasan_bergabung?.trim()) e.alasan_bergabung = 'Wajib diisi';
+    return e;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!divisi) { setError('Pilih divisimu dulu'); return; }
-    if (!form.nama) { setError('Nama wajib diisi'); return; }
-    setLoading(true); setError('');
+    if (!divisi) { setError('Divisi tidak terdeteksi — hubungi admin'); return; }
+    const errs = validate();
+    if (Object.keys(errs).length > 0) { setErrors(errs); setError('Ada field yang belum diisi'); return; }
+    setLoading(true); setError(''); setErrors({});
     try {
       await api.simpanProfiling(divisi, { ...form, divisi });
       setSuccess(true);
@@ -368,7 +392,12 @@ export default function FormProfiling({ onSuccess }) {
 
   return (
     <form onSubmit={handleSubmit}>
-      {error && <div className="alert alert-red" style={{ marginBottom: 16 }}><span>⚠️</span><div>{error}</div></div>}
+      {error && Object.keys(errors).length > 0 && (
+        <div className="alert alert-red" style={{ marginBottom: 16 }}><span>⚠️</span><div>Lengkapi semua field yang ditandai di bawah</div></div>
+      )}
+      {error && Object.keys(errors).length === 0 && (
+        <div className="alert alert-red" style={{ marginBottom: 16 }}><span>⚠️</span><div>{error}</div></div>
+      )}
 
       {/* Identitas otomatis */}
       <div className="card" style={{ marginBottom: 16 }}>
@@ -438,10 +467,10 @@ export default function FormProfiling({ onSuccess }) {
             ))}
           </div>
 
-          <BagianUmum form={form} set={set} />
+          <BagianUmum form={form} set={set} errors={errors} />
           <TeknisDivisi divisi={divisi} form={form} set={set} />
           <BagianKarakter form={form} set={set} />
-          <BagianMotivasi form={form} set={set} />
+          <BagianMotivasi form={form} set={set} errors={errors} />
 
           <button type="submit" className="btn btn-primary"
             style={{ width: '100%', padding: '10px', fontSize: 14, justifyContent: 'center' }}

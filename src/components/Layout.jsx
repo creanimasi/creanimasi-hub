@@ -7,9 +7,49 @@ import { useTim } from '../hooks/useTim';
 import { api } from '../services/api';
 import { useNotifications } from '../hooks/useNotifications';
 import { usePresence } from '../hooks/usePresence';
+import { ToastContext, useToastState } from '../hooks/useToast';
 
 // Context agar komponen lain bisa akses online status
 export const PresenceContext = createContext({ onlineUsers: [], isOnline: () => false });
+
+// ── TOAST ────────────────────────────────────────────────────
+const TOAST_COLORS = {
+  success: { bg: 'var(--green-light, rgba(0,214,143,0.12))', border: 'rgba(0,214,143,0.3)', color: 'var(--green)', icon: '✓' },
+  error:   { bg: 'var(--red-light,   rgba(255,82,82,0.12))',  border: 'rgba(255,82,82,0.3)',  color: 'var(--red)',   icon: '✕' },
+  info:    { bg: 'var(--blue-light,  rgba(79,195,247,0.12))', border: 'rgba(79,195,247,0.3)', color: 'var(--blue)',  icon: 'ℹ' },
+  warning: { bg: 'var(--amber-light, rgba(255,184,48,0.12))', border: 'rgba(255,184,48,0.3)', color: 'var(--amber)', icon: '!' },
+};
+
+function ToastContainer({ toasts, removeToast }) {
+  if (!toasts.length) return null;
+  return (
+    <div style={{
+      position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
+      display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none',
+    }}>
+      {toasts.map(t => {
+        const c = TOAST_COLORS[t.type] || TOAST_COLORS.success;
+        return (
+          <div key={t.id} style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            background: 'var(--surface)', border: `1px solid ${c.border}`,
+            borderLeft: `3px solid ${c.color}`,
+            borderRadius: 10, padding: '10px 14px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+            fontSize: 13, fontWeight: 500, color: 'var(--text)',
+            pointerEvents: 'all', cursor: 'pointer',
+            animation: 'toastIn .2s ease',
+            maxWidth: 320,
+          }} onClick={() => removeToast(t.id)}>
+            <span style={{ color: c.color, fontWeight: 700, fontSize: 15, flexShrink: 0 }}>{c.icon}</span>
+            <span style={{ flex: 1 }}>{t.message}</span>
+          </div>
+        );
+      })}
+      <style>{`@keyframes toastIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }`}</style>
+    </div>
+  );
+}
 
 const PAGE_TITLES = {
   '/':            'Dashboard',
@@ -53,7 +93,7 @@ function getNow() {
 
 function ThemeToggle({ dark, toggle }) {
   return (
-    <button onClick={toggle} title={dark ? 'Mode terang' : 'Mode gelap'} style={{
+    <button onClick={toggle} title={dark ? 'Ganti ke mode terang' : 'Ganti ke mode gelap'} style={{
       width: 36, height: 36, borderRadius: 10,
       border: '1px solid var(--border-2)',
       background: 'var(--surface-2)',
@@ -65,7 +105,7 @@ function ThemeToggle({ dark, toggle }) {
       onMouseEnter={e => e.currentTarget.style.boxShadow = '0 0 12px rgba(0,214,143,0.2)'}
       onMouseLeave={e => e.currentTarget.style.boxShadow = ''}
     >
-      {dark ? '☀️' : '🎮'}
+      {dark ? '☀️' : '🌙'}
     </button>
   );
 }
@@ -203,23 +243,39 @@ export default function Layout({ children, path }) {
   const { user }  = useAuth();
   const [dark, toggleDark] = useDarkMode(user?.tema);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem('hub_sidebar_collapsed') === '1'; } catch { return false; }
+  });
   const title     = PAGE_TITLES[path] || 'Flipspace Hub';
   const greeting  = getGreeting();
   const isHome    = path === '/';
   const firstName = user?.nama?.split(' ')[0] || 'Kamu';
   const isAdmin   = user?.role === 'admin';
 
+  const handleToggleCollapse = () => {
+    setSidebarCollapsed(c => {
+      const next = !c;
+      try { localStorage.setItem('hub_sidebar_collapsed', next ? '1' : '0'); } catch {}
+      return next;
+    });
+  };
+
   // Real-time presence
   const presence  = usePresence(user);
   const tim       = useTim();
 
+  // Toast
+  const toast = useToastState();
+
   return (
+    <ToastContext.Provider value={toast}>
     <PresenceContext.Provider value={presence}>
-    <div className="app-layout">
+    <div className={`app-layout${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
       {/* Overlay untuk mobile */}
       <div className={`sidebar-overlay ${sidebarOpen ? 'mobile-open' : ''}`}
         onClick={() => setSidebarOpen(false)} />
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)}
+        collapsed={sidebarCollapsed} onToggleCollapse={handleToggleCollapse} />
       <div className="main-area">
         <header className="topbar">
           {/* Hamburger — mobile only */}
@@ -271,5 +327,7 @@ export default function Layout({ children, path }) {
       </div>
     </div>
     </PresenceContext.Provider>
+    <ToastContainer toasts={toast.toasts} removeToast={toast.removeToast} />
+    </ToastContext.Provider>
   );
 }
