@@ -1,4 +1,4 @@
-import { useContext } from 'react';
+import { useContext, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { TIPE_COLOR } from '../data/tim';
 import { useAuth } from '../hooks/useAuth';
@@ -7,51 +7,47 @@ import { PresenceContext } from './Layout';
 
 const NAV_ADMIN = [
   { section: 'Utama' },
-  { path: '/',           label: 'Dashboard',           badge: null,              badgeType: '' },
-  { path: '/ai-assistant', label: 'AI Assistant',      badge: null,              badgeType: '' },
-  { path: '/tim',        label: 'Tim',                 badge: null,              badgeType: 'green' },
-  { path: '/anggota',    label: 'Kelola Anggota',       badge: null,              badgeType: '' },
-  { path: '/modul',      label: 'Modul Belajar',       badge: null,              badgeType: '' },
-  { path: '/jurnal',     label: 'Jurnal Refleksi',     badge: null,              badgeType: '' },
-  { section: 'Form' },
-  { path: '/laporan-admin',  label: 'Laporan Mingguan Admin',  badge: null, badgeType: '' },
-  { path: '/jurnal/isi', label: 'Isi Jurnal Mingguan', badge: null, badgeType: '' },
-  { path: '/profiling',  label: 'Form Profiling Tim',  badge: null, badgeType: '' },
-  { section: 'Operasional' },
-  { path: '/sop',        label: 'SOP Brief',           badge: null, badgeType: '' },
-  { path: '/reward',     label: 'Reward & KPI',        badge: null, badgeType: '' },
-  { path: '/workshop',   label: 'Workshop JRUHUB',     badge: null, badgeType: '' },
-  { path: '/absensi',   label: 'Absensi Tim',          badge: null, badgeType: '' },
-  { section: 'Analitik' },
-  { path: '/performa',   label: 'Grafik Performa',     badge: null, badgeType: '' },
-  { path: '/laporan-harian',  label: 'Laporan Harian',          badge: null, badgeType: '' },
-  { path: '/laporan-mentor',  label: 'Laporan Mingguan Mentor', badge: null, badgeType: '' },
-  { path: '/laporan-bulanan', label: 'Laporan Bulanan',         badge: null, badgeType: '' },
-  { section: 'Marketing' },
-  { path: '/ads-performance', label: 'Ads Performance',         badge: null, badgeType: '' },
-  { path: '/laporan-profit',  label: 'Laporan Profit',          badge: null, badgeType: '' },
-  { section: 'Pengembangan' },
-  { path: '/friday-win', label: 'Friday Win',          badge: null, badgeType: '' },
-  { path: '/kalender',   label: 'Kalender',             badge: null, badgeType: '' },
-  { path: '/skb',        label: 'SKB',                 badge: null, badgeType: '' },
-  { path: '/1on1',       label: 'Sesi 1-on-1',         badge: null, badgeType: '' },
-  { path: '/kader',      label: 'Kader Potensial',     badge: null, badgeType: '' },
+  { path: '/',              label: 'Dashboard',         badgeType: '' },
+  { path: '/ai-assistant',  label: 'AI Assistant',      badgeType: '' },
+  { path: '/kalender',      label: 'Kalender',          badgeType: '' },
+  { section: 'Tim' },
+  { path: '/tim',           label: 'Direktori Tim',     badgeType: 'green' },
+  { path: '/anggota',       label: 'Kelola Anggota',    badgeType: '' },
+  { path: '/performa',      label: 'Performa',          badgeType: '' },
+  { path: '/absensi',       label: 'Absensi',           badgeType: '' },
+  { section: 'Aksi Cepat' },
+  { path: '/jurnal/isi',    label: 'Isi Jurnal',        badgeType: 'green' },
+  { path: '/laporan-admin', label: 'Laporan Mingguan',  badgeType: '' },
+  { path: '/profiling',     label: 'Form Profiling',    badgeType: '' },
+  { section: 'Program' },
+  { path: '/modul',         label: 'Modul Belajar',     badgeType: '' },
+  { path: '/workshop',      label: 'Workshop',          badgeType: '' },
+  { path: '/friday-win',    label: 'Friday Win',        badgeType: '' },
+  { path: '/1on1',          label: 'Sesi 1-on-1',       badgeType: '' },
+  { path: '/skb',           label: 'SKB',               badgeType: '' },
+  { path: '/reward',        label: 'Reward & KPI',      badgeType: '' },
+  { path: '/sop',           label: 'SOP Brief',         badgeType: '' },
+  { path: '/kader',         label: 'Kader Potensial',   badgeType: '' },
+  { group: 'Laporan' },
+  { path: '/laporan-harian',   label: 'Laporan Harian',   badgeType: '', sub: true },
+  { path: '/laporan-mentor',   label: 'Lap. Mingguan Mentor', badgeType: '', sub: true },
+  { path: '/laporan-bulanan',  label: 'Laporan Bulanan',  badgeType: '', sub: true },
+  { path: '/ads-performance',  label: 'Ads Performance',  badgeType: '', sub: true },
+  { path: '/laporan-profit',   label: 'Laporan Profit',   badgeType: '', sub: true },
 ];
 
 const NAV_MEMBER = [
-  { section: 'Saya' },
-  { path: '/',           label: 'Dashboard Saya',      badge: null, badgeType: '' },
-  { path: '/modul',      label: 'Modul Belajar',       badge: null, badgeType: '' },
-  { section: 'Isi Data' },
-  { path: '/jurnal/isi',     label: 'Isi Jurnal Mingguan', badge: null, badgeType: '' },
-  { path: '/jurnal/riwayat', label: 'Riwayat Jurnal',      badge: null, badgeType: '' },
-  { path: '/profiling',      label: 'Form Profiling',       badge: null, badgeType: '' },
-  { section: 'Referensi' },
-  { path: '/sop',        label: 'SOP Brief',           badge: null, badgeType: '' },
-  { section: 'Analitik' },
-  { path: '/performa',      label: 'Grafik Performa',      badge: null, badgeType: '' },
-  { section: 'Inisiatif' },
-  { path: '/skb',        label: 'Ajukan SKB',          badge: null, badgeType: '' },
+  { section: 'Utama' },
+  { path: '/',              label: 'Dashboard',         badgeType: '' },
+  { path: '/modul',         label: 'Modul Belajar',     badgeType: '' },
+  { path: '/performa',      label: 'Grafik Performa',   badgeType: '' },
+  { section: 'Aksi Cepat' },
+  { path: '/jurnal/isi',    label: 'Isi Jurnal',        badgeType: 'green' },
+  { path: '/jurnal/riwayat',label: 'Riwayat Jurnal',    badgeType: '' },
+  { path: '/profiling',     label: 'Form Profiling',    badgeType: '' },
+  { section: 'Program' },
+  { path: '/sop',           label: 'SOP Brief',         badgeType: '' },
+  { path: '/skb',           label: 'Ajukan SKB',        badgeType: '' },
 ];
 
 const ICONS = {
@@ -92,11 +88,16 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
   const timAktif       = tim;
   const isAdmin        = user?.role === 'admin';
   const isAdminDivisi  = !isAdmin && tim.some(m => m.nama === user?.nama && m.divisi === 'Admin');
-  const baseNav        = isAdmin ? NAV_ADMIN : NAV_MEMBER;
-  const NAV            = (!isAdmin && isAdminDivisi)
+  const [laporanOpen, setLaporanOpen] = useState(() => {
+    const LAPORAN_PATHS = ['/laporan-harian','/laporan-mentor','/laporan-bulanan','/ads-performance','/laporan-profit'];
+    return LAPORAN_PATHS.includes(location.pathname);
+  });
+
+  const baseNav = isAdmin ? NAV_ADMIN : NAV_MEMBER;
+  const NAV = (!isAdmin && isAdminDivisi)
     ? baseNav.map(item =>
         item.path === '/jurnal/isi'
-          ? [{ path: '/laporan-admin', label: 'Laporan Mingguan Admin', badge: null, badgeType: '' }, item]
+          ? [{ path: '/laporan-admin', label: 'Laporan Mingguan', badgeType: '' }, item]
           : item
       ).flat()
     : baseNav;
@@ -155,24 +156,80 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
       <div className="sidebar-scroll">
       {/* Nav */}
       <nav className="sidebar-nav">
-        {NAV.map((item, i) =>
-          item.section ? (
-            !collapsed && <div key={i} className="nav-section">{item.section}</div>
-          ) : (
+        {NAV.map((item, i) => {
+          /* Section header */
+          if (item.section) {
+            if (collapsed) return null;
+            return <div key={i} className="nav-section">{item.section}</div>;
+          }
+
+          /* Collapsible group header (Laporan) */
+          if (item.group) {
+            const LAPORAN_PATHS = ['/laporan-harian','/laporan-mentor','/laporan-bulanan','/ads-performance','/laporan-profit'];
+            const anyActive = LAPORAN_PATHS.includes(location.pathname);
+            if (collapsed) return (
+              <div key={i}
+                className={`nav-item nav-item-collapsed${anyActive ? ' active' : ''}`}
+                title="Laporan"
+                onClick={() => { setLaporanOpen(o => !o); }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:18,height:18}}>
+                  <rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/>
+                  <rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>
+                </svg>
+              </div>
+            );
+            return (
+              <div key={i}
+                className={`nav-item${anyActive ? ' active' : ''}`}
+                onClick={() => setLaporanOpen(o => !o)}
+                style={{ userSelect: 'none' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:15,height:15,flexShrink:0}}>
+                  <rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/>
+                  <rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>
+                </svg>
+                <span style={{flex:1}}>Laporan</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                  style={{width:12,height:12,flexShrink:0,transition:'transform .2s',transform:laporanOpen?'rotate(180deg)':'none'}}>
+                  <polyline points="6,9 12,15 18,9"/>
+                </svg>
+              </div>
+            );
+          }
+
+          /* Sub-items (inside Laporan group) — only show when open */
+          if (item.sub) {
+            if (!laporanOpen && !collapsed) return null;
+            return (
+              <div key={item.path}
+                className={`nav-item${location.pathname === item.path ? ' active' : ''}${collapsed ? ' nav-item-collapsed' : ' nav-item-sub'}`}
+                onClick={() => goTo(item.path)}
+                title={item.label}>
+                {collapsed
+                  ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:18,height:18}}>
+                      <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/>
+                    </svg>
+                  : <><span className="nav-sub-dot"/>{item.label}</>
+                }
+              </div>
+            );
+          }
+
+          /* Regular nav item */
+          const isActive = location.pathname === item.path;
+          const isJurnal = item.path === '/jurnal/isi';
+          return (
             <div key={item.path}
-              className={`nav-item ${location.pathname === item.path ? 'active' : ''}${collapsed ? ' nav-item-collapsed' : ''}`}
+              className={`nav-item${isActive ? ' active' : ''}${collapsed ? ' nav-item-collapsed' : ''}${isJurnal && !collapsed ? ' nav-item-accent' : ''}`}
               onClick={() => goTo(item.path)}
               title={collapsed ? item.label : undefined}>
               {ICONS[item.path]}
-              {!collapsed && item.label}
-              {!collapsed && (item.path === '/tim' ? timAktif.length : item.badge) > 0 && (
-                <span className={`nav-badge ${item.badgeType}`}>
-                  {item.path === '/tim' ? timAktif.length : item.badge}
-                </span>
+              {!collapsed && <span style={{flex:1}}>{item.label}</span>}
+              {!collapsed && item.path === '/tim' && timAktif.length > 0 && (
+                <span className={`nav-badge ${item.badgeType}`}>{timAktif.length}</span>
               )}
             </div>
-          )
-        )}
+          );
+        })}
       </nav>
 
       {/* Team preview strip — admin only, hidden when collapsed */}

@@ -120,6 +120,34 @@ body {
 .nav-item-collapsed svg { width: 18px; height: 18px; }
 .nav-item-collapsed.active { box-shadow: none; border-left: 2px solid var(--green); }
 
+/* Sub-menu items inside collapsible Laporan group */
+.nav-item-sub {
+  padding-left: 32px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.nav-item-sub:hover { color: var(--text); }
+.nav-item-sub.active { color: var(--green); background: var(--green-light); }
+.nav-sub-dot {
+  display: inline-block;
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  margin-right: 8px;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+.nav-item-sub.active .nav-sub-dot { opacity: 1; }
+
+/* Accent item — Isi Jurnal */
+.nav-item-accent {
+  background: var(--green-light);
+  color: var(--green) !important;
+  font-weight: 600;
+  border: 1px solid rgba(0,214,143,0.15);
+}
+.nav-item-accent:hover { background: rgba(0,214,143,0.2); }
+
 /* subtle gradient accent on sidebar top */
 .sidebar::before {
   content: '';
