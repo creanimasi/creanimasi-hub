@@ -135,18 +135,18 @@ function BagianMotivasi({ form, set, errors = {} }) {
         <Select value={form.tertarik_memimpin} onChange={v => set('tertarik_memimpin', v)}
           options={['Ya, sangat tertarik','Mungkin, kalau sudah siap','Belum tertarik saat ini']} />
       </Field>
-      <Field label="Alasan bergabung Flipspace" required error={errors.alasan_bergabung}>
+      <Field label="Alasan bergabung Creanimasi" required error={errors.alasan_bergabung}>
         <textarea rows={2} value={form.alasan_bergabung} onChange={e => set('alasan_bergabung', e.target.value)}
-          placeholder="Kenapa kamu bergabung di Flipspace?"
+          placeholder="Kenapa kamu bergabung di Creanimasi?"
           style={{ resize: 'vertical', minHeight: 56, borderColor: errors.alasan_bergabung ? 'var(--red)' : undefined }} />
       </Field>
-      <Field label="1 hal yang ingin diubah atau diperbaiki di Flipspace">
+      <Field label="1 hal yang ingin diubah atau diperbaiki di Creanimasi">
         <textarea rows={2} value={form.ingin_diubah} onChange={e => set('ingin_diubah', e.target.value)}
           placeholder="Kalau ada 1 hal yang bisa kamu ubah, apa itu?" style={{ resize: 'vertical', minHeight: 56 }} />
       </Field>
       <div style={{ marginBottom: 14 }}>
         <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 8 }}>
-          Kepuasan perkembangan diri di Flipspace (1–10) *
+          Kepuasan perkembangan diri di Creanimasi (1–10) *
           <span style={{ marginLeft: 8, fontWeight: 700, color: form.kepuasan_diri >= 7 ? 'var(--green)' : form.kepuasan_diri >= 5 ? 'var(--amber)' : 'var(--red)' }}>
             {form.kepuasan_diri}/10
           </span>
@@ -386,7 +386,7 @@ export default function FormProfiling({ onSuccess }) {
     <div style={{ textAlign: 'center', padding: 40 }}>
       <div style={{ fontSize: 40, marginBottom: 12 }}>🎉</div>
       <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--green)' }}>Profiling berhasil disimpan!</div>
-      <div style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 4 }}>Data kamu sudah masuk ke Command Center Flipspace.</div>
+      <div style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 4 }}>Data kamu sudah masuk ke Command Center Creanimasi.</div>
     </div>
   );
 

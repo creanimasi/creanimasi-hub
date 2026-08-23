@@ -75,10 +75,10 @@ export default function Login({ onLogin }) {
             boxShadow: '0 0 24px rgba(0,214,143,0.2)',
             padding: 8, overflow: 'hidden',
           }}>
-            <img src="/logo192.png" alt="Flipspace" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+            <img src="/logo192.png" alt="Creanimasi" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
           <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--text)' }}>
-            Flipspace<span style={{ color: 'var(--green)' }}>.</span>
+            Creanimasi<span style={{ color: 'var(--green)' }}>.</span>
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4, fontWeight: 500,
             textTransform: 'uppercase', letterSpacing: '0.08em' }}>

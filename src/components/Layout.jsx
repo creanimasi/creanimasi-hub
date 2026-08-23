@@ -246,7 +246,7 @@ export default function Layout({ children, path }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try { return localStorage.getItem('hub_sidebar_collapsed') === '1'; } catch { return false; }
   });
-  const title     = PAGE_TITLES[path] || 'Flipspace Hub';
+  const title     = PAGE_TITLES[path] || 'Creanimasi Hub';
   const greeting  = getGreeting();
   const isHome    = path === '/';
   const firstName = user?.nama?.split(' ')[0] || 'Kamu';

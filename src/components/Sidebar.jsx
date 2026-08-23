@@ -113,7 +113,7 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
       <div className="sidebar-logo">
         <img
           src="/logo192.png"
-          alt="Flipspace"
+          alt="Creanimasi"
           style={{
             width: 30, height: 30, borderRadius: 8, flexShrink: 0,
             background: 'var(--green-light)',
@@ -123,7 +123,7 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
         />
         {!collapsed && (
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="sidebar-logo-name">Flipspace</div>
+            <div className="sidebar-logo-name">Creanimasi</div>
             <div className="sidebar-logo-sub">Internal Hub</div>
           </div>
         )}
