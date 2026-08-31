@@ -1,3 +1,4 @@
+require('dotenv').config({ override: true, path: require('path').join(__dirname, '.env') });
 // ══════════════════════════════════════════════════
 // CREANIMASI INTERNAL HUB — Backend API Routes
 // Tambahkan ke server Node.js CRM_Creanimasi yang ada
@@ -109,15 +110,36 @@ router.get('/profiling/me', authMiddleware, async (req, res) => {
 
 // ── JURNAL MINGGUAN ───────────────────────────────
 
+// Auto-migrate kolom request_1on1
+;(async () => {
+  try {
+    await pool.query(`ALTER TABLE jurnal_mingguan ADD COLUMN IF NOT EXISTS request_1on1 BOOLEAN DEFAULT FALSE`);
+    await pool.query(`ALTER TABLE jurnal_mingguan ADD COLUMN IF NOT EXISTS catatan_request TEXT`);
+    await pool.query(`
+      CREATE OR REPLACE VIEW v_jurnal_stats AS
+      SELECT
+        nama,
+        COUNT(*)                                                                    AS total_jurnal,
+        ROUND(AVG(mood), 1)                                                         AS avg_mood,
+        ROUND(AVG(skor_karya), 1)                                                   AS avg_skor_karya,
+        ROUND(AVG(skor_skill), 1)                                                   AS avg_skor_skill,
+        MAX(tanggal_jurnal)                                                         AS jurnal_terakhir,
+        (MAX(tanggal_jurnal) >= DATE_TRUNC('week', CURRENT_DATE))                   AS isi_minggu_ini
+      FROM jurnal_mingguan
+      GROUP BY nama
+    `);
+  } catch (e) { console.error('Migration startup:', e.message); }
+})();
+
 // POST /api/hub/jurnal — simpan jurnal baru
-router.post('/jurnal', async (req, res) => {
+router.post('/jurnal', authMiddleware, async (req, res) => {
   try {
     const {
       divisi, level_karier, tanggal_jurnal,
       pencapaian_1, pencapaian_2, pencapaian_3,
       hambatan, pelajaran, target_depan,
       mood, skor_karya, skor_waktu, skor_komunikasi, skor_skill,
-      catatan_mentor
+      catatan_mentor, request_1on1, catatan_request
     } = req.body;
 
     const nama = req.user.nama;
@@ -131,14 +153,14 @@ router.post('/jurnal', async (req, res) => {
          pencapaian_1, pencapaian_2, pencapaian_3,
          hambatan, pelajaran, target_depan,
          mood, skor_karya, skor_waktu, skor_komunikasi, skor_skill,
-         catatan_mentor)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+         catatan_mentor, request_1on1, catatan_request)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
        RETURNING *`,
       [nama, divisi, level_karier, tanggal_jurnal || new Date(),
        pencapaian_1, pencapaian_2, pencapaian_3,
        hambatan, pelajaran, target_depan,
        mood, skor_karya, skor_waktu, skor_komunikasi, skor_skill,
-       catatan_mentor]
+       catatan_mentor, request_1on1 || false, catatan_request || null]
     );
 
     res.status(201).json({ success: true, data: result.rows[0] });
@@ -149,7 +171,7 @@ router.post('/jurnal', async (req, res) => {
 });
 
 // GET /api/hub/jurnal — semua jurnal (untuk dashboard)
-router.get('/jurnal', async (req, res) => {
+router.get('/jurnal', authMiddleware, async (req, res) => {
   try {
     const { nama, limit = 50 } = req.query;
     const cap = Math.min(parseInt(limit) || 50, 200);
@@ -170,7 +192,7 @@ router.get('/jurnal', async (req, res) => {
 });
 
 // GET /api/hub/jurnal/stats — statistik untuk dashboard
-router.get('/jurnal/stats', async (req, res) => {
+router.get('/jurnal/stats', authMiddleware, async (req, res) => {
   try {
     const result = await query(`SELECT * FROM v_jurnal_stats ORDER BY nama`);
     const mingguIni = result.rows.filter(r => r.isi_minggu_ini).length;
@@ -251,7 +273,7 @@ const PROFILING_TO_TIM_SKOR = {
 };
 
 // POST /api/hub/profiling/:divisi — simpan profiling
-router.post('/profiling/:divisi', async (req, res) => {
+router.post('/profiling/:divisi', authMiddleware, async (req, res) => {
   const { divisi } = req.params;
   const TABLE_MAP = {
     admin: 'profiling_admin',
@@ -281,8 +303,10 @@ router.post('/profiling/:divisi', async (req, res) => {
     );
 
     // Sinkronkan skor ke tabel tim agar kartu Tim ikut update
+    // Gunakan req.user.nama (dari JWT) — bukan req.body.nama — agar tidak bisa dispoof
+    const namaUser = req.user.nama;
     const skorMap = PROFILING_TO_TIM_SKOR[divisiKey];
-    if (result.rows[0] && req.body.nama) {
+    if (result.rows[0] && namaUser) {
       const skillVal      = req.body[skorMap.skill];
       const komunikasiVal = req.body[skorMap.komunikasi];
       const kriteriaVal   = req.body.skor_kerja_tim;
@@ -296,7 +320,7 @@ router.post('/profiling/:divisi', async (req, res) => {
       if (kepuasanVal   != null) { setValues.push(kepuasanVal);   setClauses.push(`kepuasan = $${setValues.length}`); }
 
       if (setClauses.length > 0) {
-        setValues.push(req.body.nama);
+        setValues.push(namaUser);
         const timR = await query(
           `UPDATE tim SET ${setClauses.join(', ')} WHERE nama = $${setValues.length}
            RETURNING skill, komunikasi, kriteria, kepuasan`,
@@ -305,7 +329,7 @@ router.post('/profiling/:divisi', async (req, res) => {
 
         if (timR.rows[0]) {
           const tipeBaru = hitungTipeTim(timR.rows[0]);
-          await query(`UPDATE tim SET tipe = $1 WHERE nama = $2`, [tipeBaru, req.body.nama]);
+          await query(`UPDATE tim SET tipe = $1 WHERE nama = $2`, [tipeBaru, namaUser]);
         }
       }
     }
@@ -318,7 +342,7 @@ router.post('/profiling/:divisi', async (req, res) => {
 });
 
 // GET /api/hub/profiling/all — semua profiling untuk dashboard
-router.get('/profiling/all', async (req, res) => {
+router.get('/profiling/all', authMiddleware, async (req, res) => {
   try {
     const result = await query(`SELECT * FROM v_profiling_all ORDER BY divisi, nama`);
     res.json({ success: true, data: result.rows });
@@ -328,7 +352,7 @@ router.get('/profiling/all', async (req, res) => {
 });
 
 // GET /api/hub/profiling/:divisi — profiling per divisi
-router.get('/profiling/:divisi', async (req, res) => {
+router.get('/profiling/:divisi', authMiddleware, async (req, res) => {
   const TABLE_MAP = {
     admin: 'profiling_admin', pm: 'profiling_pm',
     illustrator: 'profiling_illustrator', rigger: 'profiling_rigger', '3d': 'profiling_3d'
@@ -347,7 +371,8 @@ router.get('/profiling/:divisi', async (req, res) => {
 // ── REWARD ────────────────────────────────────────
 
 // POST /api/hub/reward — catat reward baru
-router.post('/reward', async (req, res) => {
+router.post('/reward', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin yang dapat mencatat reward' });
   try {
     const { tanggal, nama, kategori, trigger, bentuk, nominal, catatan } = req.body;
     const result = await query(
@@ -362,7 +387,7 @@ router.post('/reward', async (req, res) => {
 });
 
 // GET /api/hub/reward — semua reward
-router.get('/reward', async (req, res) => {
+router.get('/reward', authMiddleware, async (req, res) => {
   try {
     const result = await query(`SELECT * FROM reward_tracking ORDER BY tanggal DESC`);
     const totalBulanIni = await query(
@@ -380,7 +405,7 @@ router.get('/reward', async (req, res) => {
 });
 
 // PATCH /api/hub/reward/:id/status — update status reward
-router.patch('/reward/:id/status', async (req, res) => {
+router.patch('/reward/:id/status', authMiddleware, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
   try {
     const result = await query(
@@ -396,13 +421,16 @@ router.patch('/reward/:id/status', async (req, res) => {
 // ── SKB ───────────────────────────────────────────
 
 // POST /api/hub/skb — submit SKB baru
-router.post('/skb', async (req, res) => {
+router.post('/skb', authMiddleware, async (req, res) => {
   try {
     const {
-      tipe, nama, divisi, level, judul, deskripsi,
+      tipe, divisi, level, judul, deskripsi,
       latar_belakang, tujuan, output, timeline,
       kebutuhan, risiko, ukuran_sukses, komitmen
     } = req.body;
+
+    // Nama selalu dari JWT — admin bisa override via req.body.nama jika perlu mengajukan atas nama orang lain
+    const nama = req.user.role === 'admin' && req.body.nama ? req.body.nama : req.user.nama;
 
     if (!judul || !nama || !tipe) {
       return res.status(400).json({ error: 'Tipe, nama, dan judul wajib diisi' });
@@ -424,7 +452,7 @@ router.post('/skb', async (req, res) => {
 });
 
 // GET /api/hub/skb — semua SKB
-router.get('/skb', async (req, res) => {
+router.get('/skb', authMiddleware, async (req, res) => {
   try {
     const result = await query(`SELECT * FROM skb ORDER BY created_at DESC`);
     res.json({ success: true, data: result.rows });
@@ -434,7 +462,7 @@ router.get('/skb', async (req, res) => {
 });
 
 // PATCH /api/hub/skb/:id — update status SKB
-router.patch('/skb/:id', async (req, res) => {
+router.patch('/skb/:id', authMiddleware, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
   try {
     const { status, catatan_review, reviewer } = req.body;
@@ -580,12 +608,12 @@ router.patch('/tim/:id/aktifkan', authMiddleware, async (req, res) => {
 // ── DASHBOARD STATS ───────────────────────────────
 
 // GET /api/hub/dashboard — ringkasan untuk dashboard
-router.get('/dashboard', async (req, res) => {
+router.get('/dashboard', authMiddleware, async (req, res) => {
   try {
     const [jurnal, profiling, reward, skb] = await Promise.all([
       query(`SELECT COUNT(*) as total,
-               SUM(CASE WHEN tanggal_jurnal >= CURRENT_DATE-7 THEN 1 ELSE 0 END) as minggu_ini,
-               ROUND(AVG(CASE WHEN tanggal_jurnal >= CURRENT_DATE-7 THEN mood END),1) as avg_mood
+               COUNT(DISTINCT CASE WHEN tanggal_jurnal >= DATE_TRUNC('week', CURRENT_DATE) THEN nama END) as minggu_ini,
+               ROUND(AVG(CASE WHEN tanggal_jurnal >= DATE_TRUNC('week', CURRENT_DATE) THEN mood END),1) as avg_mood
              FROM jurnal_mingguan`),
       query(`SELECT COUNT(*) as total FROM v_profiling_all`),
       query(`SELECT COALESCE(SUM(nominal),0) as total_bulan_ini
@@ -744,6 +772,155 @@ router.patch('/absensi/:sesi_id/:nama', authMiddleware, async (req, res) => {
   } catch { res.status(500).json({ error: 'Gagal update absensi' }); }
 });
 
+// PUT /api/hub/absensi/sesi/:id — edit label/tanggal sesi
+router.put('/absensi/sesi/:id', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const { label, tanggal } = req.body;
+  if (!label?.trim() || !tanggal) return res.status(400).json({ error: 'Label dan tanggal wajib diisi' });
+  try {
+    const r = await hubPool.query(
+      'UPDATE absensi_sesi SET label=$1, tanggal=$2 WHERE id=$3 RETURNING *',
+      [label.trim(), tanggal, req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Sesi tidak ditemukan' });
+    res.json({ ok: true, data: r.rows[0] });
+  } catch { res.status(500).json({ error: 'Gagal update sesi' }); }
+});
+
+// DELETE /api/hub/absensi/sesi/:id — hapus sesi (cascade ke kehadiran)
+router.delete('/absensi/sesi/:id', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  try {
+    const r = await hubPool.query('DELETE FROM absensi_sesi WHERE id=$1 RETURNING id', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Sesi tidak ditemukan' });
+    res.json({ ok: true });
+  } catch { res.status(500).json({ error: 'Gagal hapus sesi' }); }
+});
+
+// ── LAPORAN BULANAN ───────────────────────────────────────────────────────────
+// GET /api/hub/laporan-bulanan?bulan=2026-07
+// Mengembalikan agregat per anggota untuk bulan tertentu
+router.get('/laporan-bulanan', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const { bulan } = req.query; // format: YYYY-MM
+  if (!bulan || !/^\d{4}-\d{2}$/.test(bulan)) return res.status(400).json({ error: 'Parameter bulan wajib (format: YYYY-MM)' });
+
+  const [tahun, bln] = bulan.split('-').map(Number);
+  const tglAwal = new Date(tahun, bln - 1, 1);
+  const tglAkhir = new Date(tahun, bln, 0, 23, 59, 59); // akhir bulan
+
+  try {
+    const [jurnalR, absensiSesiR, skbR, sesi1on1R, workshopR, rewardR] = await Promise.all([
+      hubPool.query(
+        `SELECT nama, tanggal_jurnal, mood, skor_karya, skor_waktu, skor_komunikasi, skor_skill, catatan_mentor
+         FROM jurnal_mingguan
+         WHERE tanggal_jurnal >= $1 AND tanggal_jurnal <= $2
+         ORDER BY nama, tanggal_jurnal`,
+        [tglAwal, tglAkhir]
+      ),
+      hubPool.query(
+        `SELECT s.id, s.tanggal, k.nama, k.status
+         FROM absensi_sesi s
+         JOIN absensi_kehadiran k ON k.sesi_id = s.id
+         WHERE s.tanggal >= $1 AND s.tanggal <= $2`,
+        [tglAwal, tglAkhir]
+      ),
+      hubPool.query(
+        `SELECT nama, status, created_at FROM skb
+         WHERE created_at >= $1 AND created_at <= $2`,
+        [tglAwal, tglAkhir]
+      ),
+      hubPool.query(
+        `SELECT anggota as nama, tanggal FROM sesi_1on1
+         WHERE tanggal >= $1 AND tanggal <= $2`,
+        [tglAwal, tglAkhir]
+      ),
+      hubPool.query('SELECT nama, hadir FROM workshop_kehadiran'),
+      hubPool.query(
+        `SELECT nama, nominal, kategori FROM reward_tracking
+         WHERE tanggal >= $1 AND tanggal <= $2`,
+        [tglAwal, tglAkhir]
+      ),
+    ]);
+
+    // Hitung total sesi absensi unik bulan ini
+    const sesiIds = [...new Set(absensiSesiR.rows.map(r => r.id))];
+    const totalSesiAbsensi = sesiIds.length;
+
+    // Total sesi workshop (semua layer × sesi, tidak per bulan karena tidak ada tanggal)
+    const totalSesiWorkshop = [...new Set(workshopR.rows.map(r => `${r.layer_id}_${r.sesi_idx}`))].length;
+
+    // Grup per nama
+    const namaSet = new Set([
+      ...jurnalR.rows.map(r => r.nama),
+      ...absensiSesiR.rows.map(r => r.nama),
+      ...skbR.rows.map(r => r.nama),
+      ...sesi1on1R.rows.map(r => r.nama),
+      ...workshopR.rows.map(r => r.nama),
+      ...rewardR.rows.map(r => r.nama),
+    ]);
+
+    const laporan = [...namaSet].sort().map(nama => {
+      // Jurnal
+      const jurnal = jurnalR.rows.filter(r => r.nama === nama);
+      const jmlJurnal = jurnal.length;
+      const avgMood      = jmlJurnal ? +(jurnal.reduce((s,r) => s + (r.mood||0), 0) / jmlJurnal).toFixed(1) : null;
+      const avgKarya     = jmlJurnal ? +(jurnal.reduce((s,r) => s + (r.skor_karya||0), 0) / jmlJurnal).toFixed(1) : null;
+      const avgWaktu     = jmlJurnal ? +(jurnal.reduce((s,r) => s + (r.skor_waktu||0), 0) / jmlJurnal).toFixed(1) : null;
+      const avgKomunikasi= jmlJurnal ? +(jurnal.reduce((s,r) => s + (r.skor_komunikasi||0), 0) / jmlJurnal).toFixed(1) : null;
+      const avgSkill     = jmlJurnal ? +(jurnal.reduce((s,r) => s + (r.skor_skill||0), 0) / jmlJurnal).toFixed(1) : null;
+      const avgKinerja   = (avgKarya && avgWaktu && avgKomunikasi && avgSkill)
+        ? +((avgKarya + avgWaktu + avgKomunikasi + avgSkill) / 4).toFixed(1) : null;
+      const catatanMentor = jurnal.filter(r => r.catatan_mentor).at(-1)?.catatan_mentor || null;
+
+      // Absensi
+      const absensi = absensiSesiR.rows.filter(r => r.nama === nama);
+      const hadirCount = absensi.filter(r => r.status === 'hadir' || r.status === 'terlambat').length;
+      const terlambatCount = absensi.filter(r => r.status === 'terlambat').length;
+      const pctAbsensi = totalSesiAbsensi > 0 ? Math.round(hadirCount / totalSesiAbsensi * 100) : null;
+
+      // Workshop
+      const ws = workshopR.rows.filter(r => r.nama === nama);
+      const wsHadir = ws.filter(r => r.hadir).length;
+      const pctWorkshop = totalSesiWorkshop > 0 ? Math.round(wsHadir / totalSesiWorkshop * 100) : null;
+
+      // SKB
+      const skb = skbR.rows.filter(r => r.nama === nama);
+      const skbDisetujui = skb.filter(r => r.status === 'disetujui' || r.status === 'selesai').length;
+
+      // 1-on-1
+      const sesi1on1 = sesi1on1R.rows.filter(r => r.nama === nama);
+      const tgl1on1Terakhir = sesi1on1.at(-1)?.tanggal || null;
+
+      // Reward
+      const reward = rewardR.rows.filter(r => r.nama === nama);
+      const totalReward = reward.reduce((s,r) => s + Number(r.nominal||0), 0);
+
+      // Status kesehatan (badge)
+      let status = 'baik';
+      if (pctAbsensi !== null && pctAbsensi < 70) status = 'risiko';
+      else if ((avgMood !== null && avgMood < 3) || (pctAbsensi !== null && pctAbsensi < 80)) status = 'perhatian';
+
+      return {
+        nama, jmlJurnal,
+        avgMood, avgKinerja, avgKarya, avgWaktu, avgKomunikasi, avgSkill,
+        catatanMentor,
+        totalSesiAbsensi, hadirCount, terlambatCount, pctAbsensi,
+        totalSesiWorkshop, wsHadir, pctWorkshop,
+        skbTotal: skb.length, skbDisetujui,
+        sesi1on1Total: sesi1on1.length, tgl1on1Terakhir,
+        totalReward, reward,
+        status,
+      };
+    });
+
+    res.json({ success: true, data: { bulan, laporan } });
+  } catch (err) {
+    console.error('Laporan bulanan error:', err);
+    res.status(500).json({ error: 'Gagal membuat laporan bulanan' });
+  }
+});
+
 // ── FRIDAY WIN ────────────────────────────────────────────────────────────────
 router.get('/friday-win', authMiddleware, async (req, res) => {
   try {
@@ -854,6 +1031,7 @@ router.get('/revenue', authMiddleware, async (req, res) => {
 });
 
 router.post('/revenue', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin yang dapat mencatat revenue' });
   const { bulan, tahun, nama, jumlah, target, catatan } = req.body;
   try {
     const r = await hubPool.query(`
@@ -1611,4 +1789,537 @@ router.delete('/laporan-admin/:id', authMiddleware, async (req, res) => {
   } catch { res.status(500).json({ error: 'Gagal hapus' }); }
 });
 
+// ── META ADS ──────────────────────────────────────────────────────────────────
+
+// Startup migration — idempotent
+(async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS meta_ads_brands (
+        id              SERIAL PRIMARY KEY,
+        nama            VARCHAR(100) NOT NULL UNIQUE,
+        ad_account_id   VARCHAR(50)  NOT NULL,
+        pixel_id        VARCHAR(50),
+        aktif           BOOLEAN      NOT NULL DEFAULT TRUE,
+        created_at      TIMESTAMPTZ  DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS meta_ads_insights (
+        id              SERIAL PRIMARY KEY,
+        brand_id        INTEGER      NOT NULL REFERENCES meta_ads_brands(id) ON DELETE CASCADE,
+        tanggal         DATE         NOT NULL,
+        spend           NUMERIC(12,2) NOT NULL DEFAULT 0,
+        klik            INTEGER      NOT NULL DEFAULT 0,
+        impresi         INTEGER      NOT NULL DEFAULT 0,
+        reach           INTEGER      NOT NULL DEFAULT 0,
+        cpm             NUMERIC(10,4),
+        ctr             NUMERIC(8,4),
+        purchase_value  NUMERIC(12,2),
+        purchase_count  INTEGER,
+        synced_at       TIMESTAMPTZ  DEFAULT NOW(),
+        UNIQUE (brand_id, tanggal)
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS meta_ads_reports (
+        id              SERIAL PRIMARY KEY,
+        brand_id        INTEGER      NOT NULL REFERENCES meta_ads_brands(id) ON DELETE CASCADE,
+        tanggal         DATE         NOT NULL,
+        jumlah_order    INTEGER      NOT NULL DEFAULT 0,
+        omzet           NUMERIC(12,2) NOT NULL DEFAULT 0,
+        hpp_persen      NUMERIC(5,2) NOT NULL DEFAULT 0,
+        catatan         TEXT,
+        created_by      VARCHAR(100),
+        updated_at      TIMESTAMPTZ  DEFAULT NOW(),
+        UNIQUE (brand_id, tanggal)
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS meta_ads_thresholds (
+        id              SERIAL PRIMARY KEY,
+        brand_id        INTEGER      NOT NULL REFERENCES meta_ads_brands(id) ON DELETE CASCADE UNIQUE,
+        max_spend_harian NUMERIC(12,2),
+        min_roas        NUMERIC(8,4),
+        updated_at      TIMESTAMPTZ  DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_meta_insights_brand_tgl ON meta_ads_insights (brand_id, tanggal)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_meta_reports_brand_tgl  ON meta_ads_reports  (brand_id, tanggal)`);
+    // Tambah kolom kurs_usd dan hpp_default ke meta_ads_brands
+    await pool.query(`ALTER TABLE meta_ads_brands ADD COLUMN IF NOT EXISTS kurs_usd NUMERIC(12,2) NOT NULL DEFAULT 16000`);
+    await pool.query(`ALTER TABLE meta_ads_brands ADD COLUMN IF NOT EXISTS hpp_default NUMERIC(5,2) NOT NULL DEFAULT 0`);
+    // Hapus hpp_persen dari meta_ads_reports (tidak lagi dipakai per-hari)
+    // Tidak drop kolom agar data lama aman — cukup abaikan di logic baru
+  } catch (e) { console.error('Meta Ads migration:', e.message); }
+})();
+
+// ── META ADS HELPER ──────────────────────────────────────────────────────────
+
+async function syncMetaInsights(brandId, adAccountId, tanggal) {
+  const token = process.env.META_ACCESS_TOKEN;
+  if (!token) throw new Error('META_ACCESS_TOKEN tidak di-set');
+
+  const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
+  const fields = 'spend,clicks,impressions,reach,cpm,ctr,actions,action_values';
+  const url = `https://graph.facebook.com/v19.0/${accountId}/insights` +
+    `?fields=${fields}&time_range={"since":"${tanggal}","until":"${tanggal}"}` +
+    `&time_increment=1&level=account&access_token=${token}`;
+
+  const fetch = require('node-fetch');
+  const resp = await fetch(url);
+  const json = await resp.json();
+  if (json.error) throw new Error(json.error.message);
+
+  const row = (json.data || [])[0];
+  if (!row) return null;
+
+  const findAction = (actions, type) =>
+    Number((actions || []).find(a => a.action_type === type)?.value || 0);
+  const findValue = (vals, type) =>
+    Number((vals || []).find(a => a.action_type === type)?.value || 0);
+
+  const data = {
+    spend:          Number(row.spend          || 0),
+    klik:           Number(row.clicks         || 0),
+    impresi:        Number(row.impressions    || 0),
+    reach:          Number(row.reach          || 0),
+    cpm:            Number(row.cpm            || 0),
+    ctr:            Number(row.ctr            || 0),
+    purchase_count: findAction(row.actions,       'purchase'),
+    purchase_value: findValue (row.action_values, 'purchase'),
+  };
+
+  await pool.query(`
+    INSERT INTO meta_ads_insights
+      (brand_id, tanggal, spend, klik, impresi, reach, cpm, ctr, purchase_value, purchase_count, synced_at)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+    ON CONFLICT (brand_id, tanggal) DO UPDATE SET
+      spend=$3, klik=$4, impresi=$5, reach=$6, cpm=$7, ctr=$8,
+      purchase_value=$9, purchase_count=$10, synced_at=NOW()
+  `, [brandId, tanggal, data.spend, data.klik, data.impresi, data.reach,
+      data.cpm, data.ctr, data.purchase_value, data.purchase_count]);
+
+  return data;
+}
+
+// ── META ADS ENDPOINTS ────────────────────────────────────────────────────────
+
+// GET /api/hub/meta-ads/brands
+router.get('/meta-ads/brands', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  try {
+    const r = await pool.query('SELECT id, nama, ad_account_id, pixel_id, aktif, kurs_usd, hpp_default FROM meta_ads_brands ORDER BY nama');
+    res.json({ data: r.rows });
+  } catch { res.status(500).json({ error: 'Gagal ambil brands' }); }
+});
+
+// PUT /api/hub/meta-ads/brands/:id/settings — update kurs USD dan HPP default
+router.put('/meta-ads/brands/:id/settings', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const { kurs_usd, hpp_default } = req.body;
+  if (kurs_usd == null || hpp_default == null) return res.status(400).json({ error: 'kurs_usd dan hpp_default wajib' });
+  try {
+    await pool.query(
+      `UPDATE meta_ads_brands SET kurs_usd=$1, hpp_default=$2 WHERE id=$3`,
+      [Number(kurs_usd), Number(hpp_default), req.params.id]
+    );
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: 'Gagal update settings: ' + e.message }); }
+});
+
+// POST /api/hub/meta-ads/brands
+router.post('/meta-ads/brands', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const { nama, ad_account_id, pixel_id } = req.body;
+  if (!nama || !ad_account_id) return res.status(400).json({ error: 'nama dan ad_account_id wajib' });
+  try {
+    const r = await pool.query(
+      `INSERT INTO meta_ads_brands (nama, ad_account_id, pixel_id) VALUES ($1,$2,$3) RETURNING *`,
+      [nama, ad_account_id, pixel_id || null]
+    );
+    res.status(201).json({ data: r.rows[0] });
+  } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'Brand sudah ada' });
+    res.status(500).json({ error: 'Gagal simpan brand' });
+  }
+});
+
+// PUT /api/hub/meta-ads/brands/:id
+router.put('/meta-ads/brands/:id', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const { nama, ad_account_id, pixel_id, aktif } = req.body;
+  try {
+    await pool.query(
+      `UPDATE meta_ads_brands SET nama=$1, ad_account_id=$2, pixel_id=$3, aktif=$4 WHERE id=$5`,
+      [nama, ad_account_id, pixel_id || null, aktif !== false, req.params.id]
+    );
+    res.json({ ok: true });
+  } catch { res.status(500).json({ error: 'Gagal update brand' }); }
+});
+
+// GET /api/hub/meta-ads/insights?brand_id=&bulan=YYYY-MM
+router.get('/meta-ads/insights', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const { brand_id, bulan } = req.query;
+  try {
+    let whereClause = '';
+    const params = [];
+    if (brand_id) { params.push(brand_id); whereClause += ` AND i.brand_id=$${params.length}`; }
+    if (bulan)    { params.push(bulan + '-01'); whereClause += ` AND DATE_TRUNC('month', i.tanggal)=DATE_TRUNC('month', $${params.length}::date)`; }
+    const r = await pool.query(`
+      SELECT i.id, i.brand_id, i.tanggal::text, i.spend, i.klik, i.impresi, i.reach, i.cpm, i.ctr, i.purchase_value, i.purchase_count, i.synced_at,
+             b.nama AS brand_nama, b.ad_account_id, b.kurs_usd, b.hpp_default,
+             r.jumlah_order, r.omzet,
+             ROUND(r.omzet / NULLIF(b.kurs_usd, 0), 2) AS omzet_usd,
+             b.hpp_default AS hpp_persen,
+             ROUND(r.omzet - (r.omzet * b.hpp_default / 100) - i.spend, 2) AS profit_bersih,
+             CASE WHEN i.spend > 0 THEN ROUND(r.omzet / i.spend, 4) END   AS roas_aktual
+      FROM meta_ads_insights i
+      JOIN meta_ads_brands b ON b.id = i.brand_id
+      LEFT JOIN meta_ads_reports r ON r.brand_id = i.brand_id AND r.tanggal = i.tanggal
+      WHERE 1=1 ${whereClause}
+      ORDER BY i.tanggal DESC
+    `, params);
+    res.json({ data: r.rows });
+  } catch (e) { res.status(500).json({ error: 'Gagal ambil insights: ' + e.message }); }
+});
+
+// POST /api/hub/meta-ads/report — input manual order/omzet (dalam USD, dikonversi ke IDR)
+router.post('/meta-ads/report', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const { brand_id, tanggal, jumlah_order, omzet_usd, catatan } = req.body;
+  if (!brand_id || !tanggal) return res.status(400).json({ error: 'brand_id dan tanggal wajib' });
+  try {
+    const br = await pool.query('SELECT kurs_usd, hpp_default FROM meta_ads_brands WHERE id=$1', [brand_id]);
+    const kurs = Number(br.rows[0]?.kurs_usd || 16000);
+    const hppDefault = Number(br.rows[0]?.hpp_default || 0);
+    const omzetIdr = Number(omzet_usd || 0) * kurs;
+    const r = await pool.query(`
+      INSERT INTO meta_ads_reports (brand_id, tanggal, jumlah_order, omzet, hpp_persen, catatan, created_by, updated_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+      ON CONFLICT (brand_id, tanggal) DO UPDATE SET
+        jumlah_order=$3, omzet=$4, hpp_persen=$5, catatan=$6, updated_at=NOW()
+      RETURNING *
+    `, [brand_id, tanggal, jumlah_order || 0, omzetIdr, hppDefault, catatan || null, req.user.nama]);
+    res.json({ data: r.rows[0], kurs_dipakai: kurs });
+  } catch (e) { res.status(500).json({ error: 'Gagal simpan report: ' + e.message }); }
+});
+
+// GET /api/hub/meta-ads/laporan?bulan=YYYY-MM&brand_id=
+router.get('/meta-ads/laporan', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const { bulan, brand_id } = req.query;
+  const bulanParam = bulan || new Date().toISOString().slice(0, 7);
+  try {
+    const params = [bulanParam + '-01'];
+    let brandFilter = '';
+    if (brand_id) { params.push(brand_id); brandFilter = ` AND b.id=$${params.length}`; }
+    const r = await pool.query(`
+      SELECT
+        b.id AS brand_id, b.nama AS brand_nama,
+        COALESCE(SUM(i.spend), 0)::NUMERIC(12,2)          AS total_spend,
+        COALESCE(SUM(i.klik), 0)                           AS total_klik,
+        COALESCE(SUM(i.impresi), 0)                        AS total_impresi,
+        COALESCE(AVG(i.cpm), 0)::NUMERIC(10,4)             AS avg_cpm,
+        COALESCE(AVG(i.ctr), 0)::NUMERIC(8,4)              AS avg_ctr,
+        COALESCE(SUM(r.jumlah_order), 0)                   AS total_order,
+        COALESCE(SUM(r.omzet), 0)::NUMERIC(12,2)           AS total_omzet,
+        COALESCE(AVG(r.hpp_persen), 0)::NUMERIC(5,2)       AS avg_hpp_persen,
+        COALESCE(
+          SUM(r.omzet - (r.omzet * r.hpp_persen / 100)) - SUM(i.spend), 0
+        )::NUMERIC(12,2)                                   AS total_profit_bersih,
+        CASE WHEN SUM(i.spend) > 0
+          THEN ROUND(SUM(r.omzet) / SUM(i.spend), 4) END  AS roas
+      FROM meta_ads_brands b
+      LEFT JOIN meta_ads_insights i
+        ON i.brand_id = b.id AND DATE_TRUNC('month', i.tanggal) = DATE_TRUNC('month', $1::date)
+      LEFT JOIN meta_ads_reports r
+        ON r.brand_id = b.id AND r.tanggal = i.tanggal
+      WHERE b.aktif = TRUE ${brandFilter}
+      GROUP BY b.id, b.nama
+      ORDER BY b.nama
+    `, params);
+    res.json({ data: r.rows });
+  } catch (e) { res.status(500).json({ error: 'Gagal ambil laporan: ' + e.message }); }
+});
+
+// POST /api/hub/meta-ads/sync/:brandId — sync data dari Meta API untuk tanggal tertentu
+router.post('/meta-ads/sync/:brandId', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const { tanggal } = req.body;
+  const tgl = tanggal || new Date().toISOString().slice(0, 10);
+  try {
+    const br = await pool.query('SELECT * FROM meta_ads_brands WHERE id=$1 AND aktif=TRUE', [req.params.brandId]);
+    if (!br.rows.length) return res.status(404).json({ error: 'Brand tidak ditemukan' });
+    const brand = br.rows[0];
+    const data = await syncMetaInsights(brand.id, brand.ad_account_id, tgl);
+    if (!data) return res.json({ ok: true, message: 'Tidak ada data dari Meta untuk tanggal ini' });
+    res.json({ ok: true, data });
+  } catch (e) { res.status(500).json({ error: 'Gagal sync: ' + e.message }); }
+});
+
+// POST /api/hub/meta-ads/sync-range/:brandId — sync range tanggal
+router.post('/meta-ads/sync-range/:brandId', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const { dari, sampai } = req.body;
+  if (!dari || !sampai) return res.status(400).json({ error: 'Perlu dari & sampai' });
+  try {
+    const br = await pool.query('SELECT * FROM meta_ads_brands WHERE id=$1 AND aktif=TRUE', [req.params.brandId]);
+    if (!br.rows.length) return res.status(404).json({ error: 'Brand tidak ditemukan' });
+    const brand = br.rows[0];
+    const start = new Date(dari), end = new Date(sampai);
+    if (start > end) return res.status(400).json({ error: 'Tanggal dari harus sebelum sampai' });
+    const results = [];
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const tgl = d.toISOString().slice(0, 10);
+      try {
+        const data = await syncMetaInsights(brand.id, brand.ad_account_id, tgl);
+        results.push({ tanggal: tgl, ok: true, data });
+      } catch (e) {
+        results.push({ tanggal: tgl, ok: false, error: e.message });
+      }
+    }
+    const ok = results.filter(r => r.ok).length;
+    res.json({ ok: true, total: results.length, berhasil: ok, gagal: results.length - ok, results });
+  } catch (e) { res.status(500).json({ error: 'Gagal sync range: ' + e.message }); }
+});
+
+// POST /api/hub/meta-ads/sync-all — sync semua brand aktif (dipanggil cron)
+router.post('/meta-ads/sync-all', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const tgl = req.body.tanggal || new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  try {
+    const brands = await pool.query('SELECT * FROM meta_ads_brands WHERE aktif=TRUE');
+    const results = await Promise.allSettled(
+      brands.rows.map(b => syncMetaInsights(b.id, b.ad_account_id, tgl))
+    );
+    const summary = results.map((r, i) => ({
+      brand: brands.rows[i].nama,
+      status: r.status,
+      error: r.reason?.message,
+    }));
+    res.json({ ok: true, tanggal: tgl, summary });
+  } catch (e) { res.status(500).json({ error: 'Gagal sync all: ' + e.message }); }
+});
+
+// ── AI INSIGHT ───────────────────────────────────────────────────────────────
+
+// POST /api/hub/ai/insight-ads
+router.post('/ai/insight-ads', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const { bulan, brand_id } = req.body;
+  if (!bulan) return res.status(400).json({ error: 'Perlu bulan (YYYY-MM)' });
+
+  const groqKey = process.env.GROQ_API_KEY;
+  if (!groqKey) return res.status(500).json({ error: 'GROQ_API_KEY tidak di-set' });
+
+  try {
+    const brandFilter = brand_id ? 'AND i.brand_id = $2' : '';
+    const params = brand_id ? [bulan + '-01', brand_id] : [bulan + '-01'];
+    const r = await pool.query(`
+      SELECT
+        b.nama AS brand,
+        i.tanggal::text,
+        i.spend, i.klik, i.impresi, i.ctr, i.cpm,
+        rep.jumlah_order, rep.omzet, rep.hpp_persen,
+        CASE WHEN rep.omzet IS NOT NULL AND i.spend > 0
+          THEN ROUND((rep.omzet - rep.omzet * COALESCE(rep.hpp_persen,0)/100 - i.spend)::numeric, 0)
+          ELSE NULL END AS profit_bersih,
+        CASE WHEN i.spend > 0 AND rep.omzet IS NOT NULL
+          THEN ROUND((rep.omzet / i.spend)::numeric, 2)
+          ELSE NULL END AS roas
+      FROM meta_ads_insights i
+      JOIN meta_ads_brands b ON b.id = i.brand_id
+      LEFT JOIN meta_ads_reports rep ON rep.brand_id = i.brand_id AND rep.tanggal = i.tanggal
+      WHERE DATE_TRUNC('month', i.tanggal) = DATE_TRUNC('month', $1::date) ${brandFilter}
+      ORDER BY i.tanggal DESC
+    `, params);
+
+    if (!r.rows.length) return res.status(404).json({ error: 'Tidak ada data untuk periode ini' });
+
+    const totalSpend   = r.rows.reduce((s, x) => s + Number(x.spend || 0), 0);
+    const totalKlik    = r.rows.reduce((s, x) => s + Number(x.klik || 0), 0);
+    const totalOrder   = r.rows.reduce((s, x) => s + Number(x.jumlah_order || 0), 0);
+    const totalOmzet   = r.rows.reduce((s, x) => s + Number(x.omzet || 0), 0);
+    const avgCtr       = r.rows.reduce((s, x) => s + Number(x.ctr || 0), 0) / r.rows.length;
+    const avgCpm       = r.rows.reduce((s, x) => s + Number(x.cpm || 0), 0) / r.rows.length;
+    const totalProfit  = r.rows.reduce((s, x) => s + Number(x.profit_bersih || 0), 0);
+    const roas         = totalSpend > 0 && totalOmzet > 0 ? (totalOmzet / totalSpend).toFixed(2) : null;
+
+    const topCtr  = [...r.rows].sort((a,b) => Number(b.ctr||0) - Number(a.ctr||0)).slice(0,3);
+    const lowCtr  = [...r.rows].sort((a,b) => Number(a.ctr||0) - Number(b.ctr||0)).slice(0,3);
+    const topSpend = [...r.rows].sort((a,b) => Number(b.spend||0) - Number(a.spend||0)).slice(0,3);
+
+    const ringkasan = `
+Data Iklan Meta Ads — ${bulan}
+Brand: ${[...new Set(r.rows.map(x => x.brand))].join(', ')}
+Jumlah hari data: ${r.rows.length}
+
+RINGKASAN BULAN INI:
+- Total Spend: Rp ${totalSpend.toLocaleString('id-ID')}
+- Total Klik: ${totalKlik.toLocaleString('id-ID')}
+- Total Order: ${totalOrder}
+- Total Omzet: Rp ${totalOmzet.toLocaleString('id-ID')}
+- Total Profit Bersih: Rp ${totalProfit.toLocaleString('id-ID')}
+- ROAS: ${roas ? roas + 'x' : 'belum ada data omzet'}
+- Rata-rata CTR: ${avgCtr.toFixed(2)}%
+- Rata-rata CPM: Rp ${Math.round(avgCpm).toLocaleString('id-ID')}
+
+HARI CTR TERTINGGI:
+${topCtr.map(x => `- ${x.tanggal}: CTR ${Number(x.ctr).toFixed(2)}%, Spend Rp ${Number(x.spend).toLocaleString('id-ID')}, Klik ${x.klik}`).join('\n')}
+
+HARI CTR TERENDAH:
+${lowCtr.map(x => `- ${x.tanggal}: CTR ${Number(x.ctr).toFixed(2)}%, Spend Rp ${Number(x.spend).toLocaleString('id-ID')}, Klik ${x.klik}`).join('\n')}
+
+HARI SPEND TERTINGGI:
+${topSpend.map(x => `- ${x.tanggal}: Spend Rp ${Number(x.spend).toLocaleString('id-ID')}, Klik ${x.klik}, CTR ${Number(x.ctr).toFixed(2)}%`).join('\n')}
+`.trim();
+
+    const fetch = require('node-fetch');
+    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
+      body: JSON.stringify({
+        model: 'groq/compound-mini',
+        messages: [
+          { role: 'system', content: 'Kamu adalah analis marketing digital yang ahli dalam Meta Ads. Berikan analisis dalam Bahasa Indonesia yang ringkas, actionable, dan mudah dipahami oleh pemilik bisnis. Gunakan emoji secukupnya untuk memperjelas poin. Format dengan heading dan bullet points.' },
+          { role: 'user', content: `Analisis data iklan Meta Ads berikut dan berikan:\n1. Evaluasi performa bulan ini (positif & negatif)\n2. Insight dari hari-hari dengan CTR terbaik dan terburuk\n3. Rekomendasi konkret untuk bulan depan\n4. Kesimpulan singkat\n\n${ringkasan}` }
+        ],
+        temperature: 0.7,
+        max_tokens: 1024,
+      }),
+    });
+    const groqJson = await groqRes.json();
+    if (groqJson.error) throw new Error(groqJson.error.message);
+    const rawInsight = groqJson.choices?.[0]?.message?.content || 'Tidak ada insight';
+    const insight = rawInsight.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    res.json({ ok: true, insight, ringkasan });
+  } catch (e) { res.status(500).json({ error: 'Gagal generate insight: ' + e.message }); }
+});
+
+// POST /api/hub/ai/chat — AI assistant dengan konteks data hub
+router.post('/ai/chat', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const { pesan, riwayat } = req.body;
+  if (!pesan) return res.status(400).json({ error: 'Pesan kosong' });
+
+  const groqKey = process.env.GROQ_API_KEY;
+  if (!groqKey) return res.status(500).json({ error: 'GROQ_API_KEY tidak di-set' });
+
+  try {
+    const now = new Date();
+    const bulanIni = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    const tglIni   = now.toISOString().slice(0,10);
+
+    // Ambil snapshot data dari semua modul
+    const [tim, jurnal, absensi, ads, reward, skb, revenue, profil, sesi1on1] = await Promise.all([
+      pool.query(`SELECT nama, divisi, level, tipe, status, kriteria, kepuasan, semangat, energi FROM tim WHERE aktif=TRUE ORDER BY nama`).catch(() => ({ rows: [] })),
+      pool.query(`SELECT nama, tanggal_jurnal::text, mood, skor_karya, skor_waktu, skor_komunikasi, skor_skill, catatan_mentor, hambatan, pencapaian_1 FROM jurnal_mingguan ORDER BY tanggal_jurnal DESC LIMIT 30`).catch(() => ({ rows: [] })),
+      pool.query(`SELECT s.label AS nama_sesi, s.tanggal::text, a.nama, a.status FROM absensi_sesi s JOIN absensi_kehadiran a ON a.sesi_id=s.id WHERE s.tanggal >= NOW()-INTERVAL '30 days' ORDER BY s.tanggal DESC LIMIT 60`).catch(() => ({ rows: [] })),
+      pool.query(`SELECT b.nama AS brand, i.tanggal::text, i.spend, i.klik, i.ctr, i.impresi, i.cpm, rep.jumlah_order, rep.omzet, rep.hpp_persen FROM meta_ads_insights i JOIN meta_ads_brands b ON b.id=i.brand_id LEFT JOIN meta_ads_reports rep ON rep.brand_id=i.brand_id AND rep.tanggal=i.tanggal WHERE DATE_TRUNC('month',i.tanggal)=DATE_TRUNC('month',$1::date) ORDER BY i.tanggal DESC`, [tglIni]).catch(() => ({ rows: [] })),
+      pool.query(`SELECT nama, jenis_reward, poin, bulan::text FROM reward_tracking ORDER BY created_at DESC LIMIT 20`).catch(() => ({ rows: [] })),
+      pool.query(`SELECT nama, judul, status, created_at::text FROM skb ORDER BY created_at DESC LIMIT 20`).catch(() => ({ rows: [] })),
+      pool.query(`SELECT nama, bulan, tahun, jumlah, target, catatan FROM revenue_bulanan ORDER BY tahun DESC, bulan DESC LIMIT 20`).catch(() => ({ rows: [] })),
+      pool.query(`SELECT t.nama, t.divisi, p.skor_teknis, p.skor_komunikasi, p.created_at::text FROM tim t LEFT JOIN LATERAL (SELECT skor_teknis, skor_komunikasi, created_at FROM profiling_illustrator WHERE nama=t.nama UNION ALL SELECT skor_teknis, skor_komunikasi, created_at FROM profiling_rigger WHERE nama=t.nama UNION ALL SELECT skor_teknis, skor_komunikasi, created_at FROM profiling_pm WHERE nama=t.nama UNION ALL SELECT skor_teknis, skor_komunikasi, created_at FROM profiling_3d WHERE nama=t.nama ORDER BY created_at DESC LIMIT 1) p ON TRUE WHERE t.aktif=TRUE`).catch(() => ({ rows: [] })),
+      pool.query(`SELECT anggota, tipe, tanggal::text, ringkasan, tindak_lanjut, mood_sebelum, mood_sesudah FROM sesi_1on1 ORDER BY tanggal DESC LIMIT 10`).catch(() => ({ rows: [] })),
+    ]);
+
+    const totalAdsSpend = ads.rows.reduce((s,r) => s + Number(r.spend||0), 0);
+    const totalAdsOmzet = ads.rows.reduce((s,r) => s + Number(r.omzet||0), 0);
+    const totalAdsKlik  = ads.rows.reduce((s,r) => s + Number(r.klik||0), 0);
+    const mingguLalu = new Date(Date.now()-7*86400000).toISOString().slice(0,10);
+    const belumJurnal = tim.rows.filter(t => !jurnal.rows.some(j => j.nama===t.nama && j.tanggal_jurnal >= mingguLalu)).map(t=>t.nama);
+
+    const konteks = `
+Kamu adalah AI assistant internal Creanimasi Studio — studio VTuber model, ilustrasi anime, VRM, AR filter, 3D print.
+PENTING: Selalu jawab dalam Bahasa Indonesia. Jangan gunakan bahasa lain.
+PENTING: Jawab langsung, padat, dan to the point. Gunakan format poin-poin atau tabel jika perlu, tapi tetap ringkas. Maksimal 350 kata per jawaban.
+Tanggal hari ini: ${tglIni}
+Owner: Mas Kholed. Tim aktif: ${tim.rows.length} orang.
+
+DATA TIM AKTIF (${tim.rows.length} anggota):
+${tim.rows.map(t => `- ${t.nama} | ${t.divisi} | ${t.level} | Tipe: ${t.tipe||'-'} | Status: ${t.status||'-'}`).join('\n')}
+
+JURNAL MINGGUAN (${jurnal.rows.length} entri terbaru):
+${jurnal.rows.slice(0,15).map(j => `- ${j.nama} | ${j.tanggal_jurnal?.slice(0,10)} | mood:${j.mood||'-'} karya:${j.skor_karya||'-'} waktu:${j.skor_waktu||'-'} komunikasi:${j.skor_komunikasi||'-'} skill:${j.skor_skill||'-'}`).join('\n')}
+Belum isi jurnal minggu ini (${mingguLalu} s/d ${tglIni}): ${belumJurnal.length > 0 ? belumJurnal.join(', ') : 'semua sudah isi'}
+
+ABSENSI 30 HARI TERAKHIR (${absensi.rows.length} record):
+${absensi.rows.slice(0,25).map(a => `- ${a.nama_sesi} (${a.tanggal?.slice(0,10)}): ${a.nama} — ${a.status}`).join('\n')}
+
+META ADS BULAN INI (${bulanIni}):
+Total Spend: Rp ${totalAdsSpend.toLocaleString('id-ID')}
+Total Omzet: Rp ${totalAdsOmzet.toLocaleString('id-ID')}
+Total Klik: ${totalAdsKlik}
+ROAS: ${totalAdsSpend > 0 && totalAdsOmzet > 0 ? (totalAdsOmzet/totalAdsSpend).toFixed(2)+'x' : 'belum ada data omzet'}
+Data: ${ads.rows.length} hari tercatat
+${ads.rows.slice(0,7).map(a => `- ${a.tanggal?.slice(0,10)} [${a.brand}]: spend Rp${Number(a.spend||0).toLocaleString('id-ID')}, klik ${a.klik}, CTR ${Number(a.ctr||0).toFixed(2)}%, CPM ${Number(a.cpm||0).toFixed(0)}, order ${a.jumlah_order||0}, omzet Rp${Number(a.omzet||0).toLocaleString('id-ID')}`).join('\n')}
+
+SESI 1-ON-1 TERBARU:
+${sesi1on1.rows.length > 0 ? sesi1on1.rows.map(s => `- ${s.anggota} (${s.tipe}, ${s.tanggal?.slice(0,10)}): mood ${s.mood_sebelum}→${s.mood_sesudah} | ${s.ringkasan}`).join('\n') : 'Belum ada sesi 1-on-1'}
+
+REWARD TERBARU:
+${reward.rows.length > 0 ? reward.rows.slice(0,10).map(r => `- ${r.nama}: ${r.jenis_reward} (${r.poin} poin) — ${r.bulan}`).join('\n') : 'Belum ada data reward'}
+
+SKB (Skill & Kompetensi Berbasis):
+${skb.rows.length > 0 ? skb.rows.slice(0,10).map(s => `- ${s.nama}: "${s.judul}" — ${s.status} (${s.created_at?.slice(0,10)})`).join('\n') : 'Belum ada data SKB'}
+
+REVENUE BULANAN:
+${revenue.rows.length > 0 ? revenue.rows.map(r => `- ${r.nama} (${r.bulan}/${r.tahun}): Rp${Number(r.jumlah||0).toLocaleString('id-ID')} dari target Rp${Number(r.target||0).toLocaleString('id-ID')}`).join('\n') : 'Belum ada data revenue'}
+
+PROFILING TERAKHIR:
+${profil.rows.filter(p=>p.skor_teknis).map(p => `- ${p.nama} (${p.divisi}): teknis ${p.skor_teknis}, komunikasi ${p.skor_komunikasi}`).join('\n') || 'Belum ada data profiling'}
+`.trim();
+
+    const messages = [
+      { role: 'system', content: konteks },
+      ...(riwayat || []).slice(-6),
+      { role: 'user', content: pesan },
+    ];
+
+    const fetch = require('node-fetch');
+    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
+      body: JSON.stringify({ model: 'groq/compound-mini', messages, temperature: 0.6, max_tokens: 800 }),
+    });
+    const groqJson = await groqRes.json();
+    if (groqJson.error) throw new Error(groqJson.error.message);
+    const rawJawaban = groqJson.choices?.[0]?.message?.content || '';
+    const jawaban = rawJawaban.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    res.json({ ok: true, jawaban });
+  } catch (e) { res.status(500).json({ error: 'Gagal: ' + e.message }); }
+});
+
+// ── CRON: daily sync jam 07:00 WIB (00:00 UTC) ───────────────────────────────
+try {
+  const cron = require('node-cron');
+  cron.schedule('0 0 * * *', async () => {
+    const tgl = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    console.log(`[Meta Ads Cron] Sync kemarin: ${tgl}`);
+    try {
+      const brands = await pool.query('SELECT * FROM meta_ads_brands WHERE aktif=TRUE');
+      for (const b of brands.rows) {
+        try {
+          await syncMetaInsights(b.id, b.ad_account_id, tgl);
+          console.log(`[Meta Ads Cron] OK: ${b.nama}`);
+        } catch (e) {
+          console.error(`[Meta Ads Cron] FAIL ${b.nama}: ${e.message}`);
+        }
+      }
+    } catch (e) { console.error('[Meta Ads Cron] Error:', e.message); }
+  });
+  console.log('[Meta Ads Cron] Terjadwal: setiap hari 07:00 WIB');
+} catch { /* node-cron belum terinstall — skip */ }
+
 module.exports = router;
+
+// Standalone server entry point (dijalankan langsung via PM2)
+if (require.main === module) {
+  const app = express();
+  app.use(express.json({ limit: '25mb' }));
+  app.use('/api/hub', router);
+  const PORT = process.env.PORT || 3001;
+  app.listen(PORT, () => console.log(`Creanimasi Hub running on port ${PORT}`));
+}
