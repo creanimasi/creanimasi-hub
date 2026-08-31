@@ -34,7 +34,7 @@ jobs:
           REACT_APP_API_URL: https://hub.creanimasi.com/api/hub
           CI: false
 
-      - name: Deploy ke VPS via SCP
+      - name: SCP build ke VPS
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -44,3 +44,14 @@ jobs:
           target: '/opt/creanimasi-hub-frontend/'
           strip_components: 0
           rm: false
+
+      - name: Copy build ke Docker container & reload nginx
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            docker cp /opt/creanimasi-hub-frontend/build/. wk0kscss0kg8o8kkk444kws0-172755724044:/usr/share/nginx/html/
+            docker exec wk0kscss0kg8o8kkk444kws0-172755724044 nginx -s reload
+            echo "Deploy selesai: $(date)"
