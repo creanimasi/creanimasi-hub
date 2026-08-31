@@ -1,0 +1,45 @@
+name: Build & Deploy Frontend
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'package.json'
+      - 'package-lock.json'
+
+jobs:
+  deploy:
+    name: Build React & Deploy ke VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout kode
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build React
+        run: npm run build
+        env:
+          REACT_APP_API_URL: https://hub.creanimasi.com/api/hub
+          CI: false
+
+      - name: Deploy ke VPS via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: 'build/*'
+          target: '/opt/creanimasi-hub-frontend/'
+          strip_components: 0
+          rm: false
