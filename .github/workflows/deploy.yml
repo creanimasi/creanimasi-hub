@@ -52,6 +52,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
+            docker exec wk0kscss0kg8o8kkk444kws0-172755724044 sh -c 'rm -rf /usr/share/nginx/html/static'
             docker cp /opt/creanimasi-hub-frontend/build/. wk0kscss0kg8o8kkk444kws0-172755724044:/usr/share/nginx/html/
             docker exec wk0kscss0kg8o8kkk444kws0-172755724044 nginx -s reload
             echo "Deploy selesai: $(date)"
