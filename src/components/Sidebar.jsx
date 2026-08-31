@@ -24,8 +24,7 @@ const NAV_ADMIN = [
   { section: 'Program' },
   { path: '/modul',         label: 'Modul Belajar',     badgeType: '' },
   { path: '/workshop',      label: 'Workshop',          badgeType: '' },
-  { path: '/friday-win',    label: 'Friday Win',        badgeType: '' },
-  { path: '/1on1',          label: 'Sesi 1-on-1',       badgeType: '' },
+  { path: '/aktivitas',     label: 'Aktivitas Tim',     badgeType: '' },
   { path: '/skb',           label: 'SKB',               badgeType: '' },
   { path: '/reward',        label: 'Reward & KPI',      badgeType: '' },
   { path: '/sop',           label: 'SOP Brief',         badgeType: '' },
@@ -81,6 +80,7 @@ const ICONS = {
   '/ads-performance': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/><circle cx="19" cy="5" r="2" fill="currentColor" stroke="none"/></svg>,
   '/laporan-profit':  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
   '/ai-assistant':    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2a7 7 0 0 1 7 7c0 3-1.8 5.6-4.5 6.7V18H9.5v-2.3C6.8 14.6 5 12 5 9a7 7 0 0 1 7-7z"/><path d="M9 21h6M10 17.5c0-1 .5-2 1-2.5M14 17.5c0-1-.5-2-1-2.5"/><circle cx="9.5" cy="9" r="1" fill="currentColor" stroke="none"/><circle cx="14.5" cy="9" r="1" fill="currentColor" stroke="none"/></svg>,
+  '/aktivitas':       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><polyline points="8,14 10,16 14,13"/><path d="M16 16h.01"/></svg>,
   '/profil':          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>,
 };
 

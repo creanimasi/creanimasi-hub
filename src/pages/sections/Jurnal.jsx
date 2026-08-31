@@ -3,6 +3,7 @@ import { TIPE_COLOR } from '../../data/tim';
 import { useTim } from '../../hooks/useTim';
 import { api } from '../../services/api';
 import { downloadCsv } from '../../utils/exportCsv';
+import { SkeletonTable } from '../../components/Skeleton';
 import EmptyState from '../../components/EmptyState';
 
 // Pisah catatan_mentor menjadi pesan member dan reply admin.
@@ -86,9 +87,7 @@ export function Jurnal() {
     ? Math.round(sudahIsi.reduce((s, d) => s + (d.jurnal?.mood || 0), 0) / sudahIsi.length * 10) / 10
     : 0;
 
-  if (loading) return (
-    <div style={{ textAlign:'center', padding:40, color:'var(--text-2)' }}>Memuat jurnal...</div>
-  );
+  if (loading) return <SkeletonTable rows={6} cols={5} />;
 
   if (loadErr) return (
     <div className="alert alert-red"><span>⚠️</span><div>{loadErr}</div></div>

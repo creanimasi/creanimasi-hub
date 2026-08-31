@@ -8,6 +8,7 @@ import { TIPE_COLOR, DIVISI_COLOR } from '../data/tim';
 import { useAuth } from '../hooks/useAuth';
 import { useTim } from '../hooks/useTim';
 import { api } from '../services/api';
+import { SkeletonList } from '../components/Skeleton';
 
 const METRIK = [
   { key: 'skor_total',     label: 'Skor Total',  color: '#00D68F', max: 100 },
@@ -247,9 +248,7 @@ export default function Performa() {
       )}
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-2)' }}>
-          Memuat data performa...
-        </div>
+        <SkeletonList count={6} />
       ) : filteredNames.length === 0 ? (
         <div className="empty">
           <div className="empty-icon">📊</div>

@@ -3,6 +3,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { useTim } from '../hooks/useTim';
 import { api } from '../services/api';
+import { SkeletonList } from '../components/Skeleton';
 
 // ── PREVIEW PDF ────────────────────────────────────────────────────────────────
 // Desain mengikuti laporan asli: dark background, layout terstruktur
@@ -443,7 +444,7 @@ export default function LaporanMingguan() {
       </div>
 
       {loading ? (
-        <div style={{ textAlign:'center', padding:40, color:'var(--text-2)' }}>Memuat...</div>
+        <SkeletonList count={5} />
       ) : daftar.length === 0 ? (
         <div className="empty">
           <div className="empty-icon">📄</div>

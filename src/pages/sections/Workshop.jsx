@@ -3,6 +3,7 @@ import { WORKSHOP_JRUHUB, TIPE_COLOR, DIVISI_COLOR } from '../../data/tim';
 import { api } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useTim } from '../../hooks/useTim';
+import { SkeletonTable } from '../../components/Skeleton';
 import { downloadCsv } from '../../utils/exportCsv';
 
 // ── WORKSHOP ───────────────────────────────────────────────────────────────
@@ -50,9 +51,7 @@ export function Workshop() {
 
   const anggota = isAdmin ? tim : tim.filter(t => t.nama === user?.nama);
 
-  if (loading) return (
-    <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-2)' }}>Memuat data workshop...</div>
-  );
+  if (loading) return <SkeletonTable rows={5} cols={4} />;
 
   return (
     <div>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 import { downloadCsv } from '../utils/exportCsv';
+import { SkeletonTable } from '../components/Skeleton';
 
 const BULAN_LABEL = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
 
@@ -127,7 +128,7 @@ export default function LaporanProfit() {
       {/* Tabel per brand */}
       {error && <div style={{ color: '#FF6B6B', fontSize: 13, marginBottom: 12 }}>{error}</div>}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)' }}>Memuat laporan...</div>
+        <SkeletonTable rows={5} cols={4} />
       ) : rows.length === 0 ? (
         <div className="empty">
           <div className="empty-icon">📭</div>

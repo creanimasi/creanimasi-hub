@@ -3,6 +3,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
 import { api } from '../services/api';
+import { SkeletonList } from '../components/Skeleton';
 
 // ── PREVIEW PDF ────────────────────────────────────────────────────────────────
 // Desain mengikuti format JELLIA Weekly Report: cream card di atas latar biru muda
@@ -857,7 +858,7 @@ export default function LaporanAdminMingguan() {
       </div>
 
       {loading ? (
-        <div style={{ textAlign:'center', padding:40, color:'var(--text-2)' }}>Memuat...</div>
+        <SkeletonList count={6} />
       ) : daftar.length === 0 ? (
         <div className="empty">
           <div className="empty-icon">📊</div>

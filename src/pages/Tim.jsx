@@ -2,6 +2,7 @@ import { useState, useEffect, useContext, useCallback } from 'react';
 import { TIPE_COLOR, DIVISI_COLOR, hitungLama } from '../data/tim';
 import { PresenceContext } from '../components/Layout';
 import { api } from '../services/api';
+import { SkeletonMetrics, SkeletonCards } from '../components/Skeleton';
 
 const RANK_CFG = {
   'Rising Star':    { icon: '⭐', color: 'var(--green)',  bg: 'var(--green-light)'  },
@@ -441,11 +442,9 @@ export default function Tim() {
     return matchDiv && matchTipe && matchQ;
   });
 
-  if (loading) return (
-    <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-2)' }}>
-      <div style={{ fontSize: 13 }}>Memuat data tim...</div>
-    </div>
-  );
+  if (loading) {
+    return <div><SkeletonMetrics count={4} /><SkeletonCards count={9} /></div>;
+  }
 
   return (
     <div>

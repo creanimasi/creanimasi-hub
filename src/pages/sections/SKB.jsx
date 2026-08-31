@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useTim } from '../../hooks/useTim';
+import { SkeletonList } from '../../components/Skeleton';
 
 // ── SKB ────────────────────────────────────────────────────────────────────
 const SKB_TEMPLATES = [
@@ -73,7 +74,7 @@ export function SKB() {
   const active   = list.filter(s => s.status === 'disetujui').length;
   const done     = list.filter(s => s.status === 'selesai').length;
 
-  if (loading) return <div style={{ textAlign:'center', padding:40, color:'var(--text-2)' }}>Memuat SKB...</div>;
+  if (loading) return <SkeletonList count={5} />;
 
   return (
     <div>

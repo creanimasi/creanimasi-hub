@@ -3,6 +3,7 @@ import { TIPE_COLOR } from '../../data/tim';
 import { api } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useTim } from '../../hooks/useTim';
+import { SkeletonList } from '../../components/Skeleton';
 
 // ── FRIDAY WIN ─────────────────────────────────────────────────────────────
 export function FridayWin() {
@@ -41,7 +42,7 @@ export function FridayWin() {
     catch (err) { setDeleteErr(err.message || 'Gagal hapus. Coba lagi.'); }
   };
 
-  if (loading) return <div style={{ textAlign:'center', padding:40, color:'var(--text-2)' }}>Memuat...</div>;
+  if (loading) return <SkeletonList count={5} />;
 
   return (
     <div>

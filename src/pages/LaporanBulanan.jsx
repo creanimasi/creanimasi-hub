@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 import { useTim } from '../hooks/useTim';
 import { downloadCsv } from '../utils/exportCsv';
+import { SkeletonTable } from '../components/Skeleton';
 
 const BULAN_LABEL = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
 
@@ -272,7 +273,7 @@ export default function LaporanBulanan() {
       {error && <div style={{ color: 'var(--red)', fontSize: 13, padding: 16 }}>⚠ {error}</div>}
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-3)' }}>Memuat laporan...</div>
+        <SkeletonTable rows={6} cols={5} />
       ) : !data ? null : filtered.length === 0 ? (
         <div className="empty">
           <div className="empty-icon">📊</div>

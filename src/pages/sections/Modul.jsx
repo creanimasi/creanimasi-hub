@@ -3,6 +3,7 @@ import { MODUL_LIST, TIPE_COLOR, DIVISI_COLOR } from '../../data/tim';
 import { DIVISI_TO_MODUL_ID } from '../../data/constants';
 import { api } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
+import { SkeletonPage } from '../../components/Skeleton';
 import { useTim } from '../../hooks/useTim';
 
 const DIVISI_TO_MODUL = DIVISI_TO_MODUL_ID;
@@ -105,7 +106,7 @@ export function Modul() {
   const grandMax = visibleModul.reduce((s, m) => s + getAnggota(m.id).length * m.jumlah, 0);
   const grandPct = grandMax > 0 ? Math.round(grandDone / grandMax * 100) : 0;
 
-  if (loading) return <div style={{ textAlign:'center', padding:40, color:'var(--text-2)' }}>Memuat data modul...</div>;
+  if (loading) return <SkeletonPage metrics={2} items={4} />;
   if (error)   return <div className="alert alert-red"><span>⚠️</span><div>{error}</div></div>;
 
   return (

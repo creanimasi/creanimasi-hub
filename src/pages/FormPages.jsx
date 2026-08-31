@@ -4,6 +4,7 @@ import FormJurnal from '../components/FormJurnal';
 import FormProfiling from '../components/FormProfiling';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../services/api';
+import { SkeletonList } from '../components/Skeleton';
 
 // Pisah catatan_mentor menjadi pesan member dan balasan admin.
 // Format baru: "pesan_member\n[ADMIN_REPLY]\nreply_admin"
@@ -82,7 +83,7 @@ export function PageRiwayatJurnal() {
       .finally(() => setLoading(false));
   }, [user]);
 
-  if (loading) return <div style={{ textAlign:'center', padding:40, color:'var(--text-2)' }}>Memuat riwayat...</div>;
+  if (loading) return <SkeletonList count={5} />;
 
   return (
     <div style={{ maxWidth:680, margin:'0 auto' }}>

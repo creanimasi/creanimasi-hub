@@ -9,6 +9,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useTim } from '../hooks/useTim';
 import { api } from '../services/api';
 import { BOT_USERNAME } from '../data/constants';
+import { SkeletonTable, SkeletonList } from '../components/Skeleton';
 
 // ── HELPERS ────────────────────────────────────────────────────────────────────
 function parseNum(str) {
@@ -311,7 +312,7 @@ function GrafikPanel() {
       </div>
 
       {loading ? (
-        <div style={{ textAlign:'center', padding:40, color:'var(--text-2)' }}>Memuat grafik...</div>
+        <SkeletonTable rows={5} cols={3} />
       ) : error ? (
         <div className="alert alert-red" style={{ marginTop:8 }}>
           <span>⚠️</span><div>Gagal memuat grafik: {error}</div>
@@ -640,7 +641,7 @@ export default function LaporanHarian() {
       {/* Laporan list */}
       {view !== 'grafik' && (
         loading ? (
-          <div style={{ textAlign:'center', padding:40, color:'var(--text-2)' }}>Memuat...</div>
+          <SkeletonList count={5} />
         ) : loadErr ? (
           <div className="alert alert-red" style={{ marginTop:8 }}>
             <span>⚠️</span><div>{loadErr}</div>

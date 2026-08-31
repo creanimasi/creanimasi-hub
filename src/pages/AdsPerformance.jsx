@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 import { useToast } from '../hooks/useToast';
+import { SkeletonTable } from '../components/Skeleton';
 
 const BULAN_LABEL = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
 
@@ -471,7 +472,7 @@ export default function AdsPerformance() {
       {/* Tabel harian */}
       {error && <div style={{ color: '#FF6B6B', fontSize: 13, marginBottom: 12 }}>{error}</div>}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)' }}>Memuat data...</div>
+        <SkeletonTable rows={5} cols={4} />
       ) : rows.length === 0 ? (
         <div className="empty">
           <div className="empty-icon">📭</div>

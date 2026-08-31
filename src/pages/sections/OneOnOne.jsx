@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { TIPE_COLOR } from '../../data/tim';
 import { useTim } from '../../hooks/useTim';
 import { api } from '../../services/api';
+import { SkeletonList } from '../../components/Skeleton';
 
 const TIPE_1ON1 = [
   { id:'Check-in Rutin',       ico:'💬', durasi:30 },
@@ -68,7 +69,7 @@ export function OneOnOne() {
   const thisWeek  = sesi.filter(s => new Date(s.tanggal) >= weekAgo);
   const thisMonth = sesi.filter(s => new Date(s.tanggal).getMonth() === new Date().getMonth());
 
-  if (loading) return <div style={{ textAlign:'center', padding:40, color:'var(--text-2)' }}>Memuat...</div>;
+  if (loading) return <SkeletonList count={5} />;
 
   return (
     <div>

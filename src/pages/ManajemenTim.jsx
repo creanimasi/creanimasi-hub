@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 import { TIPE_COLOR } from '../data/tim';
 import { useToast } from '../hooks/useToast';
+import { SkeletonList } from '../components/Skeleton';
 
 const DIVISI_OPTIONS = ['Admin', 'PM', 'Illustrator', 'Rigger', '3D Modeler'];
 const LEVEL_OPTIONS  = ['Magang / Probation', 'Junior', 'Senior', 'Admin (L4)', 'Secondline', 'Koordinator'];
@@ -252,7 +253,7 @@ export default function ManajemenTim() {
       )}
 
       {loading && (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-2)' }}>Memuat data tim...</div>
+        <SkeletonList count={6} />
       )}
 
       {/* List per divisi */}

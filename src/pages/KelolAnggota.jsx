@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 import { useToast } from '../hooks/useToast';
+import { SkeletonList } from '../components/Skeleton';
 
 const ENTITAS_LIST = ['Creanimasi Studio', 'Flip Studio', 'Creillustra', 'Shuyou'];
 const DIVISI_OPTIONS = ['Admin', 'PM', 'Illustrator', 'Rigger', '3D Modeler', 'Developer', 'Marketing', 'Desainer'];
@@ -539,7 +540,7 @@ export default function KelolAnggota() {
       )}
 
       {loading && (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-2)' }}>Memuat data anggota...</div>
+        <SkeletonList count={6} />
       )}
 
       {/* List */}
