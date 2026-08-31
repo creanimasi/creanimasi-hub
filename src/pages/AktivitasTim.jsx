@@ -20,7 +20,7 @@ export default function AktivitasTim() {
   const setTab = (key) => setParams({ tab: key }, { replace: true });
 
   return (
-    <div style={{ padding: '24px 20px', maxWidth: 960, margin: '0 auto' }}>
+    <div style={{ padding: '24px 20px' }}>
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 20, fontWeight: 800 }}>🎯 Aktivitas Tim</div>
         <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
