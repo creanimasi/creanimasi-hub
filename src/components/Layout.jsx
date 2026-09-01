@@ -74,6 +74,7 @@ const PAGE_TITLES = {
   '/laporan-admin':  'Laporan Mingguan Admin',
   '/laporan-harian': 'Laporan Harian Tim',
   '/aktivitas':   'Aktivitas Tim',
+  '/akses':       'Manajemen Akses',
   '/kalender':    'Kalender Kegiatan',
 };
 
