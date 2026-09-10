@@ -86,10 +86,11 @@ export const api = {
   heartbeat:        ()  => request('PATCH', '/auth/heartbeat'),
   offlineSignal:    ()  => request('DELETE', '/auth/heartbeat'),
   getPresence:      ()  => request('GET', '/presence/snapshot'),
-  // SSE connection — tidak pakai request() karena streaming
-  connectPresence: ()   => {
-    const token = localStorage.getItem('hub_token');
-    return new EventSource(`${BASE}/presence?token=${token}`);
+  // SSE connection — minta tiket sekali-pakai dulu (via header Authorization biasa)
+  // supaya JWT asli tidak pernah masuk ke query string/access log
+  connectPresence: async () => {
+    const { ticket } = await request('GET', '/presence/ticket');
+    return new EventSource(`${BASE}/presence?ticket=${ticket}`);
   },
 
   // Revenue

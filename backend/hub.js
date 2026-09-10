@@ -10,6 +10,7 @@ const router  = express.Router();
 const { Pool } = require('pg');
 const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const hubPool = pool;
@@ -18,6 +19,24 @@ if (!JWT_SECRET) throw new Error('HUB_JWT_SECRET environment variable tidak di-s
 
 // ── HELPER ────────────────────────────────────────
 const query = (text, params) => pool.query(text, params);
+
+// Batasi percobaan login: cegah brute-force/credential-stuffing per IP
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Terlalu banyak percobaan login. Coba lagi dalam beberapa menit.' },
+});
+
+// Batasi request umum ke seluruh API (selain login) per IP
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Terlalu banyak permintaan. Coba lagi nanti.' },
+});
 
 function authMiddleware(req, res, next) {
   const token = req.headers.authorization?.split(' ')[1];
@@ -33,7 +52,7 @@ function authMiddleware(req, res, next) {
 // ── AUTH ──────────────────────────────────────────
 
 // POST /api/hub/auth/login
-router.post('/auth/login', async (req, res) => {
+router.post('/auth/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password)
     return res.status(400).json({ error: 'Username dan password wajib diisi' });
@@ -57,8 +76,11 @@ router.post('/auth/login', async (req, res) => {
   }
 });
 
+// Rate limit untuk semua route lain (di luar /auth/login yang sudah punya limiter sendiri)
+router.use(apiLimiter);
+
 // ── GLOBAL AUTH GUARD ─────────────────────────────
-// Semua route wajib login KECUALI /auth/login dan /presence (SSE pakai token via query param)
+// Semua route wajib login KECUALI /auth/login dan /presence (SSE pakai tiket sekali-pakai via query param)
 router.use((req, res, next) => {
   if (req.path === '/auth/login' || req.path === '/presence') return next();
   return authMiddleware(req, res, next);
@@ -170,10 +192,13 @@ router.post('/jurnal', authMiddleware, async (req, res) => {
   }
 });
 
-// GET /api/hub/jurnal — semua jurnal (untuk dashboard)
+// GET /api/hub/jurnal — semua jurnal (untuk dashboard) atau riwayat milik sendiri
 router.get('/jurnal', authMiddleware, async (req, res) => {
   try {
-    const { nama, limit = 50 } = req.query;
+    const isAdmin = req.user.role === 'admin';
+    // Member hanya boleh lihat jurnal miliknya sendiri, apapun query ?nama= yang dikirim
+    const nama = isAdmin ? req.query.nama : req.user.nama;
+    const { limit = 50 } = req.query;
     const cap = Math.min(parseInt(limit) || 50, 200);
     let q = `SELECT * FROM jurnal_mingguan`;
     const params = [];
@@ -191,8 +216,9 @@ router.get('/jurnal', authMiddleware, async (req, res) => {
   }
 });
 
-// GET /api/hub/jurnal/stats — statistik untuk dashboard
+// GET /api/hub/jurnal/stats — statistik untuk dashboard (admin only)
 router.get('/jurnal/stats', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
   try {
     const result = await query(`SELECT * FROM v_jurnal_stats ORDER BY nama`);
     const mingguIni = result.rows.filter(r => r.isi_minggu_ini).length;
@@ -272,6 +298,12 @@ const PROFILING_TO_TIM_SKOR = {
   '3d':        { skill: 'skill_level_blender', komunikasi: 'skor_komunikasi' },
 };
 
+// Mapping nama divisi di tabel `tim` → key TABLE_MAP profiling (harus sinkron dengan src/data/constants.js)
+const DIVISI_TO_PROFILING_KEY = {
+  'Admin': 'admin', 'PM': 'pm', 'Illustrator': 'illustrator',
+  'Rigger': 'rigger', '3D Modeler': '3d',
+};
+
 // POST /api/hub/profiling/:divisi — simpan profiling
 router.post('/profiling/:divisi', authMiddleware, async (req, res) => {
   const { divisi } = req.params;
@@ -287,7 +319,21 @@ router.post('/profiling/:divisi', authMiddleware, async (req, res) => {
   const table = TABLE_MAP[divisiKey];
   if (!table) return res.status(400).json({ error: 'Divisi tidak valid' });
 
+  const isAdmin = req.user.role === 'admin';
+  // Nama selalu dari JWT — member tidak bisa mengisi/menimpa profiling atas nama orang lain.
+  // Admin boleh override via req.body.nama (mis. input data untuk anggota yang belum sempat isi sendiri).
+  req.body.nama = (isAdmin && req.body.nama) ? req.body.nama : req.user.nama;
+
   try {
+    if (!isAdmin) {
+      // Member hanya boleh mengisi profiling untuk divisinya sendiri
+      const timR = await query(`SELECT divisi FROM tim WHERE nama = $1 LIMIT 1`, [req.user.nama]);
+      const divisiAsli = timR.rows[0]?.divisi;
+      if (DIVISI_TO_PROFILING_KEY[divisiAsli] !== divisiKey) {
+        return res.status(403).json({ error: 'Tidak bisa mengisi profiling divisi lain' });
+      }
+    }
+
     // Hanya izinkan kolom yang benar-benar ada di tabel divisi ini
     const allowedColumns = [...PROFILING_COMMON_COLUMNS, ...PROFILING_DIVISI_COLUMNS[divisiKey]];
     const fields = Object.keys(req.body).filter(k => allowedColumns.includes(k));
@@ -341,8 +387,9 @@ router.post('/profiling/:divisi', authMiddleware, async (req, res) => {
   }
 });
 
-// GET /api/hub/profiling/all — semua profiling untuk dashboard
+// GET /api/hub/profiling/all — semua profiling untuk dashboard (admin only)
 router.get('/profiling/all', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
   try {
     const result = await query(`SELECT * FROM v_profiling_all ORDER BY divisi, nama`);
     res.json({ success: true, data: result.rows });
@@ -351,8 +398,9 @@ router.get('/profiling/all', authMiddleware, async (req, res) => {
   }
 });
 
-// GET /api/hub/profiling/:divisi — profiling per divisi
+// GET /api/hub/profiling/:divisi — profiling per divisi (admin only)
 router.get('/profiling/:divisi', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
   const TABLE_MAP = {
     admin: 'profiling_admin', pm: 'profiling_pm',
     illustrator: 'profiling_illustrator', rigger: 'profiling_rigger', '3d': 'profiling_3d'
@@ -386,8 +434,9 @@ router.post('/reward', authMiddleware, async (req, res) => {
   }
 });
 
-// GET /api/hub/reward — semua reward
+// GET /api/hub/reward — semua reward (admin only)
 router.get('/reward', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
   try {
     const result = await query(`SELECT * FROM reward_tracking ORDER BY tanggal DESC`);
     const totalBulanIni = await query(
@@ -451,10 +500,15 @@ router.post('/skb', authMiddleware, async (req, res) => {
   }
 });
 
-// GET /api/hub/skb — semua SKB
+// GET /api/hub/skb — semua SKB (admin) atau milik sendiri (member)
 router.get('/skb', authMiddleware, async (req, res) => {
   try {
-    const result = await query(`SELECT * FROM skb ORDER BY created_at DESC`);
+    const isAdmin = req.user.role === 'admin';
+    const q = isAdmin
+      ? `SELECT * FROM skb ORDER BY created_at DESC`
+      : `SELECT * FROM skb WHERE nama = $1 ORDER BY created_at DESC`;
+    const params = isAdmin ? [] : [req.user.nama];
+    const result = await query(q, params);
     res.json({ success: true, data: result.rows });
   } catch (err) {
     res.status(500).json({ error: 'Gagal mengambil data SKB' });
@@ -949,8 +1003,9 @@ router.delete('/friday-win/:id', authMiddleware, async (req, res) => {
   } catch { res.status(500).json({ error: 'Gagal hapus' }); }
 });
 
-// ── SESI 1-ON-1 ───────────────────────────────────────────────────────────────
+// ── SESI 1-ON-1 (admin/mentor only) ────────────────────────────────────────────
 router.get('/sesi-1on1', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
   try {
     const result = await hubPool.query('SELECT * FROM sesi_1on1 ORDER BY tanggal DESC, id DESC');
     res.json({ data: result.rows });
@@ -958,6 +1013,7 @@ router.get('/sesi-1on1', authMiddleware, async (req, res) => {
 });
 
 router.post('/sesi-1on1', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
   const { tanggal, anggota, tipe, durasi_menit, ringkasan, tindak_lanjut, mood_sebelum, mood_sesudah } = req.body;
   try {
     const r = await hubPool.query(
@@ -1017,8 +1073,9 @@ router.patch('/tim/:id/reset-password', authMiddleware, async (req, res) => {
   } catch { res.status(500).json({ error: 'Gagal reset password' }); }
 });
 
-// ── REVENUE BULANAN ───────────────────────────────────────────────────────────
+// ── REVENUE BULANAN (admin only) ───────────────────────────────────────────────
 router.get('/revenue', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
   const { bulan, tahun } = req.query;
   try {
     let q = 'SELECT * FROM revenue_bulanan';
@@ -1104,6 +1161,7 @@ router.patch('/profil/update', authMiddleware, async (req, res) => {
 
 // ── REVENUE HISTORY (6 bulan terakhir per admin) ─────────────────────────────
 router.get('/revenue/history', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
   try {
     const r = await hubPool.query(`
       SELECT nama, bulan, tahun, jumlah, target
@@ -1159,6 +1217,16 @@ router.patch('/modul-topik-nama/:modul_id/:topik_idx', authMiddleware, async (re
 const onlineUsers = new Map();
 // SSE clients: Set of res objects
 const sseClients  = new Set();
+// Tiket SSE sekali-pakai berumur pendek: ticketId -> { user, expires }
+// EventSource tidak bisa kirim header Authorization, jadi JWT asli tidak pernah ikut masuk ke URL/access log —
+// klien minta tiket dulu lewat request ber-header biasa, baru pakai tiket itu di query string SSE.
+const presenceTickets = new Map();
+const PRESENCE_TICKET_TTL = 30 * 1000;
+
+setInterval(() => {
+  const now = Date.now();
+  presenceTickets.forEach((v, k) => { if (v.expires < now) presenceTickets.delete(k); });
+}, 60 * 1000);
 
 // Saat startup: load user yang last_seen dalam 2 menit terakhir dari DB
 // Ini memastikan user yang sudah login tidak langsung logout saat server restart
@@ -1217,15 +1285,24 @@ router.delete('/auth/heartbeat', authMiddleware, (req, res) => {
   res.json({ ok: true });
 });
 
+// GET /api/hub/presence/ticket — tiket sekali-pakai untuk otentikasi SSE (butuh login header biasa)
+router.get('/presence/ticket', (req, res) => {
+  const ticket = require('crypto').randomBytes(24).toString('hex');
+  presenceTickets.set(ticket, { user: req.user, expires: Date.now() + PRESENCE_TICKET_TTL });
+  res.json({ ticket });
+});
+
 // GET /api/hub/presence — SSE stream siapa yang online
-// Terima token dari query param (karena EventSource tidak support custom headers)
+// Otentikasi via tiket sekali-pakai dari /presence/ticket (bukan JWT langsung di query string)
 router.get('/presence', (req, res) => {
-  const token = req.query.token || req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Token tidak ada' });
-  try {
-    const decoded = require('jsonwebtoken').verify(token, JWT_SECRET);
-    req.user = decoded;
-  } catch { return res.status(401).json({ error: 'Token tidak valid' }); }
+  const ticketId = req.query.ticket;
+  if (!ticketId) return res.status(401).json({ error: 'Tiket tidak ada' });
+  const entry = presenceTickets.get(ticketId);
+  presenceTickets.delete(ticketId); // sekali pakai
+  if (!entry || entry.expires < Date.now()) {
+    return res.status(401).json({ error: 'Tiket tidak valid atau kadaluarsa' });
+  }
+  req.user = entry.user;
   res.writeHead(200, {
     'Content-Type':  'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -1745,7 +1822,8 @@ router.post('/laporan-admin', authMiddleware, async (req, res) => {
     res.status(201).json({ data: r.rows[0] });
   } catch (e) {
     if (e.code === '23505') return res.status(409).json({ error: 'Laporan untuk akun dan tanggal ini sudah ada' });
-    res.status(500).json({ error: 'Gagal simpan laporan: ' + e.message });
+    console.error('POST /laporan-admin:', e.message);
+    res.status(500).json({ error: 'Gagal simpan laporan' });
   }
 });
 
@@ -1776,7 +1854,8 @@ router.put('/laporan-admin/:id', authMiddleware, async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     if (e.code === '23505') return res.status(409).json({ error: 'Laporan untuk akun dan tanggal ini sudah ada' });
-    res.status(500).json({ error: 'Gagal update: ' + e.message });
+    console.error('PUT /laporan-admin/:id:', e.message);
+    res.status(500).json({ error: 'Gagal update laporan' });
   }
 });
 
@@ -1925,7 +2004,7 @@ router.put('/meta-ads/brands/:id/settings', authMiddleware, async (req, res) => 
       [Number(kurs_usd), Number(hpp_default), req.params.id]
     );
     res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: 'Gagal update settings: ' + e.message }); }
+  } catch (e) { console.error('Gagal update settings:', e.message); res.status(500).json({ error: 'Gagal update settings' }); }
 });
 
 // POST /api/hub/meta-ads/brands
@@ -1982,7 +2061,7 @@ router.get('/meta-ads/insights', authMiddleware, async (req, res) => {
       ORDER BY i.tanggal DESC
     `, params);
     res.json({ data: r.rows });
-  } catch (e) { res.status(500).json({ error: 'Gagal ambil insights: ' + e.message }); }
+  } catch (e) { console.error('Gagal ambil insights:', e.message); res.status(500).json({ error: 'Gagal ambil insights' }); }
 });
 
 // POST /api/hub/meta-ads/report — input manual order/omzet (dalam USD, dikonversi ke IDR)
@@ -2003,7 +2082,7 @@ router.post('/meta-ads/report', authMiddleware, async (req, res) => {
       RETURNING *
     `, [brand_id, tanggal, jumlah_order || 0, omzetIdr, hppDefault, catatan || null, req.user.nama]);
     res.json({ data: r.rows[0], kurs_dipakai: kurs });
-  } catch (e) { res.status(500).json({ error: 'Gagal simpan report: ' + e.message }); }
+  } catch (e) { console.error('Gagal simpan report:', e.message); res.status(500).json({ error: 'Gagal simpan report' }); }
 });
 
 // GET /api/hub/meta-ads/laporan?bulan=YYYY-MM&brand_id=
@@ -2041,7 +2120,7 @@ router.get('/meta-ads/laporan', authMiddleware, async (req, res) => {
       ORDER BY b.nama
     `, params);
     res.json({ data: r.rows });
-  } catch (e) { res.status(500).json({ error: 'Gagal ambil laporan: ' + e.message }); }
+  } catch (e) { console.error('Gagal ambil laporan:', e.message); res.status(500).json({ error: 'Gagal ambil laporan' }); }
 });
 
 // POST /api/hub/meta-ads/sync/:brandId — sync data dari Meta API untuk tanggal tertentu
@@ -2056,7 +2135,7 @@ router.post('/meta-ads/sync/:brandId', authMiddleware, async (req, res) => {
     const data = await syncMetaInsights(brand.id, brand.ad_account_id, tgl);
     if (!data) return res.json({ ok: true, message: 'Tidak ada data dari Meta untuk tanggal ini' });
     res.json({ ok: true, data });
-  } catch (e) { res.status(500).json({ error: 'Gagal sync: ' + e.message }); }
+  } catch (e) { console.error('Gagal sync:', e.message); res.status(500).json({ error: 'Gagal sync' }); }
 });
 
 // POST /api/hub/meta-ads/sync-range/:brandId — sync range tanggal
@@ -2082,7 +2161,7 @@ router.post('/meta-ads/sync-range/:brandId', authMiddleware, async (req, res) =>
     }
     const ok = results.filter(r => r.ok).length;
     res.json({ ok: true, total: results.length, berhasil: ok, gagal: results.length - ok, results });
-  } catch (e) { res.status(500).json({ error: 'Gagal sync range: ' + e.message }); }
+  } catch (e) { console.error('Gagal sync range:', e.message); res.status(500).json({ error: 'Gagal sync range' }); }
 });
 
 // POST /api/hub/meta-ads/sync-all — sync semua brand aktif (dipanggil cron)
@@ -2100,7 +2179,7 @@ router.post('/meta-ads/sync-all', authMiddleware, async (req, res) => {
       error: r.reason?.message,
     }));
     res.json({ ok: true, tanggal: tgl, summary });
-  } catch (e) { res.status(500).json({ error: 'Gagal sync all: ' + e.message }); }
+  } catch (e) { console.error('Gagal sync all:', e.message); res.status(500).json({ error: 'Gagal sync all' }); }
 });
 
 // ── AI INSIGHT ───────────────────────────────────────────────────────────────
@@ -2195,7 +2274,7 @@ ${topSpend.map(x => `- ${x.tanggal}: Spend Rp ${Number(x.spend).toLocaleString('
     const rawInsight = groqJson.choices?.[0]?.message?.content || 'Tidak ada insight';
     const insight = rawInsight.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
     res.json({ ok: true, insight, ringkasan });
-  } catch (e) { res.status(500).json({ error: 'Gagal generate insight: ' + e.message }); }
+  } catch (e) { console.error('Gagal generate insight:', e.message); res.status(500).json({ error: 'Gagal generate insight' }); }
 });
 
 // POST /api/hub/ai/chat — AI assistant dengan konteks data hub
@@ -2289,7 +2368,7 @@ ${profil.rows.filter(p=>p.skor_teknis).map(p => `- ${p.nama} (${p.divisi}): tekn
     const rawJawaban = groqJson.choices?.[0]?.message?.content || '';
     const jawaban = rawJawaban.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
     res.json({ ok: true, jawaban });
-  } catch (e) { res.status(500).json({ error: 'Gagal: ' + e.message }); }
+  } catch (e) { console.error('AI Assistant error:', e.message); res.status(500).json({ error: 'Gagal memproses permintaan AI Assistant' }); }
 });
 
 // ── CRON: daily sync jam 07:00 WIB (00:00 UTC) ───────────────────────────────

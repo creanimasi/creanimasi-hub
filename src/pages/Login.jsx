@@ -95,10 +95,11 @@ export default function Login({ onLogin }) {
           )}
 
           <div style={{ marginBottom: 14 }}>
-            <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)',
+            <label htmlFor="login-username" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)',
               textTransform: 'uppercase', letterSpacing: '0.06em',
               display: 'block', marginBottom: 7 }}>Username</label>
             <input
+              id="login-username"
               type="text"
               value={form.username}
               onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
@@ -110,11 +111,12 @@ export default function Login({ onLogin }) {
           </div>
 
           <div style={{ marginBottom: 24 }}>
-            <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)',
+            <label htmlFor="login-password" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)',
               textTransform: 'uppercase', letterSpacing: '0.06em',
               display: 'block', marginBottom: 7 }}>Password</label>
             <div style={{ position: 'relative' }}>
               <input
+                id="login-password"
                 type={showPass ? 'text' : 'password'}
                 value={form.password}
                 onChange={e => setForm(f => ({ ...f, password: e.target.value }))}

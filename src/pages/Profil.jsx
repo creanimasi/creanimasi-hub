@@ -171,11 +171,11 @@ export default function Profil() {
                   { key:'target_1_tahun',  label:'🎯 Target 1 tahun',    ph:'Di mana kamu 1 tahun ke depan?' },
                 ].map(f => (
                   <div key={f.key} style={{ marginBottom:10 }}>
-                    <label style={{ fontSize:10, fontWeight:700, color:'var(--text-3)',
+                    <label htmlFor={`profil-info-${f.key}`} style={{ fontSize:10, fontWeight:700, color:'var(--text-3)',
                       textTransform:'uppercase', letterSpacing:'.05em', display:'block', marginBottom:4 }}>
                       {f.label}
                     </label>
-                    <textarea rows={2} value={infoForm[f.key]}
+                    <textarea id={`profil-info-${f.key}`} rows={2} value={infoForm[f.key]}
                       onChange={e => setInfoForm(x=>({...x,[f.key]:e.target.value}))}
                       placeholder={f.ph} style={{ resize:'vertical', minHeight:52 }} />
                   </div>
@@ -224,12 +224,13 @@ export default function Profil() {
             { key: 'konfirmasi',    label: 'Konfirmasi password baru *', show: showPass.kon,  toggle: () => setShow(s=>({...s,kon:!s.kon})) },
           ].map(f => (
             <div key={f.key} style={{ marginBottom: 14 }}>
-              <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)',
+              <label htmlFor={`profil-${f.key}`} style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)',
                 textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 6 }}>
                 {f.label}
               </label>
               <div style={{ position: 'relative' }}>
                 <input
+                  id={`profil-${f.key}`}
                   type={f.show ? 'text' : 'password'}
                   value={form[f.key]} required
                   onChange={e => set(f.key, e.target.value)}

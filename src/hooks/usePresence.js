@@ -17,33 +17,36 @@ export function usePresence(user) {
 
   useEffect(() => {
     if (!user) return;
+    let cancelled = false;
 
     // === SSE: terima update real-time siapa yang online ===
-    let sse;
-    try {
-      sse = api.connectPresence();
-      sseRef.current = sse;
+    (async () => {
+      try {
+        const sse = await api.connectPresence();
+        if (cancelled) { sse.close(); return; }
+        sseRef.current = sse;
 
-      sse.onopen = () => setConnected(true);
+        sse.onopen = () => setConnected(true);
 
-      sse.onmessage = (e) => {
-        try {
-          const list = JSON.parse(e.data);
-          setOnlineUsers(list);
-        } catch {}
-      };
+        sse.onmessage = (e) => {
+          try {
+            const list = JSON.parse(e.data);
+            setOnlineUsers(list);
+          } catch {}
+        };
 
-      sse.onerror = () => {
-        setConnected(false);
-        // Fallback: polling snapshot tiap 60 detik kalau SSE error
-        api.getPresence()
-          .then(r => setOnlineUsers(r.data || []))
-          .catch(() => {});
-      };
-    } catch {
-      // Browser tidak support EventSource, fallback ke snapshot
-      api.getPresence().then(r => setOnlineUsers(r.data || [])).catch(() => {});
-    }
+        sse.onerror = () => {
+          setConnected(false);
+          // Fallback: polling snapshot tiap 60 detik kalau SSE error
+          api.getPresence()
+            .then(r => setOnlineUsers(r.data || []))
+            .catch(() => {});
+        };
+      } catch {
+        // Browser tidak support EventSource atau gagal ambil tiket — fallback ke snapshot
+        if (!cancelled) api.getPresence().then(r => setOnlineUsers(r.data || [])).catch(() => {});
+      }
+    })();
 
     // === Heartbeat: kirim tiap 30 detik ===
     sendHeartbeat(); // kirim langsung saat mount
@@ -61,6 +64,7 @@ export function usePresence(user) {
 
     return () => {
       // Cleanup
+      cancelled = true;
       if (sseRef.current) { sseRef.current.close(); sseRef.current = null; }
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
       window.removeEventListener('beforeunload', handleUnload);
