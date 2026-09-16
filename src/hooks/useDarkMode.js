@@ -1,35 +1,37 @@
 import { useState, useEffect } from 'react';
 import { api } from '../services/api';
 
+// Nama hook dipertahankan "useDarkMode" (dipakai di Layout.jsx & Login.jsx) meski
+// sekarang mengelola 3 tema (dark/light/retro), bukan cuma boolean gelap-terang —
+// menghindari ubah import di banyak file untuk penambahan yang sifatnya perluasan.
+const THEMES = ['dark', 'light', 'retro'];
+
 export function useDarkMode(userTema) {
-  const [dark, setDark] = useState(() => {
+  const [theme, setTheme] = useState(() => {
     // Prioritas: tema dari DB (via userTema) → localStorage → default dark
-    if (userTema) return userTema !== 'light';
+    if (userTema && THEMES.includes(userTema)) return userTema;
     const saved = localStorage.getItem('theme');
-    return saved ? saved !== 'light' : true;
+    return THEMES.includes(saved) ? saved : 'dark';
   });
 
   // Sync tema dari DB saat user login/me loaded
   useEffect(() => {
-    if (userTema) {
-      const isD = userTema !== 'light';
-      setDark(isD);
-    }
+    if (userTema && THEMES.includes(userTema)) setTheme(userTema);
   }, [userTema]);
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-    localStorage.setItem('theme', dark ? 'dark' : 'light');
-  }, [dark]);
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
-  const toggle = () => {
-    setDark(d => {
-      const next = !d;
-      // Simpan ke DB di background (best-effort)
-      api.setTema(next ? 'dark' : 'light').catch(() => {});
+  // Siklus: dark -> light -> retro -> dark
+  const cycleTheme = () => {
+    setTheme(t => {
+      const next = THEMES[(THEMES.indexOf(t) + 1) % THEMES.length];
+      api.setTema(next).catch(() => {}); // simpan ke DB di background (best-effort)
       return next;
     });
   };
 
-  return [dark, toggle];
+  return [theme, cycleTheme];
 }

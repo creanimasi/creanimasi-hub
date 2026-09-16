@@ -77,6 +77,58 @@
   --glow-purple:  none;
 }
 
+/* ── RETRO GAME MODE (pixel 16-bit) ──────────────────────────────
+   Semua nilai alias ke token --rpg-* (didefinisikan di
+   src/modules/rpg/styles/rpg-tokens.css, di-import global lewat App.jsx)
+   supaya satu sumber warna dengan modul gamifikasi RPG — tidak duplikasi
+   nilai warna di dua tempat berbeda. */
+[data-theme="retro"] {
+  --green:        var(--rpg-success);
+  --green-dark:   #2f9e5c;
+  --green-light:  rgba(74,222,128,0.12);
+  --purple:       var(--rpg-stat-inisiatif);
+  --purple-light: rgba(185,140,240,0.12);
+  --amber:        var(--rpg-warn);
+  --amber-light:  rgba(255,166,76,0.12);
+  --coral:        var(--rpg-stat-produktivitas);
+  --coral-light:  rgba(251,122,92,0.12);
+  --blue:         var(--rpg-stat-kolaborasi);
+  --blue-light:   rgba(95,180,250,0.12);
+  --red:          #ff4d6a;
+  --red-light:    rgba(255,77,106,0.12);
+
+  --bg:           var(--rpg-bg);
+  --surface:      var(--rpg-bg-2);
+  --surface-2:    var(--rpg-bg-3);
+  --surface-3:    #232c66;
+  --border:       var(--rpg-line-dim);
+  --border-2:     var(--rpg-line);
+  --text:         var(--rpg-ink);
+  --text-2:       var(--rpg-ink-dim);
+  --text-3:       var(--rpg-ink-faint);
+
+  --glow-green:   0 0 20px rgba(255,210,63,.35);
+  --glow-purple:  0 0 20px rgba(185,140,240,.35);
+
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+
+  --font: var(--rpg-font-body);
+}
+
+/* Efek scanline CRT tipis — cuma dekorasi, tidak menghalangi interaksi */
+[data-theme="retro"] body::after {
+  content: "";
+  position: fixed; inset: 0; z-index: 9999; pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 2px,
+    rgba(0,0,0,.14) 2px, rgba(0,0,0,.14) 3px
+  );
+  opacity: .35;
+}
+
 body {
   font-family: var(--font);
   background: var(--bg);

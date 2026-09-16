@@ -93,9 +93,12 @@ function getNow() {
   });
 }
 
-function ThemeToggle({ dark, toggle }) {
+const THEME_NEXT_ICON  = { dark: '☀️', light: '🕹️', retro: '🌙' };
+const THEME_NEXT_LABEL = { dark: 'terang', light: 'retro (game 16-bit)', retro: 'gelap' };
+
+function ThemeToggle({ theme, toggle }) {
   return (
-    <button onClick={toggle} title={dark ? 'Ganti ke mode terang' : 'Ganti ke mode gelap'} style={{
+    <button onClick={toggle} title={`Ganti ke mode ${THEME_NEXT_LABEL[theme]}`} style={{
       width: 36, height: 36, borderRadius: 10,
       border: '1px solid var(--border-2)',
       background: 'var(--surface-2)',
@@ -107,7 +110,7 @@ function ThemeToggle({ dark, toggle }) {
       onMouseEnter={e => e.currentTarget.style.boxShadow = '0 0 12px rgba(0,214,143,0.2)'}
       onMouseLeave={e => e.currentTarget.style.boxShadow = ''}
     >
-      {dark ? '☀️' : '🌙'}
+      {THEME_NEXT_ICON[theme]}
     </button>
   );
 }
@@ -243,7 +246,7 @@ function NotificationBell({ user }) {
 
 export default function Layout({ children, path }) {
   const { user }  = useAuth();
-  const [dark, toggleDark] = useDarkMode(user?.tema);
+  const [theme, toggleTheme] = useDarkMode(user?.tema);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try { return localStorage.getItem('hub_sidebar_collapsed') === '1'; } catch { return false; }
@@ -319,7 +322,7 @@ export default function Layout({ children, path }) {
           <div className="topbar-date" style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0 }}>{getNow()}</div>
 
           <NotificationBell user={user} />
-          <ThemeToggle dark={dark} toggle={toggleDark} />
+          <ThemeToggle theme={theme} toggle={toggleTheme} />
         </header>
 
         {!isAdmin && <JurnalBanner user={user} />}

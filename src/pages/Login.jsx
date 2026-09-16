@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useDarkMode } from '../hooks/useDarkMode';
 
+const THEME_NEXT_ICON = { dark: '☀️', light: '🕹️', retro: '🌙' };
+
 export default function Login({ onLogin }) {
   const { login }  = useAuth();
-  const [dark, toggleDark] = useDarkMode();
+  const [theme, toggleTheme] = useDarkMode();
   const [form, setForm]    = useState({ username: '', password: '' });
   const [error, setError]  = useState('');
   const [loading, setLoading] = useState(false);
@@ -46,13 +48,13 @@ export default function Login({ onLogin }) {
       }} />
 
       {/* Theme toggle */}
-      <button onClick={toggleDark} style={{
+      <button onClick={toggleTheme} style={{
         position: 'absolute', top: 20, right: 20,
         width: 36, height: 36, borderRadius: 10,
         border: '1px solid var(--border-2)', background: 'var(--surface-2)',
         cursor: 'pointer', fontSize: 16,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>{dark ? '☀️' : '🎮'}</button>
+      }}>{THEME_NEXT_ICON[theme]}</button>
 
       {/* Login card */}
       <div style={{
