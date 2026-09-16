@@ -3,11 +3,14 @@
 ## Tentang Creanimasi Studio
 Studio VTuber model, illustrasi anime, VRM, AR filter, 3D print.
 Platform: Fiverr, VGen, Etsy. Owner: Mas Kholed.
-Tim inhouse 11 orang + remote.
+Tim inhouse ~17 orang aktif (24 akun tercatat di hub_users, 7 nonaktif/offboarded) + remote,
+tersebar di beberapa entitas/brand: Creanimasi Studio, Creillustra, Shuyou, Flip Studio.
 
 ## Stack Teknologi
 - Frontend: React + React Router di ~/Documents/creanimasi-hub
-- Backend: Node.js di ~/Documents/creanimasi-fiverr-project-manager-main - v28/server/server.js
+- Backend: Node.js di ~/Documents/creanimasi-hub/backend (hub.js + server.js) — BUKAN di
+  project "creanimasi-fiverr-project-manager-main - v28" seperti dokumentasi versi lama
+  (project itu adalah aplikasi terpisah "CRM_Creanimasi", di-deploy ke crm.creanimasi.com)
 - Database: PostgreSQL lokal: creanimasi_hub_dev / production: Coolify (163.61.44.177)
 - Hosting: Coolify v4 di 163.61.44.177:8000
 - OS: Zorin Linux (Ubuntu based)
@@ -35,7 +38,7 @@ src/
     useDarkMode.js     — dark mode tersimpan ke DB per user
     useNotifications.js — polling notifikasi tiap 5 menit
   data/
-    tim.js             — data 11 anggota + hitungLama() otomatis dari tanggal
+    tim.js             — data 22 anggota (17 aktif) + hitungLama() otomatis dari tanggal
   services/
     api.js             — semua call ke backend /api/hub (40+ methods)
   utils/
@@ -53,30 +56,63 @@ Endpoint: auth/login|me|password|tema, jurnal, profiling/:divisi|all|me,
 reward, skb, tim, modul-topik, workshop, friday-win, sesi-1on1, revenue,
 dashboard, profil/update, tim/:id/reset-password
 
-## Database Tables (PostgreSQL: creanimasi_hub_dev)
+## Database Tables (PostgreSQL: creanimasi_hub_dev / production: creanimasi_hub — 28 tabel)
 hub_users, jurnal_mingguan, profiling_admin/pm/illustrator/rigger/3d,
-tim, modul_topik, workshop_kehadiran, friday_win, sesi_1on1,
-revenue_bulanan, reward_tracking, skb
+tim, modul_topik, modul_topik_nama, modul_progress, workshop_kehadiran, friday_win, sesi_1on1,
+revenue_bulanan, reward_tracking, skb, absensi_kehadiran, absensi_sesi,
+laporan_harian, laporan_mingguan, laporan_akun, laporan_sdm, laporan_admin_mingguan,
+meta_ads_brands, meta_ads_insights, meta_ads_reports, meta_ads_thresholds
+
+Catatan soal migrasi yang tidak lengkap:
+- `hub_users` dan `modul_topik_nama` **tidak punya CREATE TABLE di manapun di repo ini**
+  (bukan di `schema.sql`, migrasi, maupun IIFE auto-migration `hub.js`) — berarti dibuat manual
+  langsung di production. `hub_users` sudah saya rekonstruksi strukturnya ke
+  `database/migration_hub_users.sql` (2026-09-15, dicek langsung ke DB production).
+  `modul_progress` disebut di kolom `data/tim.js`-adjacent tapi tidak ditemukan referensinya
+  sama sekali di `backend/hub.js` — kemungkinan tabel sisa dari fitur yang sudah tidak dipakai.
+- `absensi_kehadiran`/`absensi_sesi` ADA di `database/migration_absensi.sql` **dan** dibuat ulang
+  (idempotent, `IF NOT EXISTS`) oleh IIFE di `hub.js` — redundan tapi tidak masalah.
+- `meta_ads_*` dan kolom `request_1on1`/`catatan_request` di `jurnal_mingguan` **hanya** dibuat
+  lewat IIFE auto-migration di `backend/hub.js` (`CREATE TABLE IF NOT EXISTS` / `ALTER TABLE ...
+  ADD COLUMN IF NOT EXISTS` yang jalan otomatis tiap kali server start) — tidak ada file SQL-nya,
+  tapi ini "by design", bukan gap.
 
 ## Sistem Role & Akses
 **Admin (kholed/admin123):** Semua halaman + edit modul/workshop/SKB review/reset PW
 **Member (username/creanimasi123):** Dashboard, Modul divisi sendiri, Isi Jurnal,
 Riwayat Jurnal, Profiling, SOP, Ajukan SKB, Profil & Ganti Password
 
-## Data Tim (11 anggota)
-| Nama | Divisi | Level | Tipe |
-|------|--------|-------|------|
-| Ariel Tegar | Admin | Senior | Rising Star |
-| Ryan Cavallera | Admin | Senior | Rising Star |
-| Nanda Cahya Bintang | Admin | Junior | High Potential |
-| Dina Syavina | PM | Senior | High Potential |
-| Tsania Lathifa | PM | Junior | Rising Star |
-| Ahmad Fathurrahman | Rigger | Senior | Rising Star |
-| Raynar Harits | Rigger | Senior | Silent Expert |
-| Aditya Tri Prakoso | Illustrator | Senior | High Potential |
-| Noval Faqihudin Zaky | Illustrator | Senior | High Potential |
-| Galang Ramadhan | Illustrator | Junior | Silent Expert |
-| Ridho Ramadhan | 3D Modeler | Junior | At Risk |
+## Data Tim (22 baris di tabel `tim`, disinkron dari production 2026-09-15)
+**Aktif (17):**
+| Nama | Divisi | Level | Tipe | Entitas |
+|------|--------|-------|------|---------|
+| Ariel Tegar | Admin | Senior | Rising Star | Creanimasi Studio |
+| Ryan Cavallera | Admin | Senior | Rising Star | Creillustra |
+| Nanda Cahya Bintang | Admin | Junior | High Potential | Creanimasi Studio |
+| Dina Syavina | PM | Senior | High Potential | Creanimasi Studio |
+| Tsania Lathifa | PM | Junior | Rising Star | Creanimasi Studio |
+| Ahmad Fathurrahman | Rigger | Senior | Rising Star | Creanimasi Studio |
+| Raynar Harits | Rigger | Senior | Silent Expert | Creillustra |
+| Aditya Tri Prakoso | Illustrator | Senior | High Potential | Creanimasi Studio |
+| Noval Faqihudin Zaky | Illustrator | Senior | High Potential | Creanimasi Studio |
+| Galang Ramadhan | Illustrator | Junior | Silent Expert | Creanimasi Studio |
+| Ridho Ramadhan | 3D Modeler | Junior | Rising Star | Creanimasi Studio |
+| davian | Admin | Magang/Probation | Rising Star | Creanimasi Studio |
+| nindi | Admin | Magang/Probation | — | Creanimasi Studio |
+| Vitto Ramadani | Desainer | Junior | — | Creanimasi Studio |
+| Azzahra Nadienta | PM | Senior | — | Creanimasi Studio |
+| Sigit Setyawan | 3D Modeler | Magang/Probation | Rising Star | Creanimasi Studio |
+| Aryo Cahyono | 3D Modeler | Senior | — | Creanimasi Studio |
+
+**Nonaktif/offboarded (5, login dinonaktifkan):** Andini Dyah Paramastri (Admin, Shuyou),
+Elenesya Sasmariza (Admin, Flip Studio), Risma Wulandari (Admin, Flip Studio),
+Maheswara Artha Kumara Gautama (PM, Shuyou), Rizky Himawan Aria Wicaksa (3D Modeler, Shuyou)
+
+**Admin login (2):** kholed (Mas Kholed), mietsaq (Mietsaq Husain)
+
+Data lengkap tersinkron di `src/data/tim.js`. Field naratif (semangat/energi/target/mentor)
+di tabel `tim` production sudah default "-" untuk semua orang — data itu sekarang hidup di
+tabel `profiling_*`, bukan di `tim` lagi.
 
 ## Fitur Utama v2.0
 - Auth JWT + role-based routing + global authMiddleware di semua endpoint

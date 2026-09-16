@@ -431,7 +431,7 @@ export default function Tim() {
 
   useEffect(() => { load(); }, [load]);
 
-  const divisis   = ['Semua', 'Admin', 'PM', 'Rigger', 'Illustrator', '3D Modeler'];
+  const divisis   = ['Semua', 'Admin', 'PM', 'Rigger', 'Illustrator', '3D Modeler', 'Desainer'];
   const tipes     = ['Semua', 'Rising Star', 'High Potential', 'Silent Expert', 'At Risk'];
 
   const filtered = tim.filter(t => {
