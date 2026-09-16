@@ -365,7 +365,7 @@ export default function ManajemenAkses() {
 
                 {/* Aksi */}
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {hasAkun && !isSelf && (
+                  {hasAkun && !isSelf && currentUser?.is_superadmin && (
                     <button onClick={() => setModal({ type: 'role', data: a })} style={{
                       padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
                       border: '1px solid var(--border-2)', background: 'var(--surface-2)',

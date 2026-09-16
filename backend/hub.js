@@ -38,6 +38,13 @@ const apiLimiter = rateLimit({
   message: { error: 'Terlalu banyak permintaan. Coba lagi nanti.' },
 });
 
+// Superadmin = admin dengan flag is_superadmin — satu-satunya yang boleh
+// mengubah role user lain (admin<->member). Admin biasa tetap bisa semua
+// fitur operasional lain seperti sebelumnya.
+function canManageRoles(user) {
+  return user?.role === 'admin' && user?.is_superadmin === true;
+}
+
 function authMiddleware(req, res, next) {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Token tidak ada' });
@@ -67,10 +74,10 @@ router.post('/auth/login', loginLimiter, async (req, res) => {
     if (!valid) return res.status(401).json({ error: 'Username atau password salah' });
 
     const token = jwt.sign(
-      { id: user.id, nama: user.nama, username: user.username, role: user.role },
+      { id: user.id, nama: user.nama, username: user.username, role: user.role, is_superadmin: !!user.is_superadmin },
       JWT_SECRET, { expiresIn: '7d' }
     );
-    res.json({ success: true, token, user: { id: user.id, nama: user.nama, username: user.username, role: user.role, tema: user.tema || 'dark' } });
+    res.json({ success: true, token, user: { id: user.id, nama: user.nama, username: user.username, role: user.role, is_superadmin: !!user.is_superadmin, tema: user.tema || 'dark' } });
   } catch (err) {
     res.status(500).json({ error: 'Gagal login' });
   }
@@ -572,6 +579,8 @@ router.post('/tim', authMiddleware, async (req, res) => {
     return res.status(400).json({ error: 'Nama, divisi, entitas, username, dan password wajib diisi' });
   if (password.length < 8)
     return res.status(400).json({ error: 'Password minimal 8 karakter' });
+  if (role === 'admin' && !canManageRoles(req.user))
+    return res.status(403).json({ error: 'Hanya superadmin yang bisa membuat akun admin' });
   const client = await hubPool.connect();
   try {
     await client.query('BEGIN');
@@ -612,6 +621,18 @@ router.patch('/tim/:id', authMiddleware, async (req, res) => {
     if (!timR.rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Anggota tidak ditemukan' }); }
     let userInfo = {};
     if (username || role) {
+      if (role) {
+        const curR = await client.query(
+          'SELECT role FROM hub_users WHERE tim_id=$1 OR (tim_id IS NULL AND nama=$2) LIMIT 1',
+          [req.params.id, nama]
+        );
+        const currentRole = curR.rows[0]?.role;
+        const touchesAdmin = role === 'admin' || currentRole === 'admin';
+        if (touchesAdmin && !canManageRoles(req.user)) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ error: 'Hanya superadmin yang bisa mengubah role admin' });
+        }
+      }
       const userR = await client.query(
         'UPDATE hub_users SET nama=$1, username=COALESCE($2, username), role=COALESCE($3, role) WHERE tim_id=$4 OR (tim_id IS NULL AND nama=$1) RETURNING username, role',
         [nama, username ? username.toLowerCase().trim() : null, role || null, req.params.id]
@@ -1032,6 +1053,8 @@ router.post('/tim/:id/buat-akun', authMiddleware, async (req, res) => {
   const { username, password, role } = req.body;
   if (!username || !username.trim()) return res.status(400).json({ error: 'Username wajib diisi' });
   if (!password || password.length < 8) return res.status(400).json({ error: 'Password minimal 8 karakter' });
+  if (role === 'admin' && !canManageRoles(req.user))
+    return res.status(403).json({ error: 'Hanya superadmin yang bisa membuat akun admin' });
   try {
     const timR = await hubPool.query('SELECT * FROM tim WHERE id=$1', [req.params.id]);
     if (!timR.rows.length) return res.status(404).json({ error: 'Anggota tidak ditemukan' });
