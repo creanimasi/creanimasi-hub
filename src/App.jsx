@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import './index.css';
+import './modules/rpg/styles/rpg-tokens.css'; // token warna/font retro — dipakai tema "retro" & modul RPG
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { useTim } from './hooks/useTim';
 import Layout from './components/Layout';
@@ -22,6 +23,11 @@ import AdsPerformance from './pages/AdsPerformance';
 import LaporanProfit from './pages/LaporanProfit';
 import AiAssistant from './pages/AiAssistant';
 import Kalender from './pages/Kalender';
+import CharacterSheetPage from './modules/rpg/pages/CharacterSheetPage';
+import QuestBoardPage from './modules/rpg/pages/QuestBoardPage';
+import GuildHallPage from './modules/rpg/pages/GuildHallPage';
+import AchievementsPage from './modules/rpg/pages/AchievementsPage';
+import RpgAnalyticsPage from './modules/rpg/pages/admin/RpgAnalyticsPage';
 
 function AdminRoute({ children }) {
   const { user } = useAuth();
@@ -68,6 +74,12 @@ function ProtectedRoutes() {
         <Route path="/skb"          element={<SKB />} />
         <Route path="/performa"     element={<Performa />} />
 
+        {/* Modul RPG — preview, data dummy, belum production-ready */}
+        <Route path="/rpg/character" element={<CharacterSheetPage />} />
+        <Route path="/rpg/quests"    element={<QuestBoardPage />} />
+        <Route path="/rpg/guild"     element={<GuildHallPage />} />
+        <Route path="/rpg/achievements" element={<AchievementsPage />} />
+
         {/* Admin only */}
         <Route path="/tim"          element={<AdminRoute><Tim /></AdminRoute>} />
         <Route path="/anggota"      element={<AdminRoute><KelolAnggota /></AdminRoute>} />
@@ -89,6 +101,7 @@ function ProtectedRoutes() {
         <Route path="/laporan-profit"     element={<AdminRoute><LaporanProfit /></AdminRoute>} />
         <Route path="/ai-assistant"       element={<AdminRoute><AiAssistant /></AdminRoute>} />
         <Route path="/kalender"     element={<AdminRoute><Kalender /></AdminRoute>} />
+        <Route path="/rpg/analytics" element={<AdminRoute><RpgAnalyticsPage /></AdminRoute>} />
 
         <Route path="*"             element={<Navigate to="/" replace />} />
       </Routes>

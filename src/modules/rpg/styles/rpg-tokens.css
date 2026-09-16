@@ -1,0 +1,44 @@
+/*
+  rpg-tokens.css
+  Token warna & tipografi untuk modul gamifikasi RPG hub.creanimasi.
+  Diekstrak dari mockup yang sudah disetujui (arah visual: pixel retro 16-bit).
+  Prefix --rpg-* sengaja dipakai supaya tidak pernah bentrok dengan token
+  global di src/index.css. Jangan timpa token global yang sudah ada.
+*/
+
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@500;600;700&family=VT323&display=swap');
+
+:root {
+  /* --- Warna dasar --- */
+  --rpg-bg: #0a0e27;
+  --rpg-bg-2: #141a44;
+  --rpg-bg-3: #1c2456;
+
+  /* --- Border / bevel pixel --- */
+  --rpg-line: #9fe3ff;
+  --rpg-line-dim: #3f4f8c;
+
+  /* --- Aksen utama (XP, level, highlight) --- */
+  --rpg-gold: #ffd23f;
+  --rpg-gold-dim: #c9a02e;
+
+  /* --- Teks --- */
+  --rpg-ink: #f2f6ff;
+  --rpg-ink-dim: #8593c9;
+  --rpg-ink-faint: #4c5690;
+
+  /* --- Warna stat PILAR --- */
+  --rpg-stat-produktivitas: #fb7a5c;
+  --rpg-stat-kolaborasi: #5fb4fa;
+  --rpg-stat-inisiatif: #b98cf0;
+  --rpg-stat-konsistensi: #4ade80;
+
+  /* --- Semantik --- */
+  --rpg-success: #4ade80;
+  --rpg-warn: #ffa64c;
+
+  /* --- Font --- */
+  --rpg-font-display: 'Press Start 2P', monospace;
+  --rpg-font-body: 'Pixelify Sans', ui-sans-serif, system-ui, sans-serif;
+  --rpg-font-hud: 'VT323', monospace;
+}

@@ -1,0 +1,42 @@
+/*
+  rpg-components.css
+  HANYA untuk hal yang tidak bisa lewat inline style React:
+  pseudo-elements (notch pixel di pojok pixbox) dan @keyframes.
+  Semua warna/spacing per-instance tetap inline di komponen, konsisten
+  dengan pola styling lain di project ini (lihat src/index.css).
+*/
+
+.rpg-pixbox {
+  position: relative;
+}
+.rpg-pixbox::before,
+.rpg-pixbox::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  width: 6px;
+  height: 6px;
+  background: var(--rpg-gold);
+  pointer-events: none;
+}
+.rpg-pixbox::before { left: -2px; }
+.rpg-pixbox::after  { right: -2px; }
+
+@keyframes rpg-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: .25; }
+}
+.rpg-blink { animation: rpg-blink 1.6s steps(1) infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rpg-blink { animation: none !important; opacity: 1 !important; }
+}
+
+/* Bar (XP / stat / quest progress) — width diatur inline via style={{width}},
+   transisinya butuh keyframe `steps()` yang tidak praktis lewat inline style. */
+.rpg-bar-fill {
+  transition: width 1s steps(20);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rpg-bar-fill { transition: none; }
+}

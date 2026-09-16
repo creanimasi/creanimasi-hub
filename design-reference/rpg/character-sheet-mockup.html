@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Lembar Karakter Creanimasi</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@500;600;700&family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0e27;
+    --bg-2:#141a44;
+    --bg-3:#1c2456;
+
+    --line:#9fe3ff;
+    --line-dim:#3f4f8c;
+
+    --gold:#ffd23f;
+    --gold-dim:#c9a02e;
+
+    --ink:#f2f6ff;
+    --ink-dim:#8593c9;
+    --ink-faint:#4c5690;
+
+    --st-prod:#fb7a5c;
+    --st-collab:#5fb4fa;
+    --st-init:#b98cf0;
+    --st-const:#4ade80;
+
+    --success:#4ade80;
+    --warn:#ffa64c;
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; }
+
+  body{
+    position:relative;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Pixelify Sans', ui-sans-serif, system-ui, sans-serif;
+    padding-inline:clamp(16px, 4vw, 48px);
+    padding-block:clamp(1.75rem, 4vw, 3rem);
+    min-height:100%;
+    overflow-x:hidden;
+  }
+
+  img{ max-width:100%; }
+  [hidden]{ display:none!important; }
+
+  /* CRT scanline + starfield */
+  body::before{
+    content:"";
+    position:fixed; inset:0; z-index:50; pointer-events:none;
+    background:repeating-linear-gradient(
+      to bottom, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 2px,
+      rgba(0,0,0,.22) 2px, rgba(0,0,0,.22) 3px
+    );
+    opacity:.35;
+  }
+  .stars{ position:fixed; inset:0; z-index:-1; pointer-events:none; }
+  .star{
+    position:absolute; width:3px; height:3px; background:var(--line);
+  }
+  .star.gold{ background:var(--gold); }
+  .blink{ animation:blink 1.6s steps(1) infinite; }
+  @keyframes blink{ 0%,49%{ opacity:1; } 50%,100%{ opacity:.25; } }
+  @media (prefers-reduced-motion:reduce){ .blink{ animation:none!important; opacity:1!important; } }
+
+  .frame{ max-width:1180px; margin-inline:auto; position:relative; }
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    display:flex; align-items:baseline; justify-content:space-between;
+    gap:1rem; flex-wrap:wrap;
+    padding-bottom:1.1rem;
+    margin-bottom:1.75rem;
+    border-bottom:2px solid var(--line-dim);
+  }
+  .wordmark{
+    font-family:'Press Start 2P', monospace; font-weight:400;
+    font-size:clamp(.72rem, 1.6vw, .95rem);
+    line-height:1.6;
+    color:var(--gold);
+    text-wrap:balance;
+  }
+  .wordmark span{ color:var(--ink-dim); font-size:.75em; display:block; margin-top:.35rem; }
+  .season-tag{
+    font-family:'VT323', monospace;
+    font-size:1.05rem; letter-spacing:.03em;
+    color:var(--ink);
+    background:var(--bg-2);
+    border:2px solid var(--line);
+    padding:.3rem .8rem;
+  }
+
+  /* ---------- Layout ---------- */
+  .layout{
+    display:grid;
+    grid-template-columns:190px minmax(0,1fr) 300px;
+    gap:1.5rem;
+    align-items:start;
+  }
+
+  /* ---------- Pixel box (shared chrome) ---------- */
+  .pixbox{
+    background:var(--bg-2);
+    border:2px solid var(--line);
+    box-shadow:
+      inset 2px 2px 0 rgba(159,227,255,.35),
+      inset -2px -2px 0 rgba(0,0,0,.4),
+      3px 3px 0 var(--bg-3);
+    position:relative;
+  }
+  .pixbox::before, .pixbox::after{
+    content:""; position:absolute; top:-2px; width:6px; height:6px;
+    background:var(--gold);
+  }
+  .pixbox::before{ left:-2px; }
+  .pixbox::after{ right:-2px; }
+
+  /* ---------- Rail nav ---------- */
+  .railnav{
+    display:flex; flex-direction:column; gap:.5rem;
+    padding:1rem .7rem;
+    position:sticky; top:1rem;
+  }
+  .railnav a{
+    display:flex; align-items:center; gap:.6rem;
+    padding:.55rem .6rem;
+    color:var(--ink-dim);
+    text-decoration:none;
+    font-weight:600;
+    font-size:.82rem;
+    border:2px solid transparent;
+  }
+  .railnav a svg{ width:16px; height:16px; flex:none; stroke:currentColor; }
+  .railnav a.active{
+    background:var(--bg-3);
+    color:var(--gold);
+    border-color:var(--line);
+    box-shadow:2px 2px 0 rgba(0,0,0,.4);
+  }
+  .railnav hr{ border:none; border-top:2px dashed var(--line-dim); margin:.4rem .1rem; }
+  .railnav .rail-note{
+    font-family:'VT323', monospace;
+    font-size:.95rem; color:var(--ink-faint);
+    padding:.2rem .6rem 0;
+    line-height:1.4;
+  }
+
+  /* ---------- Main stage ---------- */
+  .stage{ display:flex; flex-direction:column; gap:1.5rem; min-width:0; }
+
+  .hero-card{ padding:clamp(1.3rem, 3vw, 2rem); }
+
+  .hero-top{ display:flex; gap:1.5rem; align-items:flex-start; flex-wrap:wrap; }
+
+  .crest{
+    flex:none;
+    width:92px; height:92px;
+    position:relative;
+    background:
+      repeating-conic-gradient(#241a52 0% 25%, #2c2168 0% 50%) 0 0/8px 8px,
+      var(--bg-3);
+    border:2px solid var(--line);
+    box-shadow:inset 2px 2px 0 rgba(159,227,255,.3), inset -2px -2px 0 rgba(0,0,0,.5);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .crest span{
+    font-family:'Press Start 2P', monospace; font-weight:400;
+    font-size:1.15rem; color:var(--gold);
+    text-shadow:2px 2px 0 rgba(0,0,0,.5);
+  }
+  .crest .class-badge{
+    position:absolute; bottom:-8px; right:-8px;
+    width:28px; height:28px;
+    background:var(--st-const);
+    display:flex; align-items:center; justify-content:center;
+    border:2px solid var(--bg);
+  }
+  .crest .class-badge svg{ width:14px; height:14px; stroke:#08240f; }
+
+  .hero-id{ flex:1 1 260px; min-width:0; }
+  .hero-id .name-row{ display:flex; align-items:baseline; gap:.65rem; flex-wrap:wrap; }
+  .hero-id h1{
+    font-family:'Press Start 2P', monospace; font-weight:400;
+    font-size:clamp(1rem, 2.2vw, 1.3rem);
+    margin:0; text-wrap:balance; line-height:1.5;
+    color:var(--ink);
+  }
+  .rarity{ display:flex; gap:.2rem; margin:.5rem 0 .3rem; }
+  .rarity i{ width:11px; height:11px; background:var(--gold); }
+  .rarity i.off{ background:var(--ink-faint); }
+
+  .title-pill{
+    font-family:'VT323', monospace;
+    font-size:.95rem; font-weight:400; letter-spacing:.02em;
+    color:#1a1206;
+    background:var(--gold);
+    padding:.22rem .6rem;
+  }
+  .hero-id .role-line{
+    margin:.45rem 0 0; font-family:'VT323', monospace;
+    color:var(--ink-dim); font-size:1.05rem;
+  }
+
+  .level-block{ flex:none; text-align:right; }
+  .level-block .lvl-num{
+    font-family:'Press Start 2P', monospace;
+    font-size:1.5rem; font-weight:400; color:var(--gold);
+    line-height:1; text-shadow:2px 2px 0 rgba(0,0,0,.5);
+  }
+  .level-block .lvl-label{
+    font-family:'VT323', monospace;
+    font-size:.95rem; letter-spacing:.04em; color:var(--ink-dim);
+    text-transform:uppercase; margin-top:.35rem;
+  }
+
+  .h2-rule{ height:2px; background:var(--line-dim); margin:0 0 1.1rem; }
+
+  .xp-row{ margin-top:1.4rem; }
+  .xp-row .xp-labels{
+    display:flex; justify-content:space-between;
+    font-family:'VT323', monospace;
+    font-size:1.05rem; color:var(--ink-dim);
+    margin-bottom:.4rem;
+  }
+  .xp-track{
+    height:16px;
+    background:var(--bg-3);
+    border:2px solid var(--line-dim);
+  }
+  .xp-fill{
+    height:100%;
+    background:
+      repeating-linear-gradient(90deg, rgba(0,0,0,.18) 0 3px, transparent 3px 9px),
+      linear-gradient(180deg, var(--gold), var(--gold-dim));
+    width:0%;
+    transition:width 1s steps(20);
+  }
+
+  .levelup-banner{
+    margin-top:1.15rem;
+    display:flex; align-items:center; gap:.65rem;
+    background:var(--bg-3);
+    border:2px solid var(--st-const);
+    padding:.6rem .85rem;
+    font-family:'VT323', monospace;
+    font-size:1.05rem;
+    color:var(--ink);
+  }
+  .levelup-banner .blip{ width:9px; height:9px; background:var(--st-const); flex:none; }
+  .levelup-banner b{ font-family:'Press Start 2P', monospace; font-size:.68rem; color:var(--st-const); display:block; margin-bottom:.3rem; }
+
+  /* ---------- Panels ---------- */
+  .panel{ padding:clamp(1.1rem, 2.4vw, 1.6rem); }
+  .panel h2{
+    font-family:'Press Start 2P', monospace;
+    font-size:.68rem; font-weight:400;
+    color:var(--ink);
+    margin:0 0 .7rem;
+    line-height:1.6;
+  }
+  .panel h2 em{ color:var(--gold); font-style:normal; }
+
+  /* ---------- Stats ---------- */
+  .stats-grid{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:1.1rem 1.6rem; }
+  .stat-item .stat-top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:.4rem; }
+  .stat-name{ display:flex; align-items:center; gap:.5rem; font-family:'VT323', monospace; font-size:1.05rem; color:var(--ink); }
+  .stat-name .ico{ width:20px; height:20px; flex:none; display:flex; align-items:center; justify-content:center; }
+  .stat-name .ico svg{ width:13px; height:13px; stroke:#0b0d1e; }
+  .ico.prod{ background:var(--st-prod); }
+  .ico.collab{ background:var(--st-collab); }
+  .ico.init{ background:var(--st-init); }
+  .ico.const{ background:var(--st-const); }
+
+  .stat-value{ font-family:'VT323', monospace; font-weight:400; color:var(--gold); font-size:1.15rem; }
+  .stat-track{ height:10px; background:var(--bg-3); border:2px solid var(--line-dim); }
+  .stat-fill{
+    height:100%; width:0%; transition:width 1s steps(16);
+    background:repeating-linear-gradient(90deg, rgba(0,0,0,.2) 0 2px, transparent 2px 6px), linear-gradient(180deg, #fff2, transparent);
+  }
+  .stat-fill.prod{ background-color:var(--st-prod); }
+  .stat-fill.collab{ background-color:var(--st-collab); }
+  .stat-fill.init{ background-color:var(--st-init); }
+  .stat-fill.const{ background-color:var(--st-const); }
+
+  /* ---------- Achievements ---------- */
+  .badge-row{ display:grid; grid-template-columns:repeat(auto-fill, minmax(88px, 1fr)); gap:1rem; }
+  .badge{ display:flex; flex-direction:column; align-items:center; gap:.5rem; text-align:center; }
+  .badge-icon{
+    width:52px; height:52px;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--bg-3);
+    border:2px solid var(--gold);
+    box-shadow:2px 2px 0 rgba(0,0,0,.4);
+  }
+  .badge-icon svg{ width:22px; height:22px; stroke:var(--gold); }
+  .badge.locked .badge-icon{ border-color:var(--line-dim); box-shadow:none; }
+  .badge.locked .badge-icon svg{ stroke:var(--ink-faint); }
+  .badge-label{ font-family:'VT323', monospace; font-size:.9rem; color:var(--ink-dim); line-height:1.25; }
+  .badge.locked .badge-label{ color:var(--ink-faint); }
+  .badge-progress{ font-family:'VT323', monospace; font-size:.85rem; color:var(--ink-faint); }
+
+  /* ---------- Side panel ---------- */
+  .sidepanel{ display:flex; flex-direction:column; gap:1.5rem; min-width:0; }
+
+  .quest-card{
+    border:2px solid var(--line-dim);
+    padding:.8rem .9rem;
+    background:var(--bg-3);
+    margin-bottom:.75rem;
+  }
+  .quest-card:last-child{ margin-bottom:0; }
+  .quest-top{ display:flex; justify-content:space-between; gap:.6rem; align-items:flex-start; }
+  .quest-title{ font-family:'VT323', monospace; font-weight:400; font-size:1.05rem; color:var(--ink); line-height:1.3; }
+  .quest-xp{ flex:none; font-family:'VT323', monospace; font-size:1.05rem; color:var(--success); white-space:nowrap; }
+  .quest-meta{ display:flex; justify-content:space-between; align-items:center; margin-top:.5rem; font-family:'VT323', monospace; font-size:.92rem; color:var(--ink-faint); }
+  .quest-meta.warn{ color:var(--warn); }
+  .quest-track{ height:6px; background:var(--bg); border:1px solid var(--line-dim); margin-top:.5rem; }
+  .quest-fill{ height:100%; background:var(--gold); }
+
+  .leader-row{ display:flex; align-items:center; gap:.7rem; padding:.55rem 0; border-bottom:1px dashed var(--line-dim); }
+  .leader-row:last-child{ border-bottom:none; }
+  .leader-rank{ font-family:'Press Start 2P', monospace; font-size:.65rem; color:var(--ink-faint); width:1.4rem; text-align:center; flex:none; }
+  .leader-row.you .leader-rank{ color:var(--gold); }
+  .leader-name{ flex:1; min-width:0; font-family:'VT323', monospace; }
+  .leader-name .nm{ font-size:1.05rem; color:var(--ink); }
+  .leader-name .unit{ font-size:.85rem; color:var(--ink-faint); }
+  .leader-xp{ font-family:'VT323', monospace; font-size:1.05rem; color:var(--ink-dim); flex:none; }
+  .leader-row.you{ background:rgba(255,210,63,.08); padding-inline:.5rem; margin-inline:-.5rem; }
+  .crown{ width:16px; height:16px; stroke:var(--gold); flex:none; }
+
+  /* ---------- Footer ---------- */
+  .disclaimer{
+    margin-top:2rem;
+    padding-top:1.1rem;
+    border-top:2px solid var(--line-dim);
+    font-family:'VT323', monospace;
+    font-size:1rem;
+    color:var(--ink-faint);
+    text-align:center;
+  }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width:900px){
+    .layout{ grid-template-columns:1fr; }
+    .railnav{ position:static; flex-direction:row; overflow-x:auto; gap:.5rem; }
+    .railnav a{ flex:none; }
+    .railnav .rail-note{ display:none; }
+    .railnav hr{ display:none; }
+  }
+  @media (max-width:520px){
+    .stats-grid{ grid-template-columns:1fr; }
+    .level-block{ text-align:left; }
+    .hero-top{ flex-direction:column; }
+  }
+</style>
+</head>
+<body>
+
+<div class="stars" aria-hidden="true">
+  <div class="star gold blink" style="top:6%;left:20%;"></div>
+  <div class="star blink" style="top:14%;left:62%; animation-delay:.4s;"></div>
+  <div class="star gold blink" style="top:30%;left:90%; animation-delay:.9s;"></div>
+  <div class="star blink" style="top:50%;left:5%; animation-delay:.2s;"></div>
+  <div class="star gold blink" style="top:68%;left:80%; animation-delay:1.1s;"></div>
+  <div class="star blink" style="top:85%;left:40%; animation-delay:.7s;"></div>
+</div>
+
+<div class="frame">
+
+  <div class="topbar">
+    <div class="wordmark">HUB.CREANIMASI<span>gamifikasi tim</span></div>
+    <div class="season-tag">MUSIM 01 · UNIT CREILLUSTRA</div>
+  </div>
+
+  <div class="layout">
+
+    <!-- Rail nav -->
+    <nav class="railnav pixbox" aria-label="Navigasi modul">
+      <a href="#" class="active">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M5 21c0-4 3-7 7-7s7 3 7 7"/></svg>
+        Karakter
+      </a>
+      <a href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M6 3h9l3 3v15H6z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>
+        Papan Quest
+      </a>
+      <a href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M4 21V10l8-6 8 6v11"/><path d="M9 21v-6h6v6"/></svg>
+        Guild Hall
+      </a>
+      <a href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><circle cx="12" cy="9" r="5"/><path d="M8.5 13.5 7 21l5-3 5 3-1.5-7.5"/></svg>
+        Pencapaian
+      </a>
+      <a href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M4 19h16"/><path d="M7 19v-6M12 19V8M17 19v-10"/></svg>
+        Laporan
+      </a>
+      <hr>
+      <div class="rail-note">Akun<br>Kirana&nbsp;Ayu</div>
+    </nav>
+
+    <!-- Main stage -->
+    <main class="stage">
+
+      <section class="hero-card pixbox" aria-label="Ringkasan karakter">
+        <div class="hero-top">
+          <div class="crest">
+            <span>KA</span>
+            <div class="class-badge" title="Kelas: Ilustrator">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M12 19l7-7 3 3-7 7-3-3Z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5Z"/><path d="M2 2l7.5 7.5"/></svg>
+            </div>
+          </div>
+
+          <div class="hero-id">
+            <div class="name-row">
+              <h1>Kirana Ayu</h1>
+            </div>
+            <span class="title-pill">Rising Star</span>
+            <div class="rarity" aria-label="Rarity 4 dari 5">
+              <i></i><i></i><i></i><i></i><i class="off"></i>
+            </div>
+            <p class="role-line">Ilustrator &amp; Rigger VTuber &middot; Unit Creillustra</p>
+          </div>
+
+          <div class="level-block">
+            <div class="lvl-num">Lv14</div>
+            <div class="lvl-label">Staf Senior</div>
+          </div>
+        </div>
+
+        <div class="xp-row">
+          <div class="xp-labels">
+            <span>6240 XP</span>
+            <span>Naik level di 8000 XP</span>
+          </div>
+          <div class="xp-track"><div class="xp-fill" data-target="78"></div></div>
+        </div>
+
+        <div class="levelup-banner">
+          <span class="blip blink"></span>
+          <span><b>LEVEL UP!</b>Naik dari Staf ke Staf Senior minggu lalu — +2 slot quest harian terbuka.</span>
+        </div>
+      </section>
+
+      <section class="panel pixbox" aria-label="Statistik PILAR">
+        <h2>STATISTIK <em>PILAR</em></h2>
+        <div class="h2-rule"></div>
+        <div class="stats-grid">
+
+          <div class="stat-item">
+            <div class="stat-top">
+              <span class="stat-name">
+                <span class="ico prod"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg></span>
+                Produktivitas
+              </span>
+              <span class="stat-value">82</span>
+            </div>
+            <div class="stat-track"><div class="stat-fill prod" data-target="82"></div></div>
+          </div>
+
+          <div class="stat-item">
+            <div class="stat-top">
+              <span class="stat-name">
+                <span class="ico collab"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><circle cx="9" cy="7" r="3"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6"/><circle cx="17" cy="8" r="2.5"/><path d="M15 20c.3-2.5 1.8-4.3 4-4.8"/></svg></span>
+                Kolaborasi
+              </span>
+              <span class="stat-value">74</span>
+            </div>
+            <div class="stat-track"><div class="stat-fill collab" data-target="74"></div></div>
+          </div>
+
+          <div class="stat-item">
+            <div class="stat-top">
+              <span class="stat-name">
+                <span class="ico init"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M12 3v3M12 18v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M3 12h3M18 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/><circle cx="12" cy="12" r="3.5"/></svg></span>
+                Inisiatif
+              </span>
+              <span class="stat-value">69</span>
+            </div>
+            <div class="stat-track"><div class="stat-fill init" data-target="69"></div></div>
+          </div>
+
+          <div class="stat-item">
+            <div class="stat-top">
+              <span class="stat-name">
+                <span class="ico const"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M12 2v20M5 8l7-6 7 6M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8"/></svg></span>
+                Konsistensi
+              </span>
+              <span class="stat-value">91</span>
+            </div>
+            <div class="stat-track"><div class="stat-fill const" data-target="91"></div></div>
+          </div>
+
+        </div>
+      </section>
+
+      <section class="panel pixbox" aria-label="Pencapaian">
+        <h2>PENCAPAIAN</h2>
+        <div class="h2-rule"></div>
+        <div class="badge-row">
+
+          <div class="badge">
+            <div class="badge-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="m9 12 2 2 4-4"/><rect x="3" y="3" width="18" height="18"/></svg></div>
+            <span class="badge-label">Onboarding Tuntas</span>
+          </div>
+
+          <div class="badge">
+            <div class="badge-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M12 2 3 7v6c0 5 4 8 9 9 5-1 9-4 9-9V7l-9-5Z"/></svg></div>
+            <span class="badge-label">30 Hari Beruntun Lapor</span>
+          </div>
+
+          <div class="badge">
+            <div class="badge-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M4 21c4-6 12-6 16 0"/><rect x="8" y="4" width="8" height="8"/></svg></div>
+            <span class="badge-label">Naik ke Staf Senior</span>
+          </div>
+
+          <div class="badge locked">
+            <div class="badge-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><rect x="5" y="11" width="14" height="9"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+            <span class="badge-label">Quest Master</span>
+            <span class="badge-progress">38/50</span>
+          </div>
+
+          <div class="badge locked">
+            <div class="badge-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><rect x="5" y="11" width="14" height="9"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+            <span class="badge-label">Kolaborator Emas</span>
+            <span class="badge-progress">Terkunci</span>
+          </div>
+
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Side panel -->
+    <aside class="sidepanel">
+
+      <div class="panel pixbox" aria-label="Papan quest aktif">
+        <h2>QUEST <em>AKTIF</em></h2>
+        <div class="h2-rule"></div>
+
+        <div class="quest-card">
+          <div class="quest-top">
+            <span class="quest-title">Rigging VTuber — Klien Fiverr #482</span>
+            <span class="quest-xp">+120 XP</span>
+          </div>
+          <div class="quest-meta warn"><span>Tenggat besok</span><span>80%</span></div>
+          <div class="quest-track"><div class="quest-fill" style="width:80%"></div></div>
+        </div>
+
+        <div class="quest-card">
+          <div class="quest-top">
+            <span class="quest-title">Revisi Model VRM — Order Etsy #113</span>
+            <span class="quest-xp">+90 XP</span>
+          </div>
+          <div class="quest-meta"><span>3 hari lagi</span><span>40%</span></div>
+          <div class="quest-track"><div class="quest-fill" style="width:40%"></div></div>
+        </div>
+
+        <div class="quest-card">
+          <div class="quest-top">
+            <span class="quest-title">Lapor Progres Harian (WhatsApp)</span>
+            <span class="quest-xp">+15 XP</span>
+          </div>
+          <div class="quest-meta"><span>Quest harian &middot; streak 12 hari</span><span>&mdash;</span></div>
+        </div>
+      </div>
+
+      <div class="panel pixbox" aria-label="Papan peringkat mingguan">
+        <h2>GUILD HALL <em>· TOP XP</em></h2>
+        <div class="h2-rule"></div>
+
+        <div class="leader-row">
+          <span class="leader-rank">
+            <svg class="crown" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="m3 8 4 3 5-6 5 6 4-3-2 11H5L3 8Z"/></svg>
+          </span>
+          <span class="leader-name"><span class="nm">Bagas P.</span><br><span class="unit">Unit Creillustra</span></span>
+          <span class="leader-xp">2340</span>
+        </div>
+
+        <div class="leader-row you">
+          <span class="leader-rank">2</span>
+          <span class="leader-name"><span class="nm">Kirana Ayu &middot; Kamu</span><br><span class="unit">Unit Creillustra</span></span>
+          <span class="leader-xp">2110</span>
+        </div>
+
+        <div class="leader-row">
+          <span class="leader-rank">3</span>
+          <span class="leader-name"><span class="nm">Nadia R.</span><br><span class="unit">Unit Jellia Studio</span></span>
+          <span class="leader-xp">1980</span>
+        </div>
+      </div>
+
+    </aside>
+
+  </div>
+
+  <p class="disclaimer">Contoh tampilan modul gamifikasi hub.creanimasi — nama, statistik, dan quest bersifat ilustratif untuk keperluan desain, bukan data anggota tim yang sebenarnya.</p>
+
+</div>
+
+<script>
+  (function(){
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var bars = document.querySelectorAll('.xp-fill, .stat-fill');
+    bars.forEach(function(el){
+      var target = el.getAttribute('data-target') + '%';
+      if (reduce){ el.style.width = target; return; }
+      requestAnimationFrame(function(){
+        setTimeout(function(){ el.style.width = target; }, 120);
+      });
+    });
+  })();
+</script>
+</body>
+</html>
