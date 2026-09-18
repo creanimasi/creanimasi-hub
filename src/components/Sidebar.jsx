@@ -6,52 +6,42 @@ import { useTim } from '../hooks/useTim';
 import { PresenceContext } from './Layout';
 import { api } from '../services/api';
 
-const NAV_ADMIN = [
+// Daftar nav tunggal — item tanpa pageKey selalu tampil (halaman baseline,
+// bisa diakses semua role). Item dengan pageKey difilter lewat page_access
+// user (dihitung backend dari role_page_access, lihat Master Data > Hak
+// Akses/Role). Label member-friendly ("Grafik Performa", "Riwayat Jurnal")
+// ditangani lewat labelMember di item yang sama, bukan array terpisah.
+const NAV_ITEMS = [
   { section: 'Utama' },
   { path: '/',              label: 'Dashboard',         badgeType: '' },
-  { path: '/ai-assistant',  label: 'AI Assistant',      badgeType: '' },
-  { path: '/kalender',      label: 'Kalender',          badgeType: '' },
+  { path: '/ai-assistant',  label: 'AI Assistant',      badgeType: '', pageKey: 'ai-assistant' },
+  { path: '/kalender',      label: 'Kalender',          badgeType: '', pageKey: 'kalender' },
+  { path: '/modul',         label: 'Modul Belajar',     badgeType: '' },
+  { path: '/performa',      label: 'Performa',      labelMember: 'Grafik Performa', badgeType: '' },
   { path: '/profil',        label: 'Profil Saya',       badgeType: '' },
   { section: 'Tim' },
-  { path: '/tim',           label: 'Direktori Tim',     badgeType: 'green' },
-  { path: '/anggota',       label: 'Kelola Anggota',    badgeType: '' },
-  { path: '/akses',         label: 'Manajemen Akses',   badgeType: '' },
-  { path: '/performa',      label: 'Performa',          badgeType: '' },
-  { path: '/absensi',       label: 'Absensi',           badgeType: '' },
-  { section: 'Aksi Cepat' },
-  { path: '/jurnal/isi',    label: 'Isi Jurnal',        badgeType: 'green' },
-  { path: '/laporan-admin', label: 'Laporan Mingguan',  badgeType: '' },
-  { path: '/profiling',     label: 'Form Profiling',    badgeType: '' },
-  { section: 'Program' },
-  { path: '/modul',         label: 'Modul Belajar',     badgeType: '' },
-  { path: '/workshop',      label: 'Workshop',          badgeType: '' },
-  { path: '/aktivitas',     label: 'Aktivitas Tim',     badgeType: '' },
-  { path: '/skb',           label: 'SKB',               badgeType: '' },
-  { path: '/reward',        label: 'Reward & KPI',      badgeType: '' },
-  { path: '/sop',           label: 'SOP Brief',         badgeType: '' },
-  { path: '/kader',         label: 'Kader Potensial',   badgeType: '' },
-  { group: 'Laporan' },
-  { path: '/laporan-harian',   label: 'Laporan Harian',        badgeType: '', sub: true, groupKey: 'laporan' },
-  { path: '/laporan-mentor',   label: 'Lap. Mingguan Mentor',  badgeType: '', sub: true, groupKey: 'laporan' },
-  { path: '/laporan-bulanan',  label: 'Laporan Bulanan',       badgeType: '', sub: true, groupKey: 'laporan' },
-  { group: 'Marketing' },
-  { path: '/ads-performance',  label: 'Ads Performance',       badgeType: '', sub: true, groupKey: 'marketing' },
-  { path: '/laporan-profit',   label: 'Laporan Profit',        badgeType: '', sub: true, groupKey: 'marketing' },
-];
-
-const NAV_MEMBER = [
-  { section: 'Utama' },
-  { path: '/',              label: 'Dashboard',         badgeType: '' },
-  { path: '/modul',         label: 'Modul Belajar',     badgeType: '' },
-  { path: '/performa',      label: 'Grafik Performa',   badgeType: '' },
-  { path: '/profil',        label: 'Profil Saya',       badgeType: '' },
+  { path: '/tim',           label: 'Direktori Tim',     badgeType: 'green', pageKey: 'tim' },
+  { path: '/master-data',   label: 'Master Data',       badgeType: '', pageKey: 'master-data' },
+  { path: '/absensi',       label: 'Absensi',           badgeType: '', pageKey: 'absensi' },
   { section: 'Aksi Cepat' },
   { path: '/jurnal/isi',    label: 'Isi Jurnal',        badgeType: 'green' },
   { path: '/jurnal/riwayat',label: 'Riwayat Jurnal',    badgeType: '' },
+  { path: '/laporan-admin', label: 'Laporan Mingguan',  badgeType: '', pageKey: 'laporan-admin' },
   { path: '/profiling',     label: 'Form Profiling',    badgeType: '' },
   { section: 'Program' },
+  { path: '/workshop',      label: 'Workshop',          badgeType: '', pageKey: 'workshop' },
+  { path: '/aktivitas',     label: 'Aktivitas Tim',     badgeType: '', pageKey: 'aktivitas-tim' },
+  { path: '/skb',           label: 'SKB',       labelMember: 'Ajukan SKB', badgeType: '' },
+  { path: '/reward',        label: 'Reward & KPI',      badgeType: '', pageKey: 'reward' },
   { path: '/sop',           label: 'SOP Brief',         badgeType: '' },
-  { path: '/skb',           label: 'Ajukan SKB',        badgeType: '' },
+  { path: '/kader',         label: 'Kader Potensial',   badgeType: '', pageKey: 'kader' },
+  { group: 'Laporan' },
+  { path: '/laporan-harian',   label: 'Laporan Harian',        badgeType: '', sub: true, groupKey: 'laporan', pageKey: 'laporan-harian' },
+  { path: '/laporan-mentor',   label: 'Lap. Mingguan Mentor',  badgeType: '', sub: true, groupKey: 'laporan', pageKey: 'laporan-mentor' },
+  { path: '/laporan-bulanan',  label: 'Laporan Bulanan',       badgeType: '', sub: true, groupKey: 'laporan', pageKey: 'laporan-bulanan' },
+  { group: 'Marketing' },
+  { path: '/ads-performance',  label: 'Ads Performance',       badgeType: '', sub: true, groupKey: 'marketing', pageKey: 'ads-performance' },
+  { path: '/laporan-profit',   label: 'Laporan Profit',        badgeType: '', sub: true, groupKey: 'marketing', pageKey: 'laporan-profit' },
 ];
 
 const ICONS = {
@@ -127,14 +117,21 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
     }).catch(() => {});
   }, [user, isAdmin]);
 
-  const baseNav = isAdmin ? NAV_ADMIN : NAV_MEMBER;
-  const NAV = (!isAdmin && isAdminDivisi)
-    ? baseNav.map(item =>
-        item.path === '/jurnal/isi'
-          ? [{ path: '/laporan-admin', label: 'Laporan Mingguan', badgeType: '' }, item]
-          : item
-      ).flat()
-    : baseNav;
+  // Item baseline (tanpa pageKey) selalu tampil. Item dengan pageKey difilter
+  // lewat page_access user — dihitung backend dari role_page_access, jadi
+  // menu ikut berubah sesuai matriks di Master Data > Hak Akses/Role tanpa
+  // perlu kode baru. /laporan-admin dapat pengecualian sama seperti backend
+  // (RequirePage di App.jsx): tetap tampil untuk siapa pun divisi timnya "Admin".
+  const pageAccess = user?.page_access || [];
+  const NAV = NAV_ITEMS
+    .filter(item => {
+      if (item.section || item.group) return true; // header baris — selalu tampil
+      if (!item.pageKey) return true; // halaman baseline
+      if (pageAccess.includes(item.pageKey)) return true;
+      if (item.pageKey === 'laporan-admin' && isAdminDivisi) return true;
+      return false;
+    })
+    .map(item => (item.labelMember && !isAdmin) ? { ...item, label: item.labelMember } : item);
 
   const teamPreview = tim.slice(0, 5);
 

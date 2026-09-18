@@ -7,9 +7,7 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Tim from './pages/Tim';
-import ManajemenTim from './pages/ManajemenTim';
-import KelolAnggota from './pages/KelolAnggota';
-import ManajemenAkses from './pages/ManajemenAkses';
+import MasterData from './pages/MasterData';
 import { Modul, Jurnal, SOP, Reward, Workshop, Kader, SKB, OneOnOne, FridayWin, Absensi } from './pages/Pages';
 import AktivitasTim from './pages/AktivitasTim';
 import { PageFormJurnal, PageFormProfiling, PageRiwayatJurnal } from './pages/FormPages';
@@ -29,18 +27,20 @@ import GuildHallPage from './modules/rpg/pages/GuildHallPage';
 import AchievementsPage from './modules/rpg/pages/AchievementsPage';
 import RpgAnalyticsPage from './modules/rpg/pages/admin/RpgAnalyticsPage';
 
-function AdminRoute({ children }) {
-  const { user } = useAuth();
-  if (user?.role !== 'admin') return <Navigate to="/" replace />;
-  return children;
-}
-
-function AdminOrMarketRoute({ children }) {
+// Gerbang akses generik berbasis page_access (dihitung backend dari
+// role_page_access, dibawa lewat /auth/me & /auth/login). Menggantikan
+// AdminRoute/AdminOrMarketRoute lama — satu-satunya sisa pengecualian
+// non-role-based ada di /laporan-admin (boleh diakses siapa pun yang
+// divisi tim-nya "Admin", sama seperti middleware backend-nya).
+function RequirePage({ pageKey, children }) {
   const { user } = useAuth();
   const tim = useTim();
-  const isAdminDiv = tim.some(m => m.nama === user?.nama && m.divisi === 'Admin');
-  if (user?.role !== 'admin' && !isAdminDiv) return <Navigate to="/" replace />;
-  return children;
+  if (user?.page_access?.includes(pageKey)) return children;
+  if (pageKey === 'laporan-admin') {
+    const isAdminDiv = tim.some(m => m.nama === user?.nama && m.divisi === 'Admin');
+    if (isAdminDiv) return children;
+  }
+  return <Navigate to="/" replace />;
 }
 
 function ProtectedRoutes() {
@@ -80,28 +80,26 @@ function ProtectedRoutes() {
         <Route path="/rpg/guild"     element={<GuildHallPage />} />
         <Route path="/rpg/achievements" element={<AchievementsPage />} />
 
-        {/* Admin only */}
-        <Route path="/tim"          element={<AdminRoute><Tim /></AdminRoute>} />
-        <Route path="/anggota"      element={<AdminRoute><KelolAnggota /></AdminRoute>} />
-        <Route path="/akses"        element={<AdminRoute><ManajemenAkses /></AdminRoute>} />
-        <Route path="/tim/kelola"   element={<AdminRoute><ManajemenTim /></AdminRoute>} />
-        <Route path="/jurnal"       element={<AdminRoute><Jurnal /></AdminRoute>} />
-        <Route path="/kader"        element={<AdminRoute><Kader /></AdminRoute>} />
-        <Route path="/reward"       element={<AdminRoute><Reward /></AdminRoute>} />
-        <Route path="/1on1"         element={<AdminRoute><OneOnOne /></AdminRoute>} />
-        <Route path="/workshop"     element={<AdminRoute><Workshop /></AdminRoute>} />
-        <Route path="/absensi"      element={<AdminRoute><Absensi /></AdminRoute>} />
-        <Route path="/friday-win"   element={<AdminRoute><FridayWin /></AdminRoute>} />
-        <Route path="/aktivitas"    element={<AdminRoute><AktivitasTim /></AdminRoute>} />
-        <Route path="/laporan-mentor"   element={<AdminRoute><LaporanMingguan /></AdminRoute>} />
-        <Route path="/laporan-admin"    element={<AdminOrMarketRoute><LaporanAdminMingguan /></AdminOrMarketRoute>} />
-        <Route path="/laporan-harian"    element={<AdminRoute><LaporanHarian /></AdminRoute>} />
-        <Route path="/laporan-bulanan"   element={<AdminRoute><LaporanBulanan /></AdminRoute>} />
-        <Route path="/ads-performance"    element={<AdminRoute><AdsPerformance /></AdminRoute>} />
-        <Route path="/laporan-profit"     element={<AdminRoute><LaporanProfit /></AdminRoute>} />
-        <Route path="/ai-assistant"       element={<AdminRoute><AiAssistant /></AdminRoute>} />
-        <Route path="/kalender"     element={<AdminRoute><Kalender /></AdminRoute>} />
-        <Route path="/rpg/analytics" element={<AdminRoute><RpgAnalyticsPage /></AdminRoute>} />
+        {/* Diatur lewat Master Data > Hak Akses/Role, bukan lagi admin/member biner */}
+        <Route path="/tim"          element={<RequirePage pageKey="tim"><Tim /></RequirePage>} />
+        <Route path="/master-data"  element={<RequirePage pageKey="master-data"><MasterData /></RequirePage>} />
+        <Route path="/jurnal"       element={<RequirePage pageKey="jurnal-admin"><Jurnal /></RequirePage>} />
+        <Route path="/kader"        element={<RequirePage pageKey="kader"><Kader /></RequirePage>} />
+        <Route path="/reward"       element={<RequirePage pageKey="reward"><Reward /></RequirePage>} />
+        <Route path="/1on1"         element={<RequirePage pageKey="sesi-1on1"><OneOnOne /></RequirePage>} />
+        <Route path="/workshop"     element={<RequirePage pageKey="workshop"><Workshop /></RequirePage>} />
+        <Route path="/absensi"      element={<RequirePage pageKey="absensi"><Absensi /></RequirePage>} />
+        <Route path="/friday-win"   element={<RequirePage pageKey="friday-win"><FridayWin /></RequirePage>} />
+        <Route path="/aktivitas"    element={<RequirePage pageKey="aktivitas-tim"><AktivitasTim /></RequirePage>} />
+        <Route path="/laporan-mentor"   element={<RequirePage pageKey="laporan-mentor"><LaporanMingguan /></RequirePage>} />
+        <Route path="/laporan-admin"    element={<RequirePage pageKey="laporan-admin"><LaporanAdminMingguan /></RequirePage>} />
+        <Route path="/laporan-harian"    element={<RequirePage pageKey="laporan-harian"><LaporanHarian /></RequirePage>} />
+        <Route path="/laporan-bulanan"   element={<RequirePage pageKey="laporan-bulanan"><LaporanBulanan /></RequirePage>} />
+        <Route path="/ads-performance"    element={<RequirePage pageKey="ads-performance"><AdsPerformance /></RequirePage>} />
+        <Route path="/laporan-profit"     element={<RequirePage pageKey="laporan-profit"><LaporanProfit /></RequirePage>} />
+        <Route path="/ai-assistant"       element={<RequirePage pageKey="ai-assistant"><AiAssistant /></RequirePage>} />
+        <Route path="/kalender"     element={<RequirePage pageKey="kalender"><Kalender /></RequirePage>} />
+        <Route path="/rpg/analytics" element={<RequirePage pageKey="rpg-analytics"><RpgAnalyticsPage /></RequirePage>} />
 
         <Route path="*"             element={<Navigate to="/" replace />} />
       </Routes>

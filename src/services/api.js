@@ -119,6 +119,12 @@ export const api = {
   buatAkunAnggota: (id, data) => request('POST',  `/tim/${id}/buat-akun`, data),
   resetPassword:   (id, pw)   => request('PATCH', `/tim/${id}/reset-password`, { password_baru: pw }),
 
+  // Master Data — Role & Hak Akses
+  getRoles:            ()               => request('GET', '/roles'),
+  getPages:             ()               => request('GET', '/pages'),
+  getRolePageAccess:   (roleId)         => request('GET', `/roles/${roleId}/page-access`),
+  saveRolePageAccess:  (roleId, access) => request('PUT', `/roles/${roleId}/page-access`, { access }),
+
   // Workshop Kehadiran
   getWorkshop:          ()                          => request('GET', '/workshop'),
   updateWorkshop:       (nama, layerId, sesiIdx, hadir) =>

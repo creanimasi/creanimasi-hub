@@ -38,11 +38,11 @@ const apiLimiter = rateLimit({
   message: { error: 'Terlalu banyak permintaan. Coba lagi nanti.' },
 });
 
-// Superadmin = admin dengan flag is_superadmin — satu-satunya yang boleh
-// mengubah role user lain (admin<->member). Admin biasa tetap bisa semua
-// fitur operasional lain seperti sebelumnya.
+// Role "protected" (Super Admin) — satu-satunya yang boleh mengubah role
+// user lain jadi/dari role protected. Menggantikan flag is_superadmin lama;
+// req.user.is_protected diisi dari JOIN ke tabel roles saat login/auth/me.
 function canManageRoles(user) {
-  return user?.role === 'admin' && user?.is_superadmin === true;
+  return user?.is_protected === true;
 }
 
 function authMiddleware(req, res, next) {
@@ -56,6 +56,87 @@ function authMiddleware(req, res, next) {
   }
 }
 
+// Middleware generik: cek req.user.role_id boleh akses page_key tertentu
+// lewat tabel role_page_access. Query fresh tiap request (bukan dari JWT)
+// supaya perubahan matriks akses langsung berlaku tanpa perlu re-login.
+// Halaman is_baseline (Dashboard, Profil, dst) selalu lolos untuk semua role.
+function requirePageAccess(pageKey) {
+  return async (req, res, next) => {
+    try {
+      const h = await hubPool.query('SELECT is_baseline FROM halaman WHERE page_key=$1', [pageKey]);
+      if (h.rows[0]?.is_baseline) return next();
+      const r = await hubPool.query(
+        'SELECT can_access FROM role_page_access WHERE role_id=$1 AND page_key=$2',
+        [req.user.role_id, pageKey]
+      );
+      if (!r.rows[0]?.can_access) return res.status(403).json({ error: 'Anda tidak memiliki akses ke halaman ini' });
+      next();
+    } catch (e) {
+      console.error('requirePageAccess error:', e.message);
+      res.status(500).json({ error: 'Gagal memeriksa hak akses' });
+    }
+  };
+}
+
+// Varian khusus /laporan-admin: hari ini bisa diakses admin ATAU siapa pun
+// yang divisi tim-nya "Admin" (lihat AdminOrMarketRoute di frontend) — bukan
+// murni berbasis role, jadi butuh fallback pengecekan divisi.
+function requirePageAccessOrAdminDivisi(pageKey) {
+  return async (req, res, next) => {
+    try {
+      const r = await hubPool.query(
+        'SELECT can_access FROM role_page_access WHERE role_id=$1 AND page_key=$2',
+        [req.user.role_id, pageKey]
+      );
+      if (r.rows[0]?.can_access) return next();
+      const d = await hubPool.query(
+        `SELECT 1 FROM tim t JOIN hub_users u ON u.tim_id = t.id OR (u.tim_id IS NULL AND u.nama = t.nama)
+         WHERE u.id = $1 AND t.divisi = 'Admin'`,
+        [req.user.id]
+      );
+      if (d.rows.length) return next();
+      return res.status(403).json({ error: 'Anda tidak memiliki akses ke halaman ini' });
+    } catch (e) {
+      console.error('requirePageAccessOrAdminDivisi error:', e.message);
+      res.status(500).json({ error: 'Gagal memeriksa hak akses' });
+    }
+  };
+}
+
+// Cegah kondisi zero-active-super_admin: dipanggil sebelum commit di endpoint
+// yang bisa menghapus/nonaktifkan/menurunkan role seseorang.
+async function wouldRemoveLastProtectedRole(client, excludeUserId) {
+  const r = await client.query(
+    `SELECT COUNT(*) FROM hub_users u
+     JOIN roles r ON r.id = u.role_id
+     WHERE u.aktif = TRUE AND r.is_protected = TRUE AND u.id != $1`,
+    [excludeUserId]
+  );
+  return parseInt(r.rows[0].count, 10) === 0;
+}
+
+// Daftar page_key yang boleh diakses sebuah role: baseline + yang di-set TRUE
+// di role_page_access. Dipakai saat login/auth/me supaya frontend bisa
+// filter nav & routing tanpa nebak-nebak.
+async function getPageAccessList(roleId) {
+  if (!roleId) return [];
+  const r = await hubPool.query(
+    `SELECT page_key FROM halaman WHERE is_baseline = TRUE
+     UNION
+     SELECT page_key FROM role_page_access WHERE role_id = $1 AND can_access = TRUE`,
+    [roleId]
+  );
+  return r.rows.map(x => x.page_key);
+}
+
+// Turunkan kolom legacy hub_users.role ('admin'|'member') dari role_id baru,
+// supaya kode lama yang belum sempat dimigrasi (kalau ada) tetap dapat nilai
+// yang masuk akal. super_admin -> 'admin', role lain -> 'member'.
+async function legacyRoleFromRoleId(client, roleId) {
+  const r = await client.query('SELECT is_protected FROM roles WHERE id=$1', [roleId]);
+  return r.rows[0]?.is_protected ? 'admin' : 'member';
+}
+
 // ── AUTH ──────────────────────────────────────────
 
 // POST /api/hub/auth/login
@@ -65,7 +146,9 @@ router.post('/auth/login', loginLimiter, async (req, res) => {
     return res.status(400).json({ error: 'Username dan password wajib diisi' });
   try {
     const result = await query(
-      `SELECT * FROM hub_users WHERE username = $1 AND aktif = TRUE`, [username]
+      `SELECT u.*, r.key AS role_key, r.nama AS role_nama, r.is_protected
+       FROM hub_users u LEFT JOIN roles r ON r.id = u.role_id
+       WHERE u.username = $1 AND u.aktif = TRUE`, [username]
     );
     const user = result.rows[0];
     if (!user) return res.status(401).json({ error: 'Username atau password salah' });
@@ -73,11 +156,17 @@ router.post('/auth/login', loginLimiter, async (req, res) => {
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(401).json({ error: 'Username atau password salah' });
 
-    const token = jwt.sign(
-      { id: user.id, nama: user.nama, username: user.username, role: user.role, is_superadmin: !!user.is_superadmin },
-      JWT_SECRET, { expiresIn: '7d' }
-    );
-    res.json({ success: true, token, user: { id: user.id, nama: user.nama, username: user.username, role: user.role, is_superadmin: !!user.is_superadmin, tema: user.tema || 'dark' } });
+    const pageAccess = await getPageAccessList(user.role_id);
+    const payload = {
+      id: user.id, nama: user.nama, username: user.username,
+      role: user.role, is_superadmin: !!user.is_superadmin,
+      role_id: user.role_id, role_key: user.role_key, is_protected: !!user.is_protected,
+    };
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
+    res.json({
+      success: true, token,
+      user: { ...payload, tema: user.tema || 'dark', page_access: pageAccess },
+    });
   } catch (err) {
     res.status(500).json({ error: 'Gagal login' });
   }
@@ -98,7 +187,8 @@ router.get('/auth/me', async (req, res) => {
   try {
     const r = await hubPool.query('SELECT tema FROM hub_users WHERE id=$1', [req.user.id]);
     const tema = r.rows[0]?.tema || 'dark';
-    res.json({ success: true, user: { ...req.user, tema } });
+    const pageAccess = await getPageAccessList(req.user.role_id);
+    res.json({ success: true, user: { ...req.user, tema, page_access: pageAccess } });
   } catch {
     res.json({ success: true, user: req.user });
   }
@@ -426,8 +516,7 @@ router.get('/profiling/:divisi', authMiddleware, async (req, res) => {
 // ── REWARD ────────────────────────────────────────
 
 // POST /api/hub/reward — catat reward baru
-router.post('/reward', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin yang dapat mencatat reward' });
+router.post('/reward', authMiddleware, requirePageAccess('reward'), async (req, res) => {
   try {
     const { tanggal, nama, kategori, trigger, bentuk, nominal, catatan } = req.body;
     const result = await query(
@@ -442,8 +531,7 @@ router.post('/reward', authMiddleware, async (req, res) => {
 });
 
 // GET /api/hub/reward — semua reward (admin only)
-router.get('/reward', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+router.get('/reward', authMiddleware, requirePageAccess('reward'), async (req, res) => {
   try {
     const result = await query(`SELECT * FROM reward_tracking ORDER BY tanggal DESC`);
     const totalBulanIni = await query(
@@ -461,8 +549,7 @@ router.get('/reward', authMiddleware, async (req, res) => {
 });
 
 // PATCH /api/hub/reward/:id/status — update status reward
-router.patch('/reward/:id/status', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+router.patch('/reward/:id/status', authMiddleware, requirePageAccess('reward'), async (req, res) => {
   try {
     const result = await query(
       `UPDATE reward_tracking SET status = $1 WHERE id = $2 RETURNING *`,
@@ -549,6 +636,224 @@ router.patch('/skb/:id', authMiddleware, async (req, res) => {
   } catch (e) { /* column may already exist */ }
 })();
 
+// ── MASTER DATA: ROLE & HAK AKSES HALAMAN ────────────────────────────────────
+// Startup migration — idempotent. Menggantikan sistem role biner admin/member
+// dengan tabel role generik + registry halaman + matriks akses per role.
+// Lihat database/migration_role_access.sql untuk dokumentasi skema ini.
+(async () => {
+  try {
+    await hubPool.query(`
+      CREATE TABLE IF NOT EXISTS roles (
+        id SERIAL PRIMARY KEY,
+        key VARCHAR(30) NOT NULL UNIQUE,
+        nama VARCHAR(50) NOT NULL,
+        is_protected BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await hubPool.query(`
+      CREATE TABLE IF NOT EXISTS halaman (
+        id SERIAL PRIMARY KEY,
+        page_key VARCHAR(50) NOT NULL UNIQUE,
+        nama VARCHAR(100) NOT NULL,
+        route_path VARCHAR(100) NOT NULL,
+        is_baseline BOOLEAN NOT NULL DEFAULT FALSE,
+        urutan INTEGER DEFAULT 0
+      )
+    `);
+    await hubPool.query(`
+      CREATE TABLE IF NOT EXISTS role_page_access (
+        id SERIAL PRIMARY KEY,
+        role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+        page_key VARCHAR(50) NOT NULL REFERENCES halaman(page_key) ON DELETE CASCADE,
+        can_access BOOLEAN NOT NULL DEFAULT FALSE,
+        UNIQUE(role_id, page_key)
+      )
+    `);
+    await hubPool.query('ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS role_id INTEGER REFERENCES roles(id)');
+    await hubPool.query('ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS email VARCHAR(120)');
+    await hubPool.query('ALTER TABLE tim ADD COLUMN IF NOT EXISTS tanggal_lahir DATE');
+
+    // Seed 6 role — key & nama sesuai PRD bagian 4
+    const ROLES = [
+      ['super_admin',  'Super Admin',  true],
+      ['founder',      'Founder',      false],
+      ['mentor',       'Mentor',       false],
+      ['admin_market', 'Admin Market', false],
+      ['pm',           'PM',           false],
+      ['anggota',      'Anggota',      false],
+    ];
+    for (const [key, nama, isProtected] of ROLES) {
+      await hubPool.query(
+        'INSERT INTO roles (key, nama, is_protected) VALUES ($1,$2,$3) ON CONFLICT (key) DO NOTHING',
+        [key, nama, isProtected]
+      );
+    }
+
+    // Seed registry halaman — 13 baseline (semua role otomatis akses) +
+    // 20 halaman admin-tier (diatur lewat role_page_access) sesuai audit
+    // routing di src/App.jsx.
+    const BASELINE = [
+      ['dashboard', 'Dashboard', '/'],
+      ['modul', 'Modul Belajar', '/modul'],
+      ['jurnal-isi', 'Isi Jurnal', '/jurnal/isi'],
+      ['jurnal-riwayat', 'Riwayat Jurnal', '/jurnal/riwayat'],
+      ['profil', 'Profil Saya', '/profil'],
+      ['profiling', 'Form Profiling', '/profiling'],
+      ['sop', 'SOP Brief', '/sop'],
+      ['skb', 'Ajukan SKB', '/skb'],
+      ['performa', 'Grafik Performa', '/performa'],
+      ['rpg-character', 'RPG Character', '/rpg/character'],
+      ['rpg-quests', 'RPG Quests', '/rpg/quests'],
+      ['rpg-guild', 'RPG Guild', '/rpg/guild'],
+      ['rpg-achievements', 'RPG Achievements', '/rpg/achievements'],
+    ];
+    const ADMIN_TIER = [
+      ['tim', 'Direktori Tim', '/tim'],
+      ['master-data', 'Master Data', '/master-data'],
+      ['jurnal-admin', 'Jurnal (Admin)', '/jurnal'],
+      ['kader', 'Kader Potensial', '/kader'],
+      ['reward', 'Reward & KPI', '/reward'],
+      ['sesi-1on1', 'Sesi 1-on-1', '/1on1'],
+      ['workshop', 'Workshop', '/workshop'],
+      ['absensi', 'Absensi', '/absensi'],
+      ['friday-win', 'Friday Win', '/friday-win'],
+      ['aktivitas-tim', 'Aktivitas Tim', '/aktivitas'],
+      ['laporan-mentor', 'Lap. Mingguan Mentor', '/laporan-mentor'],
+      ['laporan-admin', 'Laporan Mingguan Admin', '/laporan-admin'],
+      ['laporan-harian', 'Laporan Harian', '/laporan-harian'],
+      ['laporan-bulanan', 'Laporan Bulanan', '/laporan-bulanan'],
+      ['ads-performance', 'Ads Performance', '/ads-performance'],
+      ['laporan-profit', 'Laporan Profit', '/laporan-profit'],
+      ['ai-assistant', 'AI Assistant', '/ai-assistant'],
+      ['kalender', 'Kalender', '/kalender'],
+      ['rpg-analytics', 'RPG Analytics', '/rpg/analytics'],
+      ['tim-kelola-legacy', 'Kelola Tim (legacy)', '/tim/kelola'],
+    ];
+    for (let i = 0; i < BASELINE.length; i++) {
+      const [key, nama, path] = BASELINE[i];
+      await hubPool.query(
+        'INSERT INTO halaman (page_key, nama, route_path, is_baseline, urutan) VALUES ($1,$2,$3,TRUE,$4) ON CONFLICT (page_key) DO NOTHING',
+        [key, nama, path, i]
+      );
+    }
+    for (let i = 0; i < ADMIN_TIER.length; i++) {
+      const [key, nama, path] = ADMIN_TIER[i];
+      await hubPool.query(
+        'INSERT INTO halaman (page_key, nama, route_path, is_baseline, urutan) VALUES ($1,$2,$3,FALSE,$4) ON CONFLICT (page_key) DO NOTHING',
+        [key, nama, path, 100 + i]
+      );
+    }
+
+    // Seed matriks role_page_access — nilai awal, semua BISA diedit lewat
+    // Tab "Hak Akses/Role" setelah fitur ini live. super_admin selalu penuh,
+    // anggota selalu kosong (persis perilaku admin/member lama). Founder/
+    // Mentor/Admin Market/PM pakai starting-point wajar per nama role-nya —
+    // ilustrasi PRD bag. 6.2 dijadikan acuan, disesuaikan supaya tidak ada
+    // role yang kosong total (khususnya Admin Market, contoh di PRD kosong
+    // semua — diganti akses ke cluster marketing/ads sesuai nama rolenya).
+    const ALL_ADMIN_KEYS = ADMIN_TIER.map(x => x[0]);
+    const MATRIX = {
+      super_admin: ALL_ADMIN_KEYS,
+      anggota: [],
+      founder: ['reward', 'laporan-mentor', 'laporan-admin', 'laporan-harian', 'laporan-bulanan', 'ads-performance', 'laporan-profit', 'ai-assistant'],
+      mentor: ['tim', 'kader', 'reward', 'jurnal-admin', 'sesi-1on1', 'workshop'],
+      admin_market: ['ads-performance', 'laporan-profit', 'ai-assistant'],
+      pm: ['tim', 'kader', 'reward', 'jurnal-admin', 'workshop', 'absensi', 'friday-win', 'sesi-1on1', 'aktivitas-tim', 'kalender'],
+    };
+    const roleIdRes = await hubPool.query('SELECT id, key FROM roles');
+    const roleIdByKey = Object.fromEntries(roleIdRes.rows.map(r => [r.key, r.id]));
+    for (const [roleKey, allowedKeys] of Object.entries(MATRIX)) {
+      const roleId = roleIdByKey[roleKey];
+      if (!roleId) continue;
+      for (const pageKey of ALL_ADMIN_KEYS) {
+        const canAccess = allowedKeys.includes(pageKey);
+        await hubPool.query(
+          `INSERT INTO role_page_access (role_id, page_key, can_access) VALUES ($1,$2,$3)
+           ON CONFLICT (role_id, page_key) DO NOTHING`,
+          [roleId, pageKey, canAccess]
+        );
+      }
+    }
+
+    // Backfill hub_users.role_id dari role lama, zero-regression:
+    // 'admin' (superadmin ataupun bukan) -> super_admin, 'member' -> anggota.
+    // Alasan lengkap ada di database/migration_role_access.sql.
+    await hubPool.query(`
+      UPDATE hub_users SET role_id = (SELECT id FROM roles WHERE key='super_admin')
+      WHERE role_id IS NULL AND role = 'admin'
+    `);
+    await hubPool.query(`
+      UPDATE hub_users SET role_id = (SELECT id FROM roles WHERE key='anggota')
+      WHERE role_id IS NULL AND role = 'member'
+    `);
+  } catch (e) { console.error('Migration role/access startup:', e.message); }
+})();
+
+// ── ROLE & HAK AKSES HALAMAN ─────────────────────────────────────────────────
+
+// GET /api/hub/roles — daftar role + jumlah halaman yang bisa diakses
+router.get('/roles', authMiddleware, requirePageAccess('master-data'), async (req, res) => {
+  try {
+    const r = await hubPool.query(`
+      SELECT r.id, r.key, r.nama, r.is_protected,
+             COUNT(rpa.page_key) FILTER (WHERE rpa.can_access) AS jumlah_halaman
+      FROM roles r
+      LEFT JOIN role_page_access rpa ON rpa.role_id = r.id
+      GROUP BY r.id ORDER BY r.id
+    `);
+    res.json({ success: true, data: r.rows });
+  } catch { res.status(500).json({ error: 'Gagal mengambil data role' }); }
+});
+
+// GET /api/hub/pages — registry halaman (baseline + admin-tier)
+router.get('/pages', authMiddleware, requirePageAccess('master-data'), async (req, res) => {
+  try {
+    const r = await hubPool.query('SELECT page_key, nama, route_path, is_baseline FROM halaman ORDER BY urutan');
+    res.json({ success: true, data: r.rows });
+  } catch { res.status(500).json({ error: 'Gagal mengambil data halaman' }); }
+});
+
+// GET /api/hub/roles/:id/page-access — matriks akses 1 role (halaman non-baseline saja)
+router.get('/roles/:id/page-access', authMiddleware, requirePageAccess('master-data'), async (req, res) => {
+  try {
+    const r = await hubPool.query(`
+      SELECT h.page_key, h.nama, COALESCE(rpa.can_access, FALSE) AS can_access
+      FROM halaman h
+      LEFT JOIN role_page_access rpa ON rpa.page_key = h.page_key AND rpa.role_id = $1
+      WHERE h.is_baseline = FALSE
+      ORDER BY h.urutan
+    `, [req.params.id]);
+    res.json({ success: true, data: r.rows });
+  } catch { res.status(500).json({ error: 'Gagal mengambil matriks akses' }); }
+});
+
+// PUT /api/hub/roles/:id/page-access — simpan matriks akses 1 role (bulk upsert)
+router.put('/roles/:id/page-access', authMiddleware, requirePageAccess('master-data'), async (req, res) => {
+  const { access } = req.body; // [{ page_key, can_access }]
+  if (!Array.isArray(access)) return res.status(400).json({ error: 'Format data tidak valid' });
+  try {
+    const roleR = await hubPool.query('SELECT is_protected FROM roles WHERE id=$1', [req.params.id]);
+    if (!roleR.rows.length) return res.status(404).json({ error: 'Role tidak ditemukan' });
+    // Master Data untuk role protected (Super Admin) tidak boleh dilepas — proteksi
+    // ini ditegakkan di server, bukan cuma disembunyikan di UI.
+    if (roleR.rows[0].is_protected) {
+      const md = access.find(a => a.page_key === 'master-data');
+      if (md && md.can_access === false) {
+        return res.status(400).json({ error: 'Akses Master Data untuk Super Admin tidak boleh dicabut' });
+      }
+    }
+    for (const { page_key, can_access } of access) {
+      await hubPool.query(
+        `INSERT INTO role_page_access (role_id, page_key, can_access) VALUES ($1,$2,$3)
+         ON CONFLICT (role_id, page_key) DO UPDATE SET can_access = $3`,
+        [req.params.id, page_key, !!can_access]
+      );
+    }
+    res.json({ success: true });
+  } catch { res.status(500).json({ error: 'Gagal menyimpan matriks akses' }); }
+});
+
 // GET /api/hub/tim
 router.get('/tim', authMiddleware, async (req, res) => {
   try {
@@ -558,9 +863,10 @@ router.get('/tim', authMiddleware, async (req, res) => {
     if (!semua) { where += ' AND t.aktif = TRUE'; }
     if (entitas) { params.push(entitas); where += ` AND t.entitas = $${params.length}`; }
     const q = `
-      SELECT t.*, u.username, u.role, u.id as user_id
+      SELECT t.*, u.id as user_id, u.username, u.email, u.role, u.role_id, r.key as role_key, r.nama as role_nama
       FROM tim t
       LEFT JOIN hub_users u ON u.tim_id = t.id OR (u.tim_id IS NULL AND u.nama = t.nama)
+      LEFT JOIN roles r ON r.id = u.role_id
       ${where}
       ORDER BY t.entitas, t.divisi, t.nama
     `;
@@ -572,30 +878,36 @@ router.get('/tim', authMiddleware, async (req, res) => {
 });
 
 // POST /api/hub/tim — tambah anggota + buat akun sekaligus
-router.post('/tim', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
-  const { nama, divisi, level, tipe, entitas, username, password, role } = req.body;
+router.post('/tim', authMiddleware, requirePageAccess('master-data'), async (req, res) => {
+  const { nama, divisi, level, tipe, entitas, username, password, role_id, email, tanggal_lahir } = req.body;
   if (!nama || !divisi || !entitas || !username || !password)
     return res.status(400).json({ error: 'Nama, divisi, entitas, username, dan password wajib diisi' });
   if (password.length < 8)
     return res.status(400).json({ error: 'Password minimal 8 karakter' });
-  if (role === 'admin' && !canManageRoles(req.user))
-    return res.status(403).json({ error: 'Hanya superadmin yang bisa membuat akun admin' });
   const client = await hubPool.connect();
   try {
     await client.query('BEGIN');
+    if (role_id) {
+      const roleR = await client.query('SELECT is_protected FROM roles WHERE id=$1', [role_id]);
+      if (roleR.rows[0]?.is_protected && !canManageRoles(req.user)) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'Hanya Super Admin yang bisa membuat akun Super Admin' });
+      }
+    }
     const timR = await client.query(
-      'INSERT INTO tim (nama, divisi, level, tipe, entitas) VALUES ($1,$2,$3,$4,$5) RETURNING *',
-      [nama, divisi, level || '', tipe || '', entitas]
+      'INSERT INTO tim (nama, divisi, level, tipe, entitas, tanggal_lahir) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [nama, divisi, level || '', tipe || '', entitas, tanggal_lahir || null]
     );
     const timId = timR.rows[0].id;
     const hashed = await bcrypt.hash(password, 10);
+    const defaultRoleId = role_id || (await client.query("SELECT id FROM roles WHERE key='anggota'")).rows[0].id;
+    const legacyRole = await legacyRoleFromRoleId(client, defaultRoleId);
     const userR = await client.query(
-      'INSERT INTO hub_users (nama, username, password, role, aktif, tim_id) VALUES ($1,$2,$3,$4,TRUE,$5) RETURNING id, username, role',
-      [nama, username.toLowerCase().trim(), hashed, role || 'member', timId]
+      'INSERT INTO hub_users (nama, username, password, role, role_id, email, aktif, tim_id) VALUES ($1,$2,$3,$4,$5,$6,TRUE,$7) RETURNING id, username, role, role_id',
+      [nama, username.toLowerCase().trim(), hashed, legacyRole, defaultRoleId, email || null, timId]
     );
     await client.query('COMMIT');
-    res.status(201).json({ success: true, data: { ...timR.rows[0], username: userR.rows[0].username, role: userR.rows[0].role } });
+    res.status(201).json({ success: true, data: { ...timR.rows[0], username: userR.rows[0].username, role: userR.rows[0].role, role_id: userR.rows[0].role_id } });
   } catch (err) {
     await client.query('ROLLBACK');
     if (err.code === '23505') return res.status(409).json({ error: 'Username sudah digunakan' });
@@ -606,38 +918,55 @@ router.post('/tim', authMiddleware, async (req, res) => {
 });
 
 // PATCH /api/hub/tim/:id — edit data anggota + akun
-router.patch('/tim/:id', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
-  const { nama, divisi, level, tipe, aktif, entitas, username, role } = req.body;
+router.patch('/tim/:id', authMiddleware, requirePageAccess('master-data'), async (req, res) => {
+  const { nama, divisi, level, tipe, aktif, entitas, username, role_id, email, tanggal_lahir } = req.body;
   if (!nama || !divisi || !entitas)
     return res.status(400).json({ error: 'Nama, divisi, dan entitas wajib diisi' });
   const client = await hubPool.connect();
   try {
     await client.query('BEGIN');
     const timR = await client.query(
-      'UPDATE tim SET nama=$1, divisi=$2, level=$3, tipe=$4, aktif=$5, entitas=$6, updated_at=NOW() WHERE id=$7 RETURNING *',
-      [nama, divisi, level || '', tipe || '', aktif !== undefined ? aktif : true, entitas, req.params.id]
+      'UPDATE tim SET nama=$1, divisi=$2, level=$3, tipe=$4, aktif=$5, entitas=$6, tanggal_lahir=$7, updated_at=NOW() WHERE id=$8 RETURNING *',
+      [nama, divisi, level || '', tipe || '', aktif !== undefined ? aktif : true, entitas, tanggal_lahir || null, req.params.id]
     );
     if (!timR.rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Anggota tidak ditemukan' }); }
-    let userInfo = {};
-    if (username || role) {
-      if (role) {
-        const curR = await client.query(
-          'SELECT role FROM hub_users WHERE tim_id=$1 OR (tim_id IS NULL AND nama=$2) LIMIT 1',
-          [req.params.id, nama]
-        );
-        const currentRole = curR.rows[0]?.role;
-        const touchesAdmin = role === 'admin' || currentRole === 'admin';
-        if (touchesAdmin && !canManageRoles(req.user)) {
+
+    const curUserR = await client.query(
+      'SELECT id, role_id FROM hub_users WHERE tim_id=$1 OR (tim_id IS NULL AND nama=$2) LIMIT 1',
+      [req.params.id, nama]
+    );
+    const currentUser = curUserR.rows[0];
+
+    if (role_id && currentUser) {
+      const [targetRoleR, currentRoleR] = await Promise.all([
+        client.query('SELECT is_protected FROM roles WHERE id=$1', [role_id]),
+        client.query('SELECT is_protected FROM roles WHERE id=$1', [currentUser.role_id]),
+      ]);
+      const touchesProtected = targetRoleR.rows[0]?.is_protected || currentRoleR.rows[0]?.is_protected;
+      if (touchesProtected && !canManageRoles(req.user)) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'Hanya Super Admin yang bisa mengubah role Super Admin' });
+      }
+      // Turun dari role protected -> pastikan tidak menyisakan zero Super Admin aktif
+      if (currentRoleR.rows[0]?.is_protected && !targetRoleR.rows[0]?.is_protected) {
+        if (await wouldRemoveLastProtectedRole(client, currentUser.id)) {
           await client.query('ROLLBACK');
-          return res.status(403).json({ error: 'Hanya superadmin yang bisa mengubah role admin' });
+          return res.status(400).json({ error: 'Tidak bisa mengubah role — minimal harus ada 1 Super Admin aktif' });
         }
       }
+    }
+
+    let userInfo = {};
+    if (username || role_id || email !== undefined) {
+      let legacyRole;
+      if (role_id) legacyRole = await legacyRoleFromRoleId(client, role_id);
       const userR = await client.query(
-        'UPDATE hub_users SET nama=$1, username=COALESCE($2, username), role=COALESCE($3, role) WHERE tim_id=$4 OR (tim_id IS NULL AND nama=$1) RETURNING username, role',
-        [nama, username ? username.toLowerCase().trim() : null, role || null, req.params.id]
+        `UPDATE hub_users SET nama=$1, username=COALESCE($2, username), role=COALESCE($3, role),
+                role_id=COALESCE($4, role_id), email=COALESCE($5, email)
+         WHERE tim_id=$6 OR (tim_id IS NULL AND nama=$1) RETURNING username, role, role_id, email`,
+        [nama, username ? username.toLowerCase().trim() : null, legacyRole || null, role_id || null, email !== undefined ? email : null, req.params.id]
       );
-      if (userR.rows.length) userInfo = { username: userR.rows[0].username, role: userR.rows[0].role };
+      if (userR.rows.length) userInfo = userR.rows[0];
     }
     await client.query('COMMIT');
     res.json({ success: true, data: { ...timR.rows[0], ...userInfo } });
@@ -651,11 +980,25 @@ router.patch('/tim/:id', authMiddleware, async (req, res) => {
 });
 
 // DELETE /api/hub/tim/:id — nonaktifkan anggota + akun
-router.delete('/tim/:id', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+router.delete('/tim/:id', authMiddleware, requirePageAccess('master-data'), async (req, res) => {
   const client = await hubPool.connect();
   try {
     await client.query('BEGIN');
+    const userR = await client.query(
+      'SELECT id, role_id FROM hub_users WHERE tim_id=$1 LIMIT 1', [req.params.id]
+    );
+    const targetUser = userR.rows[0];
+    if (targetUser?.id === req.user.id) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Tidak bisa menonaktifkan akun sendiri' });
+    }
+    if (targetUser && await wouldRemoveLastProtectedRole(client, targetUser.id)) {
+      const roleR = await client.query('SELECT is_protected FROM roles WHERE id=$1', [targetUser.role_id]);
+      if (roleR.rows[0]?.is_protected) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Tidak bisa menonaktifkan — minimal harus ada 1 Super Admin aktif' });
+      }
+    }
     const timR = await client.query('UPDATE tim SET aktif=FALSE, updated_at=NOW() WHERE id=$1 RETURNING *', [req.params.id]);
     if (!timR.rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Anggota tidak ditemukan' }); }
     await client.query('UPDATE hub_users SET aktif=FALSE WHERE tim_id=$1 OR (tim_id IS NULL AND nama=$2)', [req.params.id, timR.rows[0].nama]);
@@ -666,8 +1009,7 @@ router.delete('/tim/:id', authMiddleware, async (req, res) => {
 });
 
 // PATCH /api/hub/tim/:id/aktifkan — aktifkan kembali
-router.patch('/tim/:id/aktifkan', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+router.patch('/tim/:id/aktifkan', authMiddleware, requirePageAccess('master-data'), async (req, res) => {
   const client = await hubPool.connect();
   try {
     await client.query('BEGIN');
@@ -714,7 +1056,7 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
 });
 
 // ── WORKSHOP KEHADIRAN ────────────────────────────────────────────────────────
-router.get('/workshop', authMiddleware, async (req, res) => {
+router.get('/workshop', authMiddleware, requirePageAccess('workshop'), async (req, res) => {
   try {
     const result = await hubPool.query(
       'SELECT nama, layer_id, sesi_idx, hadir FROM workshop_kehadiran ORDER BY nama, layer_id, sesi_idx'
@@ -775,7 +1117,7 @@ router.patch('/workshop/:nama/:layer_id/:sesi_idx', authMiddleware, async (req, 
 })();
 
 // GET /api/hub/absensi/sesi — list semua sesi, newest first
-router.get('/absensi/sesi', authMiddleware, async (req, res) => {
+router.get('/absensi/sesi', authMiddleware, requirePageAccess('absensi'), async (req, res) => {
   try {
     const r = await hubPool.query(
       'SELECT * FROM absensi_sesi ORDER BY tanggal DESC, id DESC'
@@ -785,7 +1127,7 @@ router.get('/absensi/sesi', authMiddleware, async (req, res) => {
 });
 
 // GET /api/hub/absensi/sesi/:id — detail sesi + kehadiran
-router.get('/absensi/sesi/:id', authMiddleware, async (req, res) => {
+router.get('/absensi/sesi/:id', authMiddleware, requirePageAccess('absensi'), async (req, res) => {
   try {
     const sesiR = await hubPool.query('SELECT * FROM absensi_sesi WHERE id=$1', [req.params.id]);
     if (!sesiR.rows.length) return res.status(404).json({ error: 'Sesi tidak ditemukan' });
@@ -798,8 +1140,7 @@ router.get('/absensi/sesi/:id', authMiddleware, async (req, res) => {
 });
 
 // POST /api/hub/absensi/sesi — buat sesi baru + auto-populate semua anggota aktif
-router.post('/absensi/sesi', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+router.post('/absensi/sesi', authMiddleware, requirePageAccess('absensi'), async (req, res) => {
   const { label, tanggal } = req.body;
   if (!label || !tanggal) return res.status(400).json({ error: 'Label dan tanggal wajib diisi' });
   const client = await hubPool.connect();
@@ -830,8 +1171,7 @@ router.post('/absensi/sesi', authMiddleware, async (req, res) => {
 });
 
 // PATCH /api/hub/absensi/:sesi_id/:nama — upsert status 1 anggota
-router.patch('/absensi/:sesi_id/:nama', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+router.patch('/absensi/:sesi_id/:nama', authMiddleware, requirePageAccess('absensi'), async (req, res) => {
   const { sesi_id, nama } = req.params;
   const { status, catatan } = req.body;
   const VALID = ['hadir', 'terlambat', 'izin', 'sakit', 'tidak_hadir'];
@@ -848,8 +1188,7 @@ router.patch('/absensi/:sesi_id/:nama', authMiddleware, async (req, res) => {
 });
 
 // PUT /api/hub/absensi/sesi/:id — edit label/tanggal sesi
-router.put('/absensi/sesi/:id', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+router.put('/absensi/sesi/:id', authMiddleware, requirePageAccess('absensi'), async (req, res) => {
   const { label, tanggal } = req.body;
   if (!label?.trim() || !tanggal) return res.status(400).json({ error: 'Label dan tanggal wajib diisi' });
   try {
@@ -863,8 +1202,7 @@ router.put('/absensi/sesi/:id', authMiddleware, async (req, res) => {
 });
 
 // DELETE /api/hub/absensi/sesi/:id — hapus sesi (cascade ke kehadiran)
-router.delete('/absensi/sesi/:id', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+router.delete('/absensi/sesi/:id', authMiddleware, requirePageAccess('absensi'), async (req, res) => {
   try {
     const r = await hubPool.query('DELETE FROM absensi_sesi WHERE id=$1 RETURNING id', [req.params.id]);
     if (!r.rows.length) return res.status(404).json({ error: 'Sesi tidak ditemukan' });
@@ -875,8 +1213,7 @@ router.delete('/absensi/sesi/:id', authMiddleware, async (req, res) => {
 // ── LAPORAN BULANAN ───────────────────────────────────────────────────────────
 // GET /api/hub/laporan-bulanan?bulan=2026-07
 // Mengembalikan agregat per anggota untuk bulan tertentu
-router.get('/laporan-bulanan', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+router.get('/laporan-bulanan', authMiddleware, requirePageAccess('laporan-bulanan'), async (req, res) => {
   const { bulan } = req.query; // format: YYYY-MM
   if (!bulan || !/^\d{4}-\d{2}$/.test(bulan)) return res.status(400).json({ error: 'Parameter bulan wajib (format: YYYY-MM)' });
 
@@ -997,14 +1334,14 @@ router.get('/laporan-bulanan', authMiddleware, async (req, res) => {
 });
 
 // ── FRIDAY WIN ────────────────────────────────────────────────────────────────
-router.get('/friday-win', authMiddleware, async (req, res) => {
+router.get('/friday-win', authMiddleware, requirePageAccess('friday-win'), async (req, res) => {
   try {
     const result = await hubPool.query('SELECT * FROM friday_win ORDER BY tanggal DESC, id DESC LIMIT 20');
     res.json({ data: result.rows });
   } catch { res.status(500).json({ error: 'Gagal mengambil Friday Win' }); }
 });
 
-router.post('/friday-win', authMiddleware, async (req, res) => {
+router.post('/friday-win', authMiddleware, requirePageAccess('friday-win'), async (req, res) => {
   const { tanggal, headline, penerima, pesan } = req.body;
   try {
     const r = await hubPool.query(
@@ -1016,8 +1353,7 @@ router.post('/friday-win', authMiddleware, async (req, res) => {
   } catch { res.status(500).json({ error: 'Gagal simpan Friday Win' }); }
 });
 
-router.delete('/friday-win/:id', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+router.delete('/friday-win/:id', authMiddleware, requirePageAccess('friday-win'), async (req, res) => {
   try {
     await hubPool.query('DELETE FROM friday_win WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
@@ -1025,16 +1361,14 @@ router.delete('/friday-win/:id', authMiddleware, async (req, res) => {
 });
 
 // ── SESI 1-ON-1 (admin/mentor only) ────────────────────────────────────────────
-router.get('/sesi-1on1', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+router.get('/sesi-1on1', authMiddleware, requirePageAccess('sesi-1on1'), async (req, res) => {
   try {
     const result = await hubPool.query('SELECT * FROM sesi_1on1 ORDER BY tanggal DESC, id DESC');
     res.json({ data: result.rows });
   } catch { res.status(500).json({ error: 'Gagal mengambil sesi 1-on-1' }); }
 });
 
-router.post('/sesi-1on1', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+router.post('/sesi-1on1', authMiddleware, requirePageAccess('sesi-1on1'), async (req, res) => {
   const { tanggal, anggota, tipe, durasi_menit, ringkasan, tindak_lanjut, mood_sebelum, mood_sesudah } = req.body;
   try {
     const r = await hubPool.query(
@@ -1048,35 +1382,45 @@ router.post('/sesi-1on1', authMiddleware, async (req, res) => {
 
 
 // POST /api/hub/tim/:id/buat-akun — buat akun login untuk anggota yang belum punya
-router.post('/tim/:id/buat-akun', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
-  const { username, password, role } = req.body;
+router.post('/tim/:id/buat-akun', authMiddleware, requirePageAccess('master-data'), async (req, res) => {
+  const { username, password, role_id, email } = req.body;
   if (!username || !username.trim()) return res.status(400).json({ error: 'Username wajib diisi' });
   if (!password || password.length < 8) return res.status(400).json({ error: 'Password minimal 8 karakter' });
-  if (role === 'admin' && !canManageRoles(req.user))
-    return res.status(403).json({ error: 'Hanya superadmin yang bisa membuat akun admin' });
+  const client = await hubPool.connect();
   try {
-    const timR = await hubPool.query('SELECT * FROM tim WHERE id=$1', [req.params.id]);
-    if (!timR.rows.length) return res.status(404).json({ error: 'Anggota tidak ditemukan' });
+    await client.query('BEGIN');
+    if (role_id) {
+      const roleR = await client.query('SELECT is_protected FROM roles WHERE id=$1', [role_id]);
+      if (roleR.rows[0]?.is_protected && !canManageRoles(req.user)) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'Hanya Super Admin yang bisa membuat akun Super Admin' });
+      }
+    }
+    const timR = await client.query('SELECT * FROM tim WHERE id=$1', [req.params.id]);
+    if (!timR.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Anggota tidak ditemukan' }); }
     const { nama } = timR.rows[0];
-    // Cek sudah punya akun belum
-    const existing = await hubPool.query('SELECT id FROM hub_users WHERE tim_id=$1 OR nama=$2', [req.params.id, nama]);
-    if (existing.rows.length) return res.status(409).json({ error: 'Anggota sudah punya akun login' });
+    const existing = await client.query('SELECT id FROM hub_users WHERE tim_id=$1 OR nama=$2', [req.params.id, nama]);
+    if (existing.rows.length) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Anggota sudah punya akun login' }); }
     const hashed = await bcrypt.hash(password, 10);
-    const r = await hubPool.query(
-      'INSERT INTO hub_users (nama, username, password, role, aktif, tim_id) VALUES ($1,$2,$3,$4,TRUE,$5) RETURNING id, username, role',
-      [nama, username.trim().toLowerCase(), hashed, role || 'member', req.params.id]
+    const finalRoleId = role_id || (await client.query("SELECT id FROM roles WHERE key='anggota'")).rows[0].id;
+    const legacyRole = await legacyRoleFromRoleId(client, finalRoleId);
+    const r = await client.query(
+      'INSERT INTO hub_users (nama, username, password, role, role_id, email, aktif, tim_id) VALUES ($1,$2,$3,$4,$5,$6,TRUE,$7) RETURNING id, username, role, role_id',
+      [nama, username.trim().toLowerCase(), hashed, legacyRole, finalRoleId, email || null, req.params.id]
     );
+    await client.query('COMMIT');
     res.status(201).json({ ok: true, data: r.rows[0] });
   } catch (err) {
+    await client.query('ROLLBACK');
     if (err.code === '23505') return res.status(409).json({ error: 'Username sudah digunakan' });
     res.status(500).json({ error: 'Gagal membuat akun' });
+  } finally {
+    client.release();
   }
 });
 
 // PATCH /api/hub/tim/:id/reset-password
-router.patch('/tim/:id/reset-password', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+router.patch('/tim/:id/reset-password', authMiddleware, requirePageAccess('master-data'), async (req, res) => {
   const { password_baru } = req.body;
   if (!password_baru || !password_baru.trim())
     return res.status(400).json({ error: 'Password baru wajib diisi' });
@@ -1197,8 +1541,7 @@ router.get('/revenue/history', authMiddleware, async (req, res) => {
 });
 
 // ── ADMIN REPLY JURNAL ────────────────────────────────────────────────────────
-router.patch('/jurnal/:id/reply', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+router.patch('/jurnal/:id/reply', authMiddleware, requirePageAccess('jurnal-admin'), async (req, res) => {
   const { reply } = req.body;
   try {
     // Simpan reply ke kolom catatan_mentor (repurpose untuk admin reply)
@@ -1476,8 +1819,7 @@ router.get('/laporan-harian', authMiddleware, async (req, res) => {
   } catch { res.status(500).json({ error: 'Gagal ambil laporan harian' }); }
 });
 
-router.delete('/laporan-harian/:id', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+router.delete('/laporan-harian/:id', authMiddleware, requirePageAccess('laporan-harian'), async (req, res) => {
   const { id } = req.params;
   try {
     const r = await hubPool.query('DELETE FROM laporan_harian WHERE id=$1 RETURNING id', [id]);
@@ -1511,8 +1853,7 @@ router.get('/laporan-harian/stats', authMiddleware, async (req, res) => {
 });
 
 // GET /laporan-harian/grafik?dari=YYYY-MM-DD&sampai=YYYY-MM-DD
-router.get('/laporan-harian/grafik', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+router.get('/laporan-harian/grafik', authMiddleware, requirePageAccess('laporan-harian'), async (req, res) => {
   const { dari, sampai } = req.query;
   try {
     const r = await hubPool.query(`
@@ -1530,9 +1871,7 @@ router.get('/laporan-harian/grafik', authMiddleware, async (req, res) => {
 // ── ANALISA SDM OTOMATIS ──────────────────────────────────────────────────────
 // GET /api/hub/laporan-sdm-analisa?tanggal=YYYY-MM-DD
 // Ambil jurnal minggu ini + 1-on-1 terbaru per anggota → buat narasi SDM
-router.get('/laporan-sdm-analisa', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
-
+router.get('/laporan-sdm-analisa', authMiddleware, requirePageAccess('laporan-mentor'), async (req, res) => {
   const { tanggal } = req.query;
   const tgl    = tanggal ? new Date(tanggal) : new Date();
   // Range: 7 hari sebelum tanggal laporan
@@ -1670,8 +2009,7 @@ router.get('/laporan-sdm-analisa', authMiddleware, async (req, res) => {
 // ── LAPORAN MINGGUAN ──────────────────────────────────────────────────────────
 
 // GET /api/hub/laporan-mingguan — daftar semua laporan
-router.get('/laporan-mingguan', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+router.get('/laporan-mingguan', authMiddleware, requirePageAccess('laporan-mentor'), async (req, res) => {
   try {
     const r = await hubPool.query(
       `SELECT id, tanggal, judul, kas, dibuat_oleh, created_at
@@ -1682,8 +2020,7 @@ router.get('/laporan-mingguan', authMiddleware, async (req, res) => {
 });
 
 // GET /api/hub/laporan-mingguan/:id — detail + akun + SDM
-router.get('/laporan-mingguan/:id', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+router.get('/laporan-mingguan/:id', authMiddleware, requirePageAccess('laporan-mentor'), async (req, res) => {
   try {
     const [laporan, akun, sdm] = await Promise.all([
       hubPool.query('SELECT * FROM laporan_mingguan WHERE id=$1', [req.params.id]),
@@ -1696,8 +2033,7 @@ router.get('/laporan-mingguan/:id', authMiddleware, async (req, res) => {
 });
 
 // POST /api/hub/laporan-mingguan — buat laporan baru
-router.post('/laporan-mingguan', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+router.post('/laporan-mingguan', authMiddleware, requirePageAccess('laporan-mentor'), async (req, res) => {
   const { tanggal, judul, kas, marketing, produksi, akun = [], sdm = [] } = req.body;
   if (!tanggal) return res.status(400).json({ error: 'Tanggal wajib diisi' });
   try {
@@ -1736,8 +2072,7 @@ router.post('/laporan-mingguan', authMiddleware, async (req, res) => {
 });
 
 // PUT /api/hub/laporan-mingguan/:id — update laporan
-router.put('/laporan-mingguan/:id', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+router.put('/laporan-mingguan/:id', authMiddleware, requirePageAccess('laporan-mentor'), async (req, res) => {
   const { tanggal, judul, kas, marketing, produksi, akun = [], sdm = [] } = req.body;
   const id = req.params.id;
   try {
@@ -1771,8 +2106,7 @@ router.put('/laporan-mingguan/:id', authMiddleware, async (req, res) => {
 });
 
 // DELETE /api/hub/laporan-mingguan/:id
-router.delete('/laporan-mingguan/:id', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+router.delete('/laporan-mingguan/:id', authMiddleware, requirePageAccess('laporan-mentor'), async (req, res) => {
   try {
     await hubPool.query('DELETE FROM laporan_mingguan WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
@@ -1789,17 +2123,8 @@ const LAPORAN_ADMIN_SCREENSHOT_FIELDS = [
   'screenshot_total_impressions', 'screenshot_fiverr_ads', 'screenshot_porto_baru',
 ];
 
-async function isAdminOrMarket(req) {
-  if (req.user.role === 'admin') return true;
-  try {
-    const r = await pool.query('SELECT id FROM tim WHERE nama=$1 AND divisi=$2 LIMIT 1', [req.user.nama, 'Admin']);
-    return r.rows.length > 0;
-  } catch { return false; }
-}
-
 // GET /api/hub/laporan-admin — semua laporan (list)
-router.get('/laporan-admin', authMiddleware, async (req, res) => {
-  if (!await isAdminOrMarket(req)) return res.status(403).json({ error: 'Akses ditolak' });
+router.get('/laporan-admin', authMiddleware, requirePageAccessOrAdminDivisi('laporan-admin'), async (req, res) => {
   try {
     const r = await pool.query(
       `SELECT id, tanggal, akun, periode, dibuat_oleh, created_at
@@ -1810,8 +2135,7 @@ router.get('/laporan-admin', authMiddleware, async (req, res) => {
 });
 
 // GET /api/hub/laporan-admin/:id — detail laporan
-router.get('/laporan-admin/:id', authMiddleware, async (req, res) => {
-  if (!await isAdminOrMarket(req)) return res.status(403).json({ error: 'Akses ditolak' });
+router.get('/laporan-admin/:id', authMiddleware, requirePageAccessOrAdminDivisi('laporan-admin'), async (req, res) => {
   try {
     const r = await pool.query('SELECT * FROM laporan_admin_mingguan WHERE id=$1', [req.params.id]);
     if (!r.rows.length) return res.status(404).json({ error: 'Laporan tidak ditemukan' });
@@ -1820,8 +2144,7 @@ router.get('/laporan-admin/:id', authMiddleware, async (req, res) => {
 });
 
 // POST /api/hub/laporan-admin — buat laporan baru
-router.post('/laporan-admin', authMiddleware, async (req, res) => {
-  if (!await isAdminOrMarket(req)) return res.status(403).json({ error: 'Akses ditolak' });
+router.post('/laporan-admin', authMiddleware, requirePageAccessOrAdminDivisi('laporan-admin'), async (req, res) => {
   const {
     tanggal, akun, periode,
     gigs_tags, order_queue, flow_new_order, flow_complete_order,
@@ -1851,8 +2174,7 @@ router.post('/laporan-admin', authMiddleware, async (req, res) => {
 });
 
 // PUT /api/hub/laporan-admin/:id — update laporan
-router.put('/laporan-admin/:id', authMiddleware, async (req, res) => {
-  if (!await isAdminOrMarket(req)) return res.status(403).json({ error: 'Akses ditolak' });
+router.put('/laporan-admin/:id', authMiddleware, requirePageAccessOrAdminDivisi('laporan-admin'), async (req, res) => {
   const {
     tanggal, akun, periode,
     gigs_tags, order_queue, flow_new_order, flow_complete_order,
@@ -1883,8 +2205,7 @@ router.put('/laporan-admin/:id', authMiddleware, async (req, res) => {
 });
 
 // DELETE /api/hub/laporan-admin/:id
-router.delete('/laporan-admin/:id', authMiddleware, async (req, res) => {
-  if (!await isAdminOrMarket(req)) return res.status(403).json({ error: 'Akses ditolak' });
+router.delete('/laporan-admin/:id', authMiddleware, requirePageAccessOrAdminDivisi('laporan-admin'), async (req, res) => {
   try {
     await pool.query('DELETE FROM laporan_admin_mingguan WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
@@ -2008,8 +2329,7 @@ async function syncMetaInsights(brandId, adAccountId, tanggal) {
 // ── META ADS ENDPOINTS ────────────────────────────────────────────────────────
 
 // GET /api/hub/meta-ads/brands
-router.get('/meta-ads/brands', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+router.get('/meta-ads/brands', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
   try {
     const r = await pool.query('SELECT id, nama, ad_account_id, pixel_id, aktif, kurs_usd, hpp_default FROM meta_ads_brands ORDER BY nama');
     res.json({ data: r.rows });
@@ -2017,8 +2337,7 @@ router.get('/meta-ads/brands', authMiddleware, async (req, res) => {
 });
 
 // PUT /api/hub/meta-ads/brands/:id/settings — update kurs USD dan HPP default
-router.put('/meta-ads/brands/:id/settings', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+router.put('/meta-ads/brands/:id/settings', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
   const { kurs_usd, hpp_default } = req.body;
   if (kurs_usd == null || hpp_default == null) return res.status(400).json({ error: 'kurs_usd dan hpp_default wajib' });
   try {
@@ -2031,8 +2350,7 @@ router.put('/meta-ads/brands/:id/settings', authMiddleware, async (req, res) => 
 });
 
 // POST /api/hub/meta-ads/brands
-router.post('/meta-ads/brands', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+router.post('/meta-ads/brands', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
   const { nama, ad_account_id, pixel_id } = req.body;
   if (!nama || !ad_account_id) return res.status(400).json({ error: 'nama dan ad_account_id wajib' });
   try {
@@ -2048,8 +2366,7 @@ router.post('/meta-ads/brands', authMiddleware, async (req, res) => {
 });
 
 // PUT /api/hub/meta-ads/brands/:id
-router.put('/meta-ads/brands/:id', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+router.put('/meta-ads/brands/:id', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
   const { nama, ad_account_id, pixel_id, aktif } = req.body;
   try {
     await pool.query(
@@ -2061,8 +2378,7 @@ router.put('/meta-ads/brands/:id', authMiddleware, async (req, res) => {
 });
 
 // GET /api/hub/meta-ads/insights?brand_id=&bulan=YYYY-MM
-router.get('/meta-ads/insights', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+router.get('/meta-ads/insights', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
   const { brand_id, bulan } = req.query;
   try {
     let whereClause = '';
@@ -2088,8 +2404,7 @@ router.get('/meta-ads/insights', authMiddleware, async (req, res) => {
 });
 
 // POST /api/hub/meta-ads/report — input manual order/omzet (dalam USD, dikonversi ke IDR)
-router.post('/meta-ads/report', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+router.post('/meta-ads/report', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
   const { brand_id, tanggal, jumlah_order, omzet_usd, catatan } = req.body;
   if (!brand_id || !tanggal) return res.status(400).json({ error: 'brand_id dan tanggal wajib' });
   try {
@@ -2109,8 +2424,7 @@ router.post('/meta-ads/report', authMiddleware, async (req, res) => {
 });
 
 // GET /api/hub/meta-ads/laporan?bulan=YYYY-MM&brand_id=
-router.get('/meta-ads/laporan', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+router.get('/meta-ads/laporan', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
   const { bulan, brand_id } = req.query;
   const bulanParam = bulan || new Date().toISOString().slice(0, 7);
   try {
@@ -2147,8 +2461,7 @@ router.get('/meta-ads/laporan', authMiddleware, async (req, res) => {
 });
 
 // POST /api/hub/meta-ads/sync/:brandId — sync data dari Meta API untuk tanggal tertentu
-router.post('/meta-ads/sync/:brandId', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+router.post('/meta-ads/sync/:brandId', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
   const { tanggal } = req.body;
   const tgl = tanggal || new Date().toISOString().slice(0, 10);
   try {
@@ -2162,8 +2475,7 @@ router.post('/meta-ads/sync/:brandId', authMiddleware, async (req, res) => {
 });
 
 // POST /api/hub/meta-ads/sync-range/:brandId — sync range tanggal
-router.post('/meta-ads/sync-range/:brandId', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+router.post('/meta-ads/sync-range/:brandId', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
   const { dari, sampai } = req.body;
   if (!dari || !sampai) return res.status(400).json({ error: 'Perlu dari & sampai' });
   try {
@@ -2188,8 +2500,7 @@ router.post('/meta-ads/sync-range/:brandId', authMiddleware, async (req, res) =>
 });
 
 // POST /api/hub/meta-ads/sync-all — sync semua brand aktif (dipanggil cron)
-router.post('/meta-ads/sync-all', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+router.post('/meta-ads/sync-all', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
   const tgl = req.body.tanggal || new Date(Date.now() - 86400000).toISOString().slice(0, 10);
   try {
     const brands = await pool.query('SELECT * FROM meta_ads_brands WHERE aktif=TRUE');
@@ -2208,8 +2519,7 @@ router.post('/meta-ads/sync-all', authMiddleware, async (req, res) => {
 // ── AI INSIGHT ───────────────────────────────────────────────────────────────
 
 // POST /api/hub/ai/insight-ads
-router.post('/ai/insight-ads', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+router.post('/ai/insight-ads', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
   const { bulan, brand_id } = req.body;
   if (!bulan) return res.status(400).json({ error: 'Perlu bulan (YYYY-MM)' });
 
@@ -2301,8 +2611,7 @@ ${topSpend.map(x => `- ${x.tanggal}: Spend Rp ${Number(x.spend).toLocaleString('
 });
 
 // POST /api/hub/ai/chat — AI assistant dengan konteks data hub
-router.post('/ai/chat', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+router.post('/ai/chat', authMiddleware, requirePageAccess('ai-assistant'), async (req, res) => {
   const { pesan, riwayat } = req.body;
   if (!pesan) return res.status(400).json({ error: 'Pesan kosong' });
 
