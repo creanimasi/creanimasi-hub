@@ -160,6 +160,7 @@ export const api = {
   getMetaBrands:      ()                          => request('GET', '/meta-ads/brands'),
   createMetaBrand:    (data)                      => request('POST', '/meta-ads/brands', data),
   updateMetaBrand:    (id, data)                  => request('PUT', `/meta-ads/brands/${id}`, data),
+  deleteMetaBrand:    (id)                        => request('DELETE', `/meta-ads/brands/${id}`),
   updateMetaBrandSettings: (id, data)             => request('PUT', `/meta-ads/brands/${id}/settings`, data),
   getMetaInsights:    (brandId, bulan)            => request('GET', `/meta-ads/insights?${brandId ? `brand_id=${brandId}&` : ''}${bulan ? `bulan=${bulan}` : ''}`),
   saveMetaReport:     (data)                      => request('POST', '/meta-ads/report', data),

@@ -2556,6 +2556,15 @@ router.put('/meta-ads/brands/:id', authMiddleware, requirePageAccess('ads-perfor
   }
 });
 
+// DELETE /api/hub/meta-ads/brands/:id — hapus brand + seluruh insights/report/threshold-nya (ON DELETE CASCADE)
+router.delete('/meta-ads/brands/:id', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
+  try {
+    const r = await pool.query('DELETE FROM meta_ads_brands WHERE id=$1 RETURNING nama', [req.params.id]);
+    if (!r.rowCount) return res.status(404).json({ error: 'Brand tidak ditemukan' });
+    res.json({ ok: true });
+  } catch (e) { console.error('Gagal hapus brand:', e.message); res.status(500).json({ error: 'Gagal hapus brand' }); }
+});
+
 // GET /api/hub/meta-ads/insights?brand_id=&bulan=YYYY-MM
 router.get('/meta-ads/insights', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
   const { brand_id, bulan } = req.query;

@@ -320,9 +320,12 @@ function SyncRangeModal({ brandId, brands, onDone, onClose }) {
   );
 }
 
-function BrandModal({ brand, onSave, onClose }) {
+function BrandModal({ brand, onSave, onClose, onDeleted }) {
   const { showToast } = useToast();
   const isEdit = !!brand;
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [delText, setDelText] = useState('');
+  const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState({
     nama: brand?.nama || '',
     ad_account_id: brand?.ad_account_id || '',
@@ -345,6 +348,16 @@ function BrandModal({ brand, onSave, onClose }) {
       showToast(`Brand ${form.nama} berhasil ${isEdit ? 'diperbarui' : 'ditambahkan'}`);
     } catch (e) { showToast('Gagal: ' + e.message, 'error'); }
     finally { setSaving(false); }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await api.deleteMetaBrand(brand.id);
+      showToast(`Brand ${brand.nama} dihapus`);
+      onDeleted();
+    } catch (e) { showToast('Gagal hapus: ' + e.message, 'error'); }
+    finally { setDeleting(false); }
   };
 
   return (
@@ -373,6 +386,27 @@ function BrandModal({ brand, onSave, onClose }) {
             {saving ? 'Menyimpan...' : isEdit ? 'Simpan' : 'Tambah'}
           </button>
         </div>
+        {isEdit && (
+          <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+            {!confirmDel ? (
+              <button onClick={() => setConfirmDel(true)} style={{ background: 'none', border: 'none', color: '#FF6B6B', cursor: 'pointer', fontSize: 12, padding: 0 }}>🗑️ Hapus brand ini…</button>
+            ) : (
+              <div style={{ display: 'grid', gap: 8 }}>
+                <div style={{ fontSize: 12, color: '#FF6B6B', lineHeight: 1.5 }}>
+                  Menghapus brand juga menghapus <b>semua data insights, report harian, dan threshold</b> brand ini secara permanen. Untuk berhenti sync tanpa kehilangan data, cukup hilangkan centang "Brand aktif".
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Ketik <b>{brand.nama}</b> untuk konfirmasi:</div>
+                <input value={delText} onChange={e => setDelText(e.target.value)} style={inputStyle} placeholder={brand.nama} />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => { setConfirmDel(false); setDelText(''); }} style={{ flex: 1, padding: '8px 0', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 12 }}>Batal</button>
+                  <button onClick={handleDelete} disabled={deleting || delText.trim() !== brand.nama} style={{ flex: 2, padding: '8px 0', borderRadius: 8, border: 'none', background: '#FF6B6B', color: '#fff', fontWeight: 700, cursor: (deleting || delText.trim() !== brand.nama) ? 'not-allowed' : 'pointer', opacity: delText.trim() !== brand.nama ? 0.5 : 1, fontSize: 12 }}>
+                    {deleting ? 'Menghapus...' : 'Hapus Permanen'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -560,7 +594,7 @@ export default function AdsPerformance() {
         <BrandModal onClose={() => setShowBrandModal(false)} onSave={() => { setShowBrandModal(false); loadBrands(); }} />
       )}
       {showEditBrand && brands.find(b => String(b.id) === String(brandId)) && (
-        <BrandModal brand={brands.find(b => String(b.id) === String(brandId))} onClose={() => setShowEditBrand(false)} onSave={() => { setShowEditBrand(false); loadBrands(); }} />
+        <BrandModal brand={brands.find(b => String(b.id) === String(brandId))} onClose={() => setShowEditBrand(false)} onSave={() => { setShowEditBrand(false); loadBrands(); }} onDeleted={() => { setShowEditBrand(false); setBrandId(''); loadBrands(); }} />
       )}
       {showSyncRange && (
         <SyncRangeModal brandId={brandId} brands={brands} onClose={() => setShowSyncRange(false)} onDone={loadData} />
