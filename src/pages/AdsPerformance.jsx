@@ -180,7 +180,7 @@ function BrandSettingsModal({ brands, onSave, onClose }) {
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: 16, padding: 24, width: '100%', maxWidth: 380, boxShadow: '0 8px 40px rgba(0,0,0,0.4)' }}>
         <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>⚙️ Setting Brand</div>
-        <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 20 }}>Kurs USD dan HPP berlaku untuk semua data brand ini</div>
+        <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 20 }}>Kurs USD dan HPP berlaku untuk semua data brand ini (kurs juga dipakai mengonversi spend kalau akun iklannya USD)</div>
         <div style={{ display: 'grid', gap: 12 }}>
           <div>
             {lbl('Brand')}
@@ -199,6 +199,14 @@ function BrandSettingsModal({ brands, onSave, onClose }) {
           <div style={{ background: 'var(--surface-2)', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: 'var(--text-3)' }}>
             HPP ini akan otomatis dipakai untuk hitung profit di semua transaksi brand ini.
             Ubah kapan saja — data lama akan ikut terhitung ulang.
+          </div>
+          <div style={{ background: 'var(--surface-2)', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: 'var(--text-3)', lineHeight: 1.5 }}>
+            <b style={{ color: 'var(--text-2)' }}>Mata uang akun iklan: {activeBrand?.mata_uang || 'belum terdeteksi'}</b>
+            <br />
+            {activeBrand?.mata_uang === 'USD' && 'Spend dari Meta dalam USD, otomatis dikonversi ke Rupiah memakai kurs di atas.'}
+            {activeBrand?.mata_uang === 'IDR' && 'Spend dari Meta sudah Rupiah, ditampilkan langsung tanpa konversi.'}
+            {activeBrand?.mata_uang && !['IDR', 'USD'].includes(activeBrand.mata_uang) && 'Mata uang ini belum didukung konversi otomatis (hanya IDR dan USD).'}
+            {!activeBrand?.mata_uang && 'Terdeteksi otomatis saat Sync Meta pertama. Sebelum itu spend dianggap sudah Rupiah.'}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
@@ -529,6 +537,13 @@ export default function AdsPerformance() {
         <MetricCard label="ROAS"         value={avgRoas !== null ? avgRoas.toFixed(2) + 'x' : '—'} color={avgRoas >= 2 ? '#00D68F' : avgRoas >= 1 ? '#FFB84B' : '#FF6B6B'} sub="Omzet / Spend" />
       </div>
 
+      {/* Mata uang akun selain IDR/USD tidak bisa dikonversi otomatis (hanya ada kurs USD) */}
+      {brands.filter(b => b.mata_uang && !['IDR', 'USD'].includes(b.mata_uang)).map(b => (
+        <div key={b.id} style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderLeft: '3px solid #FFB84B', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: 'var(--text-2)', marginBottom: 12 }}>
+          ⚠️ Akun iklan <b>{b.nama}</b> memakai mata uang <b>{b.mata_uang}</b>. Konversi otomatis hanya mendukung IDR dan USD, jadi spend brand ini ditampilkan apa adanya dan bisa keliru.
+        </div>
+      ))}
+
       {/* Tabel harian */}
       {error && <div style={{ color: '#FF6B6B', fontSize: 13, marginBottom: 12 }}>{error}</div>}
       {loading ? (
@@ -564,7 +579,14 @@ export default function AdsPerformance() {
                 <tr key={i} style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
                   <td style={tdStyle}>{r.tanggal?.slice(0,10)}</td>
                   <td style={tdStyle}><span style={{ fontWeight: 600 }}>{r.brand_nama}</span></td>
-                  <td style={{ ...tdStyle, textAlign: 'right', color: '#FF6B6B', fontWeight: 700 }}>{fmtRp(r.spend)}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right', color: '#FF6B6B', fontWeight: 700 }}>
+                    {fmtRp(r.spend)}
+                    {r.mata_uang === 'USD' && (
+                      <div style={{ fontSize: 10, fontWeight: 400, color: 'var(--text-3)' }} title={`Spend asli dari Meta (USD), dikonversi dengan kurs Rp ${Number(r.kurs_usd || 0).toLocaleString('id-ID')}`}>
+                        {'$' + Number(r.spend_asli || 0).toFixed(2)}
+                      </div>
+                    )}
+                  </td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>{fmt(r.klik)}</td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>{r.ctr ? Number(r.ctr).toFixed(2) + '%' : '—'}</td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>{fmtRp(r.cpm)}</td>

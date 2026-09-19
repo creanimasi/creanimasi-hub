@@ -71,6 +71,8 @@ Lakukan **semua langkah di BM tempat ad account berada**.
 ## Setelah brand dibuat
 
 1. Klik **⚙️ Setting** → isi **Kurs USD** dan **HPP default (%)**. Default kurs 16.000 dan HPP 0%. Kalau dibiarkan, profit terlihat terlalu besar.
+   - **Mata uang akun iklan terdeteksi otomatis** saat Sync Meta pertama dan ditampilkan di Setting. Akun **IDR**: spend langsung tampil sebagai Rupiah. Akun **USD**: spend dikonversi ke Rupiah memakai Kurs USD brand (nilai dolar aslinya tampil kecil di bawah angka Rupiah). Mata uang lain belum didukung dan akan diberi peringatan.
+   - Karena konversi memakai kurs brand, ubah kurs kapan saja dan semua data brand ikut terhitung ulang.
 2. Klik **📅 Sync Range** untuk menarik data historis, atau **Sync Meta** untuk kemarin.
 3. Isi **+ Input Harian** (jumlah order dan omzet) supaya profit dan ROAS terhitung.
 4. Sync otomatis jalan setiap hari **07:00 WIB** untuk semua brand aktif.

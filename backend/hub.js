@@ -2433,6 +2433,8 @@ router.delete('/laporan-admin/:id', authMiddleware, requirePageAccessOrAdminDivi
     await pool.query(`ALTER TABLE meta_ads_brands ADD COLUMN IF NOT EXISTS hpp_default NUMERIC(5,2) NOT NULL DEFAULT 0`);
     // Nama env var token Meta per brand (NULL = pakai META_ACCESS_TOKEN). Isi token-nya tetap di env, bukan di DB.
     await pool.query(`ALTER TABLE meta_ads_brands ADD COLUMN IF NOT EXISTS token_env VARCHAR(60)`);
+    // Mata uang ad account (IDR/USD/…), terdeteksi otomatis dari Meta saat sync. NULL = belum terdeteksi (dianggap IDR).
+    await pool.query(`ALTER TABLE meta_ads_brands ADD COLUMN IF NOT EXISTS mata_uang VARCHAR(10)`);
     // Hapus hpp_persen dari meta_ads_reports (tidak lagi dipakai per-hari)
     // Tidak drop kolom agar data lama aman — cukup abaikan di logic baru
   } catch (e) { console.error('Meta Ads migration:', e.message); }
@@ -2447,6 +2449,11 @@ const cleanTokenEnv = (v) => {
   return s || null;
 };
 
+// Spend/CPM di meta_ads_insights disimpan APA ADANYA dalam mata uang ad account. Semua query yang menampilkan
+// atau menghitung dengan angka itu mengalikannya dengan ini (alias tabel brand harus `b`):
+// akun USD → dikali kurs_usd brand; selain itu (IDR / belum terdeteksi) dianggap sudah Rupiah.
+const KURS_KE_IDR = `(CASE WHEN b.mata_uang = 'USD' THEN b.kurs_usd ELSE 1 END)`;
+
 async function syncMetaInsights(brandId, adAccountId, tanggal, tokenEnv) {
   const envName = tokenEnv || 'META_ACCESS_TOKEN';
   if (!META_TOKEN_ENV_RE.test(envName)) throw new Error(`Nama env token tidak valid: ${envName}`);
@@ -2454,7 +2461,7 @@ async function syncMetaInsights(brandId, adAccountId, tanggal, tokenEnv) {
   if (!token) throw new Error(`${envName} tidak di-set`);
 
   const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-  const fields = 'spend,clicks,impressions,reach,cpm,ctr,actions,action_values';
+  const fields = 'spend,clicks,impressions,reach,cpm,ctr,actions,action_values,account_currency';
   const url = `https://graph.facebook.com/v19.0/${accountId}/insights` +
     `?fields=${fields}&time_range={"since":"${tanggal}","until":"${tanggal}"}` +
     `&time_increment=1&level=account&access_token=${token}`;
@@ -2483,6 +2490,14 @@ async function syncMetaInsights(brandId, adAccountId, tanggal, tokenEnv) {
     purchase_value: findValue (row.action_values, 'purchase'),
   };
 
+  const mataUang = String(row.account_currency || '').trim().toUpperCase();
+  if (mataUang) {
+    await pool.query(
+      `UPDATE meta_ads_brands SET mata_uang=$1::varchar WHERE id=$2 AND mata_uang IS DISTINCT FROM $1::varchar`,
+      [mataUang, brandId]
+    );
+  }
+
   await pool.query(`
     INSERT INTO meta_ads_insights
       (brand_id, tanggal, spend, klik, impresi, reach, cpm, ctr, purchase_value, purchase_count, synced_at)
@@ -2501,7 +2516,7 @@ async function syncMetaInsights(brandId, adAccountId, tanggal, tokenEnv) {
 // GET /api/hub/meta-ads/brands
 router.get('/meta-ads/brands', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
   try {
-    const r = await pool.query('SELECT id, nama, ad_account_id, pixel_id, aktif, kurs_usd, hpp_default, token_env FROM meta_ads_brands ORDER BY nama');
+    const r = await pool.query('SELECT id, nama, ad_account_id, pixel_id, aktif, kurs_usd, hpp_default, token_env, mata_uang FROM meta_ads_brands ORDER BY nama');
     res.json({ data: r.rows });
   } catch { res.status(500).json({ error: 'Gagal ambil brands' }); }
 });
@@ -2574,13 +2589,16 @@ router.get('/meta-ads/insights', authMiddleware, requirePageAccess('ads-performa
     if (brand_id) { params.push(brand_id); whereClause += ` AND i.brand_id=$${params.length}`; }
     if (bulan)    { params.push(bulan + '-01'); whereClause += ` AND DATE_TRUNC('month', i.tanggal)=DATE_TRUNC('month', $${params.length}::date)`; }
     const r = await pool.query(`
-      SELECT i.id, i.brand_id, i.tanggal::text, i.spend, i.klik, i.impresi, i.reach, i.cpm, i.ctr, i.purchase_value, i.purchase_count, i.synced_at,
+      SELECT i.id, i.brand_id, i.tanggal::text,
+             ROUND(i.spend * ${KURS_KE_IDR}, 2) AS spend, i.spend AS spend_asli, b.mata_uang,
+             i.klik, i.impresi, i.reach, ROUND(i.cpm * ${KURS_KE_IDR}, 2) AS cpm, i.ctr,
+             ROUND(i.purchase_value * ${KURS_KE_IDR}, 2) AS purchase_value, i.purchase_count, i.synced_at,
              b.nama AS brand_nama, b.ad_account_id, b.kurs_usd, b.hpp_default,
              r.jumlah_order, r.omzet,
              ROUND(r.omzet / NULLIF(b.kurs_usd, 0), 2) AS omzet_usd,
              b.hpp_default AS hpp_persen,
-             ROUND(r.omzet - (r.omzet * b.hpp_default / 100) - i.spend, 2) AS profit_bersih,
-             CASE WHEN i.spend > 0 THEN ROUND(r.omzet / i.spend, 4) END   AS roas_aktual
+             ROUND(r.omzet - (r.omzet * b.hpp_default / 100) - i.spend * ${KURS_KE_IDR}, 2) AS profit_bersih,
+             CASE WHEN i.spend > 0 THEN ROUND(r.omzet / (i.spend * ${KURS_KE_IDR}), 4) END   AS roas_aktual
       FROM meta_ads_insights i
       JOIN meta_ads_brands b ON b.id = i.brand_id
       LEFT JOIN meta_ads_reports r ON r.brand_id = i.brand_id AND r.tanggal = i.tanggal
@@ -2622,19 +2640,19 @@ router.get('/meta-ads/laporan', authMiddleware, requirePageAccess('ads-performan
     const r = await pool.query(`
       SELECT
         b.id AS brand_id, b.nama AS brand_nama,
-        COALESCE(SUM(i.spend), 0)::NUMERIC(12,2)          AS total_spend,
+        COALESCE(SUM(i.spend * ${KURS_KE_IDR}), 0)::NUMERIC(14,2) AS total_spend,
         COALESCE(SUM(i.klik), 0)                           AS total_klik,
         COALESCE(SUM(i.impresi), 0)                        AS total_impresi,
-        COALESCE(AVG(i.cpm), 0)::NUMERIC(10,4)             AS avg_cpm,
+        COALESCE(AVG(i.cpm * ${KURS_KE_IDR}), 0)::NUMERIC(12,4)   AS avg_cpm,
         COALESCE(AVG(i.ctr), 0)::NUMERIC(8,4)              AS avg_ctr,
         COALESCE(SUM(r.jumlah_order), 0)                   AS total_order,
         COALESCE(SUM(r.omzet), 0)::NUMERIC(12,2)           AS total_omzet,
         COALESCE(AVG(r.hpp_persen), 0)::NUMERIC(5,2)       AS avg_hpp_persen,
         COALESCE(
-          SUM(r.omzet - (r.omzet * r.hpp_persen / 100)) - SUM(i.spend), 0
-        )::NUMERIC(12,2)                                   AS total_profit_bersih,
+          SUM(r.omzet - (r.omzet * r.hpp_persen / 100)) - SUM(i.spend * ${KURS_KE_IDR}), 0
+        )::NUMERIC(14,2)                                   AS total_profit_bersih,
         CASE WHEN SUM(i.spend) > 0
-          THEN ROUND(SUM(r.omzet) / SUM(i.spend), 4) END  AS roas
+          THEN ROUND(SUM(r.omzet) / SUM(i.spend * ${KURS_KE_IDR}), 4) END  AS roas
       FROM meta_ads_brands b
       LEFT JOIN meta_ads_insights i
         ON i.brand_id = b.id AND DATE_TRUNC('month', i.tanggal) = DATE_TRUNC('month', $1::date)
@@ -2721,13 +2739,13 @@ router.post('/ai/insight-ads', authMiddleware, requirePageAccess('ads-performanc
       SELECT
         b.nama AS brand,
         i.tanggal::text,
-        i.spend, i.klik, i.impresi, i.ctr, i.cpm,
+        ROUND(i.spend * ${KURS_KE_IDR}, 2) AS spend, i.klik, i.impresi, i.ctr, ROUND(i.cpm * ${KURS_KE_IDR}, 2) AS cpm,
         rep.jumlah_order, rep.omzet, rep.hpp_persen,
         CASE WHEN rep.omzet IS NOT NULL AND i.spend > 0
-          THEN ROUND((rep.omzet - rep.omzet * COALESCE(rep.hpp_persen,0)/100 - i.spend)::numeric, 0)
+          THEN ROUND((rep.omzet - rep.omzet * COALESCE(rep.hpp_persen,0)/100 - i.spend * ${KURS_KE_IDR})::numeric, 0)
           ELSE NULL END AS profit_bersih,
         CASE WHEN i.spend > 0 AND rep.omzet IS NOT NULL
-          THEN ROUND((rep.omzet / i.spend)::numeric, 2)
+          THEN ROUND((rep.omzet / (i.spend * ${KURS_KE_IDR}))::numeric, 2)
           ELSE NULL END AS roas
       FROM meta_ads_insights i
       JOIN meta_ads_brands b ON b.id = i.brand_id
@@ -2816,7 +2834,7 @@ router.post('/ai/chat', authMiddleware, requirePageAccess('ai-assistant'), async
       pool.query(`SELECT nama, divisi, level, tipe, status, kriteria, kepuasan, semangat, energi FROM tim WHERE aktif=TRUE ORDER BY nama`).catch(() => ({ rows: [] })),
       pool.query(`SELECT nama, tanggal_jurnal::text, mood, skor_karya, skor_waktu, skor_komunikasi, skor_skill, catatan_mentor, hambatan, pencapaian_1 FROM jurnal_mingguan ORDER BY tanggal_jurnal DESC LIMIT 30`).catch(() => ({ rows: [] })),
       pool.query(`SELECT s.label AS nama_sesi, s.tanggal::text, a.nama, a.status FROM absensi_sesi s JOIN absensi_kehadiran a ON a.sesi_id=s.id WHERE s.tanggal >= NOW()-INTERVAL '30 days' ORDER BY s.tanggal DESC LIMIT 60`).catch(() => ({ rows: [] })),
-      pool.query(`SELECT b.nama AS brand, i.tanggal::text, i.spend, i.klik, i.ctr, i.impresi, i.cpm, rep.jumlah_order, rep.omzet, rep.hpp_persen FROM meta_ads_insights i JOIN meta_ads_brands b ON b.id=i.brand_id LEFT JOIN meta_ads_reports rep ON rep.brand_id=i.brand_id AND rep.tanggal=i.tanggal WHERE DATE_TRUNC('month',i.tanggal)=DATE_TRUNC('month',$1::date) ORDER BY i.tanggal DESC`, [tglIni]).catch(() => ({ rows: [] })),
+      pool.query(`SELECT b.nama AS brand, i.tanggal::text, ROUND(i.spend * ${KURS_KE_IDR}, 2) AS spend, i.klik, i.ctr, i.impresi, ROUND(i.cpm * ${KURS_KE_IDR}, 2) AS cpm, rep.jumlah_order, rep.omzet, rep.hpp_persen FROM meta_ads_insights i JOIN meta_ads_brands b ON b.id=i.brand_id LEFT JOIN meta_ads_reports rep ON rep.brand_id=i.brand_id AND rep.tanggal=i.tanggal WHERE DATE_TRUNC('month',i.tanggal)=DATE_TRUNC('month',$1::date) ORDER BY i.tanggal DESC`, [tglIni]).catch(() => ({ rows: [] })),
       pool.query(`SELECT nama, jenis_reward, poin, bulan::text FROM reward_tracking ORDER BY created_at DESC LIMIT 20`).catch(() => ({ rows: [] })),
       pool.query(`SELECT nama, judul, status, created_at::text FROM skb ORDER BY created_at DESC LIMIT 20`).catch(() => ({ rows: [] })),
       pool.query(`SELECT nama, bulan, tahun, jumlah, target, catatan FROM revenue_bulanan ORDER BY tahun DESC, bulan DESC LIMIT 20`).catch(() => ({ rows: [] })),

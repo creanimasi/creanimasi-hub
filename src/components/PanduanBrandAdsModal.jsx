@@ -128,7 +128,12 @@ function TabAfter() {
   return (
     <>
       <ol style={S.ol}>
-        <li style={S.li}>Klik <b>⚙️ Setting</b> → isi <b>Kurs USD</b> dan <b>HPP default (%)</b>. Default kurs 16.000 dan HPP 0% — kalau dibiarkan, profit terlihat terlalu besar.</li>
+        <li style={S.li}>Klik <b>⚙️ Setting</b> → isi <b>Kurs USD</b> dan <b>HPP default (%)</b>. Default kurs 16.000 dan HPP 0% — kalau dibiarkan, profit terlihat terlalu besar.
+          <ul style={{ ...S.ul, marginTop: 6 }}>
+            <li><b>Mata uang akun iklan terdeteksi otomatis</b> saat Sync Meta pertama dan ditampilkan di Setting. Akun <b>IDR</b>: spend langsung tampil sebagai Rupiah. Akun <b>USD</b>: spend dikonversi ke Rupiah memakai Kurs USD brand (nilai dolar aslinya tampil kecil di bawah angka Rupiah). Mata uang lain belum didukung dan diberi peringatan.</li>
+            <li>Konversi memakai kurs brand, jadi kalau kurs diubah semua data brand ikut terhitung ulang.</li>
+          </ul>
+        </li>
         <li style={S.li}>Klik <b>📅 Sync Range</b> untuk menarik data historis, atau <b>Sync Meta</b> untuk kemarin.</li>
         <li style={S.li}>Isi <b>+ Input Harian</b> (jumlah order dan omzet) supaya profit dan ROAS terhitung.</li>
         <li style={S.li}>Sync otomatis jalan setiap hari <b>07:00 WIB</b> untuk semua brand aktif.</li>
