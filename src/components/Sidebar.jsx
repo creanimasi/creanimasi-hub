@@ -44,6 +44,23 @@ const NAV_ITEMS = [
   { path: '/laporan-profit',   label: 'Laporan Profit',        badgeType: '', sub: true, groupKey: 'marketing', pageKey: 'laporan-profit' },
 ];
 
+// Buang judul section/grup yang semua isinya sudah terfilter (mis. role tanpa akses
+// laporan tidak boleh melihat judul "Laporan" atau "Marketing" yang kosong).
+// Section punya anak = ada item biasa (termasuk sub-item) sebelum section berikutnya;
+// grup punya anak = ada sub-item sebelum grup/section berikutnya.
+function pruneEmptyHeaders(items) {
+  return items.filter((it, i) => {
+    if (!it.section && !it.group) return true;
+    for (let j = i + 1; j < items.length; j++) {
+      const n = items[j];
+      if (n.section) return false;
+      if (it.group && n.group) return false;
+      if (!n.section && !n.group) return true;
+    }
+    return false;
+  });
+}
+
 const ICONS = {
   '/':           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>,
   '/tim':        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="7" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="18" cy="7" r="2"/><path d="M15 20c0-2.2 1.3-4 3-4.5"/></svg>,
@@ -123,15 +140,17 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
   // perlu kode baru. /laporan-admin dapat pengecualian sama seperti backend
   // (RequirePage di App.jsx): tetap tampil untuk siapa pun divisi timnya "Admin".
   const pageAccess = user?.page_access || [];
-  const NAV = NAV_ITEMS
-    .filter(item => {
-      if (item.section || item.group) return true; // header baris — selalu tampil
-      if (!item.pageKey) return true; // halaman baseline
-      if (pageAccess.includes(item.pageKey)) return true;
-      if (item.pageKey === 'laporan-admin' && isAdminDivisi) return true;
-      return false;
-    })
-    .map(item => (item.labelMember && !isAdmin) ? { ...item, label: item.labelMember } : item);
+  const NAV = pruneEmptyHeaders(
+    NAV_ITEMS
+      .filter(item => {
+        if (item.section || item.group) return true; // header dinilai belakangan (pruneEmptyHeaders)
+        if (!item.pageKey) return true; // halaman baseline
+        if (pageAccess.includes(item.pageKey)) return true;
+        if (item.pageKey === 'laporan-admin' && isAdminDivisi) return true;
+        return false;
+      })
+      .map(item => (item.labelMember && !isAdmin) ? { ...item, label: item.labelMember } : item)
+  );
 
   const teamPreview = tim.slice(0, 5);
 
