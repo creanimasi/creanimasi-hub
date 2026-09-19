@@ -20,6 +20,17 @@ const ROLE_COLORS = {
   anggota:      { bg: 'var(--surface-2)',      text: 'var(--text-3)' },
 };
 
+// Deskripsi singkat per role — diringkas dari PRD bagian 4, ditampilkan di
+// Tab "Hak Akses/Role" supaya admin tidak menebak-nebak beda tiap role.
+const ROLE_DESCRIPTIONS = {
+  super_admin:  'Akses penuh ke semua halaman, termasuk Master Data sendiri.',
+  founder:      'Akses tinggi, terutama ke reporting/strategis.',
+  mentor:       'Akses ke data pembinaan/evaluasi anggota yang dibimbing.',
+  admin_market: 'Akses ke halaman terkait pemasaran/penjualan (ads, profit, dll).',
+  pm:           'Akses ke SOP, KPI, journaling, dan koordinasi tugas tim.',
+  anggota:      'Akses standar: profil sendiri, journaling, KPI pribadi.',
+};
+
 // Pengelompokan halaman untuk matrix Tab 2 — mengikuti section yang sama
 // persis seperti di Sidebar (src/components/Sidebar.jsx NAV_ITEMS), supaya
 // urutan & pengelompokan konsisten dengan menu yang dilihat user sehari-hari.
@@ -539,20 +550,57 @@ function ManajemenUserTab({ roles }) {
   );
 }
 
+// Konfirmasi kecil sebelum membuang perubahan matriks yang belum disimpan —
+// dipakai saat pindah role atau klik "Semua role" ketika ada perubahan pending.
+function ConfirmSwitchModal({ onConfirm, onClose }) {
+  return (
+    <ModalShell maxWidth={360} onClose={onClose}>
+      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8 }}>Ada perubahan belum disimpan</div>
+      <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 16 }}>
+        Centang/uncheck yang barusan kamu ubah belum di-klik "Simpan Akses" — kalau lanjut, perubahan itu hilang.
+      </div>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={onClose} style={{ flex: 1, padding: '9px', borderRadius: 8, border: '1px solid var(--border-2)', background: 'var(--surface)', cursor: 'pointer', fontSize: 13 }}>Batal</button>
+        <button onClick={onConfirm} style={{ flex: 1, padding: '9px', borderRadius: 8, border: 'none', background: 'var(--red)', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Lanjut tanpa simpan</button>
+      </div>
+    </ModalShell>
+  );
+}
+
 // ── TAB 2: HAK AKSES / ROLE ────────────────────────────────────────────────────
 function RoleAccessTab({ roles, onRolesChanged }) {
   const { showToast } = useToast();
   const [selectedRole, setSelectedRole] = useState(null);
   const [matrix, setMatrix] = useState([]);
+  const [savedMatrix, setSavedMatrix] = useState([]);
   const [loadingMatrix, setLoadingMatrix] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Role tujuan yang ditunda karena ada perubahan belum disimpan; 'BACK' = kembali
+  // ke grid overview. `undefined` = tidak ada apa-apa yang ditunda (modal tersembunyi).
+  const [pendingNav, setPendingNav] = useState(undefined);
+
+  const isDirty = JSON.stringify(matrix) !== JSON.stringify(savedMatrix);
 
   const openRole = async (role) => {
     setSelectedRole(role);
     setLoadingMatrix(true);
-    try { const res = await api.getRolePageAccess(role.id); setMatrix(res.data); }
-    catch { showToast('Gagal memuat matriks akses', 'error'); }
+    try {
+      const res = await api.getRolePageAccess(role.id);
+      setMatrix(res.data);
+      setSavedMatrix(res.data);
+    } catch { showToast('Gagal memuat matriks akses', 'error'); }
     finally { setLoadingMatrix(false); }
+  };
+
+  // target: objek role (pindah ke role lain), atau null (kembali ke overview)
+  const requestSwitch = (target) => {
+    if (isDirty) { setPendingNav(target === null ? 'BACK' : target); return; }
+    if (target) openRole(target); else setSelectedRole(null);
+  };
+  const confirmSwitch = () => {
+    const t = pendingNav;
+    setPendingNav(undefined);
+    if (t === 'BACK') setSelectedRole(null); else openRole(t);
   };
 
   const toggle = (page_key) => {
@@ -568,6 +616,7 @@ function RoleAccessTab({ roles, onRolesChanged }) {
     setSaving(true);
     try {
       await api.saveRolePageAccess(selectedRole.id, matrix.map(({ page_key, can_access }) => ({ page_key, can_access })));
+      setSavedMatrix(matrix);
       showToast(`Akses role ${selectedRole.nama} disimpan`);
       onRolesChanged?.();
     } catch (err) {
@@ -583,23 +632,29 @@ function RoleAccessTab({ roles, onRolesChanged }) {
     label: g.label,
     items: g.keys.map(k => matrix.find(m => m.page_key === k)).filter(Boolean),
   })).filter(g => g.items.length > 0);
+  const checkedCount = matrix.filter(m => m.can_access).length;
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: selectedRole ? '220px 1fr' : '1fr', gap: 16 }}>
-      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: selectedRole ? '1fr' : 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-        {roles.map(r => (
-          <div key={r.id} onClick={() => openRole(r)} style={{
-            padding: '12px 14px', borderRadius: 10, cursor: 'pointer',
-            border: selectedRole?.id === r.id ? '1px solid var(--green)' : '1px solid var(--border)',
-            background: selectedRole?.id === r.id ? 'rgba(0,214,143,0.06)' : 'var(--surface)',
-          }}>
-            <div style={{ fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
-              {r.nama}
-              {r.is_protected && <span title="Role protected — tidak bisa dihapus akses Master Data-nya">🔒</span>}
+      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: selectedRole ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+        {roles.map(r => {
+          const c = ROLE_COLORS[r.key] || ROLE_COLORS.anggota;
+          const active = selectedRole?.id === r.id;
+          return (
+            <div key={r.id} onClick={() => requestSwitch(r)} style={{
+              padding: '12px 14px', borderRadius: 10, cursor: 'pointer',
+              border: active ? `1px solid ${c.text}` : '1px solid var(--border)',
+              background: active ? c.bg : 'var(--surface)',
+            }}>
+              <div style={{ fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, color: active ? c.text : undefined }}>
+                {r.nama}
+                {r.is_protected && <span title="Role protected — tidak bisa dihapus akses Master Data-nya">🔒</span>}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>{r.jumlah_halaman} halaman · {r.jumlah_pengguna || 0} pengguna</div>
+              {!selectedRole && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6, lineHeight: 1.4 }}>{ROLE_DESCRIPTIONS[r.key]}</div>}
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>{r.jumlah_halaman} halaman admin-tier</div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {!selectedRole && (
@@ -610,8 +665,14 @@ function RoleAccessTab({ roles, onRolesChanged }) {
 
       {selectedRole && (
         <div className="card" style={{ padding: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginBottom: 4 }}>
-            <div style={{ fontWeight: 700, fontSize: 14 }}>Akses halaman — {selectedRole.nama}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+            <div>
+              <button onClick={() => requestSwitch(null)} style={{
+                border: 'none', background: 'none', color: 'var(--text-3)', fontSize: 11, cursor: 'pointer', padding: 0, marginBottom: 6,
+              }}>← Semua role</button>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>Akses halaman — {selectedRole.nama}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>{ROLE_DESCRIPTIONS[selectedRole.key]}</div>
+            </div>
             {!loadingMatrix && (
               <div style={{ display: 'flex', gap: 6 }}>
                 <button onClick={() => setAll(true)} style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, border: '1px solid var(--border-2)', background: 'var(--surface-2)', color: 'var(--text-2)', cursor: 'pointer' }}>Centang semua</button>
@@ -621,6 +682,7 @@ function RoleAccessTab({ roles, onRolesChanged }) {
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 14 }}>
             Halaman baseline (Dashboard, Profil, Modul, dst) otomatis bisa diakses semua role, tidak perlu diatur di sini.
+            {!loadingMatrix && <> · <strong>{checkedCount} dari {matrix.length}</strong> halaman dipilih.</>}
           </div>
           {loadingMatrix ? <SkeletonList count={5} /> : (
             <>
@@ -644,11 +706,16 @@ function RoleAccessTab({ roles, onRolesChanged }) {
                   </div>
                 </div>
               ))}
-              <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan Akses'}</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <button className="btn btn-primary" onClick={save} disabled={saving || !isDirty}>{saving ? 'Menyimpan...' : 'Simpan Akses'}</button>
+                {isDirty && !saving && <span style={{ fontSize: 11, color: 'var(--amber)' }}>Ada perubahan belum disimpan</span>}
+              </div>
             </>
           )}
         </div>
       )}
+
+      {pendingNav !== undefined && <ConfirmSwitchModal onConfirm={confirmSwitch} onClose={() => setPendingNav(undefined)} />}
     </div>
   );
 }

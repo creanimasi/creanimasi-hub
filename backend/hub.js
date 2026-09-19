@@ -797,9 +797,11 @@ router.get('/roles', authMiddleware, requirePageAccess('master-data'), async (re
   try {
     const r = await hubPool.query(`
       SELECT r.id, r.key, r.nama, r.is_protected,
-             COUNT(rpa.page_key) FILTER (WHERE rpa.can_access) AS jumlah_halaman
+             COUNT(DISTINCT rpa.page_key) FILTER (WHERE rpa.can_access) AS jumlah_halaman,
+             COUNT(DISTINCT hu.id) FILTER (WHERE hu.aktif) AS jumlah_pengguna
       FROM roles r
       LEFT JOIN role_page_access rpa ON rpa.role_id = r.id
+      LEFT JOIN hub_users hu ON hu.role_id = r.id
       GROUP BY r.id ORDER BY r.id
     `);
     res.json({ success: true, data: r.rows });
