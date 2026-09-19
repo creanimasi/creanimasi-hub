@@ -2431,6 +2431,8 @@ router.delete('/laporan-admin/:id', authMiddleware, requirePageAccessOrAdminDivi
     // Tambah kolom kurs_usd dan hpp_default ke meta_ads_brands
     await pool.query(`ALTER TABLE meta_ads_brands ADD COLUMN IF NOT EXISTS kurs_usd NUMERIC(12,2) NOT NULL DEFAULT 16000`);
     await pool.query(`ALTER TABLE meta_ads_brands ADD COLUMN IF NOT EXISTS hpp_default NUMERIC(5,2) NOT NULL DEFAULT 0`);
+    // Nama env var token Meta per brand (NULL = pakai META_ACCESS_TOKEN). Isi token-nya tetap di env, bukan di DB.
+    await pool.query(`ALTER TABLE meta_ads_brands ADD COLUMN IF NOT EXISTS token_env VARCHAR(60)`);
     // Hapus hpp_persen dari meta_ads_reports (tidak lagi dipakai per-hari)
     // Tidak drop kolom agar data lama aman — cukup abaikan di logic baru
   } catch (e) { console.error('Meta Ads migration:', e.message); }
@@ -2438,9 +2440,18 @@ router.delete('/laporan-admin/:id', authMiddleware, requirePageAccessOrAdminDivi
 
 // ── META ADS HELPER ──────────────────────────────────────────────────────────
 
-async function syncMetaInsights(brandId, adAccountId, tanggal) {
-  const token = process.env.META_ACCESS_TOKEN;
-  if (!token) throw new Error('META_ACCESS_TOKEN tidak di-set');
+// Hanya nama env var berawalan META_ACCESS_TOKEN yang boleh dirujuk brand — cegah baca env lain (DB_PASSWORD, JWT_SECRET, dst.)
+const META_TOKEN_ENV_RE = /^META_ACCESS_TOKEN[A-Z0-9_]*$/;
+const cleanTokenEnv = (v) => {
+  const s = String(v || '').trim();
+  return s || null;
+};
+
+async function syncMetaInsights(brandId, adAccountId, tanggal, tokenEnv) {
+  const envName = tokenEnv || 'META_ACCESS_TOKEN';
+  if (!META_TOKEN_ENV_RE.test(envName)) throw new Error(`Nama env token tidak valid: ${envName}`);
+  const token = process.env[envName];
+  if (!token) throw new Error(`${envName} tidak di-set`);
 
   const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
   const fields = 'spend,clicks,impressions,reach,cpm,ctr,actions,action_values';
@@ -2490,7 +2501,7 @@ async function syncMetaInsights(brandId, adAccountId, tanggal) {
 // GET /api/hub/meta-ads/brands
 router.get('/meta-ads/brands', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
   try {
-    const r = await pool.query('SELECT id, nama, ad_account_id, pixel_id, aktif, kurs_usd, hpp_default FROM meta_ads_brands ORDER BY nama');
+    const r = await pool.query('SELECT id, nama, ad_account_id, pixel_id, aktif, kurs_usd, hpp_default, token_env FROM meta_ads_brands ORDER BY nama');
     res.json({ data: r.rows });
   } catch { res.status(500).json({ error: 'Gagal ambil brands' }); }
 });
@@ -2511,11 +2522,13 @@ router.put('/meta-ads/brands/:id/settings', authMiddleware, requirePageAccess('a
 // POST /api/hub/meta-ads/brands
 router.post('/meta-ads/brands', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
   const { nama, ad_account_id, pixel_id } = req.body;
+  const token_env = cleanTokenEnv(req.body.token_env);
   if (!nama || !ad_account_id) return res.status(400).json({ error: 'nama dan ad_account_id wajib' });
+  if (token_env && !META_TOKEN_ENV_RE.test(token_env)) return res.status(400).json({ error: 'Nama env token harus diawali META_ACCESS_TOKEN (huruf besar, angka, underscore)' });
   try {
     const r = await pool.query(
-      `INSERT INTO meta_ads_brands (nama, ad_account_id, pixel_id) VALUES ($1,$2,$3) RETURNING *`,
-      [nama, ad_account_id, pixel_id || null]
+      `INSERT INTO meta_ads_brands (nama, ad_account_id, pixel_id, token_env) VALUES ($1,$2,$3,$4) RETURNING *`,
+      [nama, ad_account_id, pixel_id || null, token_env]
     );
     res.status(201).json({ data: r.rows[0] });
   } catch (e) {
@@ -2527,10 +2540,12 @@ router.post('/meta-ads/brands', authMiddleware, requirePageAccess('ads-performan
 // PUT /api/hub/meta-ads/brands/:id
 router.put('/meta-ads/brands/:id', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
   const { nama, ad_account_id, pixel_id, aktif } = req.body;
+  const token_env = cleanTokenEnv(req.body.token_env);
+  if (token_env && !META_TOKEN_ENV_RE.test(token_env)) return res.status(400).json({ error: 'Nama env token harus diawali META_ACCESS_TOKEN (huruf besar, angka, underscore)' });
   try {
     await pool.query(
-      `UPDATE meta_ads_brands SET nama=$1, ad_account_id=$2, pixel_id=$3, aktif=$4 WHERE id=$5`,
-      [nama, ad_account_id, pixel_id || null, aktif !== false, req.params.id]
+      `UPDATE meta_ads_brands SET nama=$1, ad_account_id=$2, pixel_id=$3, aktif=$4, token_env=$5 WHERE id=$6`,
+      [nama, ad_account_id, pixel_id || null, aktif !== false, token_env, req.params.id]
     );
     res.json({ ok: true });
   } catch { res.status(500).json({ error: 'Gagal update brand' }); }
@@ -2627,7 +2642,7 @@ router.post('/meta-ads/sync/:brandId', authMiddleware, requirePageAccess('ads-pe
     const br = await pool.query('SELECT * FROM meta_ads_brands WHERE id=$1 AND aktif=TRUE', [req.params.brandId]);
     if (!br.rows.length) return res.status(404).json({ error: 'Brand tidak ditemukan' });
     const brand = br.rows[0];
-    const data = await syncMetaInsights(brand.id, brand.ad_account_id, tgl);
+    const data = await syncMetaInsights(brand.id, brand.ad_account_id, tgl, brand.token_env);
     if (!data) return res.json({ ok: true, message: 'Tidak ada data dari Meta untuk tanggal ini' });
     res.json({ ok: true, data });
   } catch (e) { console.error('Gagal sync:', e.message); res.status(500).json({ error: 'Gagal sync' }); }
@@ -2647,7 +2662,7 @@ router.post('/meta-ads/sync-range/:brandId', authMiddleware, requirePageAccess('
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const tgl = d.toISOString().slice(0, 10);
       try {
-        const data = await syncMetaInsights(brand.id, brand.ad_account_id, tgl);
+        const data = await syncMetaInsights(brand.id, brand.ad_account_id, tgl, brand.token_env);
         results.push({ tanggal: tgl, ok: true, data });
       } catch (e) {
         results.push({ tanggal: tgl, ok: false, error: e.message });
@@ -2664,7 +2679,7 @@ router.post('/meta-ads/sync-all', authMiddleware, requirePageAccess('ads-perform
   try {
     const brands = await pool.query('SELECT * FROM meta_ads_brands WHERE aktif=TRUE');
     const results = await Promise.allSettled(
-      brands.rows.map(b => syncMetaInsights(b.id, b.ad_account_id, tgl))
+      brands.rows.map(b => syncMetaInsights(b.id, b.ad_account_id, tgl, b.token_env))
     );
     const summary = results.map((r, i) => ({
       brand: brands.rows[i].nama,
@@ -2872,7 +2887,7 @@ try {
       const brands = await pool.query('SELECT * FROM meta_ads_brands WHERE aktif=TRUE');
       for (const b of brands.rows) {
         try {
-          await syncMetaInsights(b.id, b.ad_account_id, tgl);
+          await syncMetaInsights(b.id, b.ad_account_id, tgl, b.token_env);
           console.log(`[Meta Ads Cron] OK: ${b.nama}`);
         } catch (e) {
           console.error(`[Meta Ads Cron] FAIL ${b.nama}: ${e.message}`);
