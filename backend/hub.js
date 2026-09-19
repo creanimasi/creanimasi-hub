@@ -17,22 +17,56 @@ const hubPool = pool;
 const JWT_SECRET = process.env.HUB_JWT_SECRET;
 if (!JWT_SECRET) throw new Error('HUB_JWT_SECRET environment variable tidak di-set');
 
+// Handler di file ini banyak yang menelan error (`catch {}`) sehingga 500 di
+// produksi tidak meninggalkan jejak. Semua error query dicatat di satu tempat.
+{
+  const rawQuery = pool.query.bind(pool);
+  pool.query = (...args) => {
+    const p = rawQuery(...args);
+    if (p && typeof p.catch === 'function') {
+      p.catch(e => console.error('[DB ERROR]', e.message, '|', String(args[0]?.text || args[0]).replace(/\s+/g, ' ').slice(0, 140)));
+    }
+    return p;
+  };
+}
+
 // ── HELPER ────────────────────────────────────────
 const query = (text, params) => pool.query(text, params);
 
-// Batasi percobaan login: cegah brute-force/credential-stuffing per IP
-const loginLimiter = rateLimit({
+// IP klien sebenarnya. Backend ada di belakang Cloudflare → Traefik → nginx dan
+// X-Forwarded-For hanya berisi IP proxy, jadi req.ip SAMA untuk semua orang —
+// limiter berbasis req.ip berarti satu jatah untuk seluruh tim. Cloudflare selalu
+// menimpa CF-Connecting-IP dengan IP klien asli.
+function clientIp(req) {
+  return req.headers['cf-connecting-ip'] || req.ip;
+}
+
+// Percobaan login GAGAL dibatasi dua lapis (yang berhasil tidak dihitung):
+// per IP klien, dan per username — supaya brute-force tetap tertahan walau IP dipalsukan.
+const loginLimiterIp = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 20,
+  skipSuccessfulRequests: true,
+  keyGenerator: clientIp,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Terlalu banyak percobaan login. Coba lagi dalam beberapa menit.' },
 });
+const loginLimiterUser = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => 'u:' + String(req.body?.username || 'anon').toLowerCase().trim().slice(0, 60),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Terlalu banyak percobaan login untuk akun ini. Coba lagi dalam beberapa menit.' },
+});
 
-// Batasi request umum ke seluruh API (selain login) per IP
+// Batasi request umum ke seluruh API (selain login) per klien
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 300,
+  max: 1000, // heartbeat presence saja sudah ~30 request/15 menit per tab
+  keyGenerator: clientIp,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Terlalu banyak permintaan. Coba lagi nanti.' },
@@ -45,14 +79,46 @@ function canManageRoles(user) {
   return user?.is_protected === true;
 }
 
-function authMiddleware(req, res, next) {
+// Status akun & role diambil dari database (bukan dari isi JWT) supaya akun yang
+// dinonaktifkan / diturunkan role-nya langsung kehilangan akses, tidak menunggu
+// token 7 hari habis. Di-cache 10 detik agar heartbeat tidak membebani database;
+// cache dikosongkan setiap ada perubahan user/role (lihat invalidateUserCache).
+const userCache = new Map();
+const USER_CACHE_MS = 10 * 1000;
+function invalidateUserCache() { userCache.clear(); }
+async function loadLiveUser(id) {
+  const hit = userCache.get(id);
+  if (hit && Date.now() - hit.at < USER_CACHE_MS) return hit.data;
+  const r = await pool.query(
+    `SELECT u.id, u.nama, u.username, u.role, u.aktif, u.role_id, r.key AS role_key, r.is_protected
+     FROM hub_users u LEFT JOIN roles r ON r.id = u.role_id WHERE u.id = $1`, [id]
+  );
+  const data = r.rows[0] || null;
+  userCache.set(id, { at: Date.now(), data });
+  return data;
+}
+
+async function authMiddleware(req, res, next) {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Token tidak ada' });
+  let payload;
   try {
-    req.user = jwt.verify(token, JWT_SECRET);
-    next();
+    payload = jwt.verify(token, JWT_SECRET);
   } catch {
-    res.status(401).json({ error: 'Token tidak valid' });
+    return res.status(401).json({ error: 'Token tidak valid' });
+  }
+  try {
+    const live = await loadLiveUser(payload.id);
+    if (!live || !live.aktif) return res.status(401).json({ error: 'Akun tidak aktif atau tidak ditemukan' });
+    req.user = {
+      ...payload,
+      nama: live.nama, username: live.username, role: live.role,
+      role_id: live.role_id, role_key: live.role_key, is_protected: !!live.is_protected,
+    };
+    next();
+  } catch (e) {
+    console.error('authMiddleware:', e.message);
+    res.status(500).json({ error: 'Gagal memeriksa sesi' });
   }
 }
 
@@ -129,6 +195,19 @@ async function getPageAccessList(roleId) {
   return r.rows.map(x => x.page_key);
 }
 
+// Akun Super Admin (role protected) hanya boleh disentuh Super Admin lain —
+// edit data, reset password, nonaktifkan. Tanpa ini, siapa pun yang diberi akses
+// Master Data bisa reset password Super Admin lalu login sebagai dia.
+async function targetIsProtected(db, timId) {
+  const r = await db.query(
+    `SELECT r.is_protected FROM hub_users u JOIN roles r ON r.id = u.role_id
+     WHERE u.tim_id = $1 OR (u.tim_id IS NULL AND u.nama = (SELECT nama FROM tim WHERE id = $1))
+     LIMIT 1`, [timId]
+  );
+  return r.rows[0]?.is_protected === true;
+}
+const FORBID_PROTECTED = { error: 'Hanya Super Admin yang bisa mengubah akun Super Admin' };
+
 // Turunkan kolom legacy hub_users.role ('admin'|'member') dari role_id baru,
 // supaya kode lama yang belum sempat dimigrasi (kalau ada) tetap dapat nilai
 // yang masuk akal. super_admin -> 'admin', role lain -> 'member'.
@@ -140,7 +219,7 @@ async function legacyRoleFromRoleId(client, roleId) {
 // ── AUTH ──────────────────────────────────────────
 
 // POST /api/hub/auth/login
-router.post('/auth/login', loginLimiter, async (req, res) => {
+router.post('/auth/login', loginLimiterIp, loginLimiterUser, async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password)
     return res.status(400).json({ error: 'Username dan password wajib diisi' });
@@ -148,7 +227,7 @@ router.post('/auth/login', loginLimiter, async (req, res) => {
     const result = await query(
       `SELECT u.*, r.key AS role_key, r.nama AS role_nama, r.is_protected
        FROM hub_users u LEFT JOIN roles r ON r.id = u.role_id
-       WHERE u.username = $1 AND u.aktif = TRUE`, [username]
+       WHERE LOWER(u.username) = LOWER($1) AND u.aktif = TRUE`, [String(username).trim()]
     );
     const user = result.rows[0];
     if (!user) return res.status(401).json({ error: 'Username atau password salah' });
@@ -776,6 +855,36 @@ router.patch('/skb/:id', authMiddleware, async (req, res) => {
       }
     }
 
+    // Tabel yang dulu dibuat manual langsung di production dan tidak tercatat di
+    // migrasi manapun (lingkungan baru/dev jadi rusak tanpa ini). Definisi disalin
+    // dari skema production apa adanya; IF NOT EXISTS → tidak menyentuh data existing.
+    await hubPool.query(`CREATE TABLE IF NOT EXISTS friday_win (
+      id SERIAL PRIMARY KEY, tanggal DATE NOT NULL DEFAULT CURRENT_DATE,
+      posted_by VARCHAR(100) NOT NULL, headline TEXT NOT NULL,
+      penerima VARCHAR(100), pesan TEXT, created_at TIMESTAMPTZ DEFAULT NOW())`);
+    await hubPool.query(`CREATE TABLE IF NOT EXISTS sesi_1on1 (
+      id SERIAL PRIMARY KEY, tanggal DATE NOT NULL, anggota VARCHAR(100) NOT NULL,
+      tipe VARCHAR(50) NOT NULL, durasi_menit INTEGER DEFAULT 30, ringkasan TEXT,
+      tindak_lanjut TEXT, mood_sebelum INTEGER, mood_sesudah INTEGER,
+      host VARCHAR(100) NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW())`);
+    await hubPool.query(`CREATE TABLE IF NOT EXISTS workshop_kehadiran (
+      id SERIAL PRIMARY KEY, nama VARCHAR(100) NOT NULL, layer_id VARCHAR(20) NOT NULL,
+      sesi_idx INTEGER NOT NULL, hadir BOOLEAN DEFAULT FALSE, updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (nama, layer_id, sesi_idx))`);
+    await hubPool.query(`CREATE TABLE IF NOT EXISTS revenue_bulanan (
+      id SERIAL PRIMARY KEY, bulan INTEGER NOT NULL CHECK (bulan >= 1 AND bulan <= 12),
+      tahun INTEGER NOT NULL, nama VARCHAR(100) NOT NULL, jumlah NUMERIC(12,2) DEFAULT 0,
+      target NUMERIC(12,2) DEFAULT 0, catatan TEXT, created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(), UNIQUE (nama, bulan, tahun))`);
+    await hubPool.query(`CREATE TABLE IF NOT EXISTS modul_topik (
+      id SERIAL PRIMARY KEY, nama VARCHAR(100) NOT NULL, modul_id VARCHAR(20) NOT NULL,
+      topik_idx INTEGER NOT NULL, selesai BOOLEAN DEFAULT FALSE, updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (nama, modul_id, topik_idx))`);
+    await hubPool.query(`CREATE TABLE IF NOT EXISTS modul_topik_nama (
+      id SERIAL PRIMARY KEY, modul_id VARCHAR(20) NOT NULL, topik_idx INTEGER NOT NULL,
+      nama TEXT NOT NULL, updated_at TIMESTAMPTZ DEFAULT NOW(), updated_by VARCHAR(100),
+      UNIQUE (modul_id, topik_idx))`);
+
     // Backfill hub_users.role_id dari role lama, zero-regression:
     // 'admin' (superadmin ataupun bukan) -> super_admin, 'member' -> anggota.
     // Alasan lengkap ada di database/migration_role_access.sql.
@@ -837,6 +946,14 @@ router.put('/roles/:id/page-access', authMiddleware, requirePageAccess('master-d
   try {
     const roleR = await hubPool.query('SELECT is_protected FROM roles WHERE id=$1', [req.params.id]);
     if (!roleR.rows.length) return res.status(404).json({ error: 'Role tidak ditemukan' });
+    // Matriks role Super Admin, dan pemberian akses Master Data ke role lain, hanya
+    // boleh diubah Super Admin — akses Master Data setara dengan kontrol atas akun.
+    if (!canManageRoles(req.user)) {
+      if (roleR.rows[0].is_protected)
+        return res.status(403).json({ error: 'Hanya Super Admin yang bisa mengubah akses role Super Admin' });
+      if (access.some(a => a.page_key === 'master-data' && a.can_access === true))
+        return res.status(403).json({ error: 'Hanya Super Admin yang bisa memberi akses Master Data' });
+    }
     // Master Data untuk role protected (Super Admin) tidak boleh dilepas — proteksi
     // ini ditegakkan di server, bukan cuma disembunyikan di UI.
     if (roleR.rows[0].is_protected) {
@@ -873,7 +990,13 @@ router.get('/tim', authMiddleware, async (req, res) => {
       ORDER BY t.entitas, t.divisi, t.nama
     `;
     const result = await hubPool.query(q, params);
-    res.json({ success: true, data: result.rows });
+    // Endpoint ini dipakai semua user (direktori tim, sidebar). Email & tanggal lahir
+    // hanya boleh dilihat pemegang akses Master Data dan pemilik datanya sendiri.
+    const canSeePII = (await getPageAccessList(req.user.role_id)).includes('master-data');
+    const rows = canSeePII ? result.rows : result.rows.map(r => (
+      r.user_id === req.user.id ? r : { ...r, email: null, tanggal_lahir: null }
+    ));
+    res.json({ success: true, data: rows });
   } catch (err) {
     res.status(500).json({ error: 'Gagal mengambil data tim' });
   }
@@ -927,6 +1050,10 @@ router.patch('/tim/:id', authMiddleware, requirePageAccess('master-data'), async
   const client = await hubPool.connect();
   try {
     await client.query('BEGIN');
+    if (!canManageRoles(req.user) && await targetIsProtected(client, req.params.id)) {
+      await client.query('ROLLBACK');
+      return res.status(403).json(FORBID_PROTECTED);
+    }
     const timR = await client.query(
       'UPDATE tim SET nama=$1, divisi=$2, level=$3, tipe=$4, aktif=$5, entitas=$6, tanggal_lahir=$7, updated_at=NOW() WHERE id=$8 RETURNING *',
       [nama, divisi, level || '', tipe || '', aktif !== undefined ? aktif : true, entitas, tanggal_lahir || null, req.params.id]
@@ -971,6 +1098,7 @@ router.patch('/tim/:id', authMiddleware, requirePageAccess('master-data'), async
       if (userR.rows.length) userInfo = userR.rows[0];
     }
     await client.query('COMMIT');
+    invalidateUserCache();
     res.json({ success: true, data: { ...timR.rows[0], ...userInfo } });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -990,6 +1118,10 @@ router.delete('/tim/:id', authMiddleware, requirePageAccess('master-data'), asyn
       'SELECT id, role_id FROM hub_users WHERE tim_id=$1 LIMIT 1', [req.params.id]
     );
     const targetUser = userR.rows[0];
+    if (!canManageRoles(req.user) && await targetIsProtected(client, req.params.id)) {
+      await client.query('ROLLBACK');
+      return res.status(403).json(FORBID_PROTECTED);
+    }
     if (targetUser?.id === req.user.id) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Tidak bisa menonaktifkan akun sendiri' });
@@ -1005,6 +1137,7 @@ router.delete('/tim/:id', authMiddleware, requirePageAccess('master-data'), asyn
     if (!timR.rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Anggota tidak ditemukan' }); }
     await client.query('UPDATE hub_users SET aktif=FALSE WHERE tim_id=$1 OR (tim_id IS NULL AND nama=$2)', [req.params.id, timR.rows[0].nama]);
     await client.query('COMMIT');
+    invalidateUserCache();
     res.json({ success: true });
   } catch { await client.query('ROLLBACK'); res.status(500).json({ error: 'Gagal nonaktifkan anggota' }); }
   finally { client.release(); }
@@ -1015,10 +1148,15 @@ router.patch('/tim/:id/aktifkan', authMiddleware, requirePageAccess('master-data
   const client = await hubPool.connect();
   try {
     await client.query('BEGIN');
+    if (!canManageRoles(req.user) && await targetIsProtected(client, req.params.id)) {
+      await client.query('ROLLBACK');
+      return res.status(403).json(FORBID_PROTECTED);
+    }
     const timR = await client.query('UPDATE tim SET aktif=TRUE, updated_at=NOW() WHERE id=$1 RETURNING *', [req.params.id]);
     if (!timR.rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Anggota tidak ditemukan' }); }
     await client.query('UPDATE hub_users SET aktif=TRUE WHERE tim_id=$1 OR (tim_id IS NULL AND nama=$2)', [req.params.id, timR.rows[0].nama]);
     await client.query('COMMIT');
+    invalidateUserCache();
     res.json({ success: true });
   } catch { await client.query('ROLLBACK'); res.status(500).json({ error: 'Gagal mengaktifkan anggota' }); }
   finally { client.release(); }
@@ -1431,6 +1569,9 @@ router.patch('/tim/:id/reset-password', authMiddleware, requirePageAccess('maste
   try {
     const timR = await hubPool.query('SELECT nama FROM tim WHERE id=$1', [req.params.id]);
     if (!timR.rows.length) return res.status(404).json({ error: 'Anggota tidak ditemukan' });
+    if (!canManageRoles(req.user) && await targetIsProtected(hubPool, req.params.id)) {
+      return res.status(403).json(FORBID_PROTECTED);
+    }
     const nama = timR.rows[0].nama;
     const hashed = await bcrypt.hash(password_baru.trim(), 10);
     const r = await hubPool.query(

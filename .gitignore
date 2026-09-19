@@ -21,3 +21,15 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# secrets & env — jangan pernah ter-commit (sebelumnya hanya .env.local yang diabaikan)
+.env
+.env.*
+!.env.example
+
+# dependencies di subfolder (pola /node_modules di atas hanya berlaku untuk root)
+node_modules/
+
+# artefak runtime lokal
+*.log
+*.pid

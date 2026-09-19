@@ -4,6 +4,7 @@ import './modules/rpg/styles/rpg-tokens.css'; // token warna/font retro — dipa
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { useTim } from './hooks/useTim';
 import Layout from './components/Layout';
+import ErrorBoundary from './components/ErrorBoundary';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Tim from './pages/Tim';
@@ -62,6 +63,7 @@ function ProtectedRoutes() {
 
   return (
     <Layout path={location.pathname}>
+      <ErrorBoundary resetKey={location.pathname}>
       <Routes>
         {/* Semua role */}
         <Route path="/"             element={<Dashboard />} />
@@ -103,6 +105,7 @@ function ProtectedRoutes() {
 
         <Route path="*"             element={<Navigate to="/" replace />} />
       </Routes>
+      </ErrorBoundary>
     </Layout>
   );
 }

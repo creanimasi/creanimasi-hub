@@ -19,6 +19,11 @@ async function request(method, path, body) {
   let data;
   try { data = JSON.parse(text); } catch { data = {}; }
   if (!res.ok) {
+    // Sesi tidak valid lagi (token kedaluwarsa / akun dinonaktifkan) → AuthProvider
+    // mengeluarkan user ke halaman login, bukan membiarkan UI setengah rusak.
+    if (res.status === 401 && token && path !== '/auth/login') {
+      window.dispatchEvent(new Event('hub-unauthorized'));
+    }
     throw new Error(`${res.status}: ${data.error || 'Request gagal'}`);
   }
   return data;

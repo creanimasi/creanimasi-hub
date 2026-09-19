@@ -36,6 +36,12 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const onUnauthorized = () => { localStorage.removeItem('hub_token'); setUser(null); };
+    window.addEventListener('hub-unauthorized', onUnauthorized);
+    return () => window.removeEventListener('hub-unauthorized', onUnauthorized);
+  }, []);
+
+  useEffect(() => {
     const token = localStorage.getItem('hub_token');
     if (!token) { setLoading(false); return; }
 
