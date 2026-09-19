@@ -822,6 +822,7 @@ router.patch('/skb/:id', authMiddleware, async (req, res) => {
       ['ai-assistant', 'AI Assistant', '/ai-assistant'],
       ['kalender', 'Kalender', '/kalender'],
       ['rpg-analytics', 'RPG Analytics', '/rpg/analytics'],
+      ['rpg-admin', 'RPG Kelola', '/rpg/kelola'],
       ['tim-kelola-legacy', 'Kelola Tim (legacy)', '/tim/kelola'],
     ];
     for (let i = 0; i < BASELINE.length; i++) {
@@ -2881,6 +2882,9 @@ try {
   });
   console.log('[Meta Ads Cron] Terjadwal: setiap hari 07:00 WIB');
 } catch { /* node-cron belum terinstall — skip */ }
+
+// Modul RPG/gamifikasi — endpoint /rpg/* (lihat backend/rpg.js)
+require('./rpg')(router, { hubPool, authMiddleware, requirePageAccess });
 
 module.exports = router;
 

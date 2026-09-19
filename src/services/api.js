@@ -168,6 +168,23 @@ export const api = {
   syncMetaRange:      (brandId, dari, sampai)     => request('POST', `/meta-ads/sync-range/${brandId}`, { dari, sampai }),
   syncAllMetaBrands:  (tanggal)                   => request('POST', '/meta-ads/sync-all', tanggal ? { tanggal } : {}),
 
+  // RPG / Gamifikasi (respons: { success, data })
+  rpgCharacter:     ()                 => request('GET', '/rpg/character'),
+  rpgQuests:        ()                 => request('GET', '/rpg/quests'),
+  rpgProgress:      (id, progress_pct) => request('PATCH', `/rpg/quests/${id}/progress`, { progress_pct }),
+  rpgAjukan:        (id, catatan)      => request('POST', `/rpg/quests/${id}/ajukan`, { catatan }),
+  rpgLeaderboard:   (period, divisi)   => request('GET', `/rpg/leaderboard?period=${period}${divisi && divisi !== 'Semua' ? `&divisi=${encodeURIComponent(divisi)}` : ''}`),
+  rpgAchievements:  ()                 => request('GET', '/rpg/achievements'),
+  rpgAnalytics:     ()                 => request('GET', '/rpg/admin/analytics'),
+  rpgAdminQuests:   ()                 => request('GET', '/rpg/admin/quests'),
+  rpgAdminBuatQuest:(data)             => request('POST', '/rpg/admin/quests', data),
+  rpgAdminUbahQuest:(id, data)         => request('PATCH', `/rpg/admin/quests/${id}`, data),
+  rpgAdminTugaskan: (id, tim_ids)      => request('POST', `/rpg/admin/quests/${id}/tugaskan`, { tim_ids }),
+  rpgAdminReview:   ()                 => request('GET', '/rpg/admin/review'),
+  rpgAdminPutuskan: (id, status, catatan_review) => request('PATCH', `/rpg/admin/assignments/${id}`, { status, catatan_review }),
+  rpgAdminAchievements: ()             => request('GET', '/rpg/admin/achievements'),
+  rpgAdminGrant:    (code, tim_id)     => request('POST', `/rpg/admin/achievements/${code}/grant`, { tim_id }),
+
   // AI
   getAiInsightAds: (bulan, brandId) => request('POST', '/ai/insight-ads', { bulan, ...(brandId ? { brand_id: brandId } : {}) }),
   aiChat:          (pesan, riwayat) => request('POST', '/ai/chat', { pesan, riwayat }),

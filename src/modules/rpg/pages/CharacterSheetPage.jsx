@@ -4,9 +4,8 @@ import StatMeter from '../components/StatMeter';
 import AchievementBadge from '../components/AchievementBadge';
 import QuestCard from '../components/QuestCard';
 import LeaderboardRow from '../components/LeaderboardRow';
-import {
-  dummyCharacter, dummyStats, dummyAchievements, dummyActiveQuests, dummyLeaderboard,
-} from '../data/dummyCharacter';
+import { rpgGuard } from '../components/RpgState';
+import { useCharacter } from '../hooks/useRpg';
 
 const STAT_ICONS = {
   produktivitas: <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="square" strokeLinejoin="miter" stroke="#0b0d1e" width={13} height={13}><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z" /></svg>,
@@ -15,11 +14,14 @@ const STAT_ICONS = {
   konsistensi:   <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="square" strokeLinejoin="miter" stroke="#0b0d1e" width={13} height={13}><path d="M12 2v20M5 8l7-6 7 6M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8" /></svg>,
 };
 
-// Halaman Character Sheet — PREVIEW dengan data dummy, belum disambung ke API.
-// Sengaja TIDAK menduplikasi navigasi/topbar: halaman ini dirender di dalam
-// Layout/Sidebar hub yang sudah ada (lihat App.jsx), beda dengan mockup
-// standalone yang punya railnav & topbar sendiri untuk keperluan preview visual.
+// Halaman Character Sheet — data dari GET /rpg/character.
+// Dirender di dalam Layout/Sidebar hub (lihat App.jsx), tanpa navigasi/topbar sendiri.
 export default function CharacterSheetPage() {
+  const res = useCharacter();
+  const guard = rpgGuard(res);
+  if (guard) return <div style={{ fontFamily: 'var(--rpg-font-body)', color: 'var(--rpg-ink)' }}>{guard}</div>;
+  const { character, stats, achievements, activeQuests, leaderboard } = res.data;
+
   return (
     <div style={{ fontFamily: 'var(--rpg-font-body)', color: 'var(--rpg-ink)' }}>
       <div style={{
@@ -30,7 +32,7 @@ export default function CharacterSheetPage() {
       }}>
         {/* ── Stage utama ── */}
         <main style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0 }}>
-          <CharacterCard character={dummyCharacter} />
+          <CharacterCard character={character} />
 
           <section className="rpg-pixbox" style={{
             background: 'var(--rpg-bg-2)', border: '2px solid var(--rpg-line)',
@@ -42,7 +44,7 @@ export default function CharacterSheetPage() {
             </h2>
             <div style={{ height: 2, background: 'var(--rpg-line-dim)', margin: '0 0 1.1rem' }} />
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: '1.1rem 1.6rem' }}>
-              {dummyStats.map(s => (
+              {stats.map(s => (
                 <StatMeter key={s.key} label={s.label} value={s.value} colorVar={s.colorVar} icon={STAT_ICONS[s.key]} />
               ))}
             </div>
@@ -58,7 +60,7 @@ export default function CharacterSheetPage() {
             </h2>
             <div style={{ height: 2, background: 'var(--rpg-line-dim)', margin: '0 0 1.1rem' }} />
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(88px, 1fr))', gap: '1rem' }}>
-              {dummyAchievements.map(a => (
+              {achievements.map(a => (
                 <AchievementBadge key={a.code} label={a.label} locked={a.locked} progressLabel={a.progressLabel} />
               ))}
             </div>
@@ -76,9 +78,11 @@ export default function CharacterSheetPage() {
               QUEST <em style={{ color: 'var(--rpg-gold)', fontStyle: 'normal' }}>AKTIF</em>
             </h2>
             <div style={{ height: 2, background: 'var(--rpg-line-dim)', margin: '0 0 1.1rem' }} />
-            {dummyActiveQuests.map(q => (
-              <QuestCard key={q.id} title={q.title} xpReward={q.xpReward} dueLabel={q.dueLabel} progressPct={q.progressPct} warn={q.warn} />
-            ))}
+            {activeQuests.length === 0
+              ? <p style={{ margin: 0, fontFamily: 'var(--rpg-font-hud)', color: 'var(--rpg-ink-faint)' }}>Tidak ada quest aktif.</p>
+              : activeQuests.map(q => (
+                  <QuestCard key={q.id} title={q.title} xpReward={q.xpReward} dueLabel={q.dueLabel} progressPct={q.progressPct} warn={q.warn} />
+                ))}
           </div>
 
           <div className="rpg-pixbox" style={{
@@ -90,19 +94,13 @@ export default function CharacterSheetPage() {
               GUILD HALL <em style={{ color: 'var(--rpg-gold)', fontStyle: 'normal' }}>· TOP XP</em>
             </h2>
             <div style={{ height: 2, background: 'var(--rpg-line-dim)', margin: '0 0 1.1rem' }} />
-            {dummyLeaderboard.map(l => (
+            {leaderboard.map(l => (
               <LeaderboardRow key={l.rank} rank={l.rank} nama={l.nama} unit={l.unit} xp={l.xp} isYou={l.isYou} />
             ))}
           </div>
         </aside>
       </div>
 
-      <p style={{
-        marginTop: '2rem', paddingTop: '1.1rem', borderTop: '2px solid var(--rpg-line-dim)',
-        fontFamily: 'var(--rpg-font-hud)', fontSize: '1rem', color: 'var(--rpg-ink-faint)', textAlign: 'center',
-      }}>
-        Preview modul gamifikasi — data di atas dummy, belum tersambung ke API/database.
-      </p>
     </div>
   );
 }

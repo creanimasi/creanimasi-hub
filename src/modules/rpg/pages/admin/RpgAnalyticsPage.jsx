@@ -3,10 +3,8 @@ import {
   LineChart, Line,
 } from 'recharts';
 import '../../styles/rpg-components.css';
-import {
-  dummyLevelDistribution, dummyXpTrend, dummyCompletionByType,
-  dummyTipeDistribution, dummyOverallStats,
-} from '../../data/dummyAnalytics';
+import { rpgGuard } from '../../components/RpgState';
+import { useAnalytics } from '../../hooks/useRpg';
 
 function Panel({ title, children }) {
   return (
@@ -29,11 +27,14 @@ const tooltipStyle = {
   fontFamily: 'VT323, monospace', fontSize: 14, color: 'var(--rpg-ink)',
 };
 
-// Halaman Admin Analytics — PREVIEW data dummy, admin-only.
-// Sengaja pakai recharts (sudah jadi dependency project, dipakai di Dashboard.jsx)
-// bukan library baru — breakdown teknis bagian 8 cuma approve framer-motion/
-// date-fns/canvas-confetti, tidak menyebut kebutuhan charting baru.
+// Halaman Admin Analytics — data dari GET /rpg/admin/analytics (hak akses rpg-analytics).
+// Pakai recharts, dependency yang sudah dipakai Dashboard.jsx.
 export default function RpgAnalyticsPage() {
+  const res = useAnalytics();
+  const guard = rpgGuard(res);
+  if (guard) return <div style={{ fontFamily: 'var(--rpg-font-body)', color: 'var(--rpg-ink)' }}>{guard}</div>;
+  const { overall, levelDistribution, xpTrend, completionByType, tipeDistribution } = res.data;
+
   return (
     <div style={{ fontFamily: 'var(--rpg-font-body)', color: 'var(--rpg-ink)' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -49,9 +50,9 @@ export default function RpgAnalyticsPage() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: '1rem' }}>
           {[
-            { num: dummyOverallStats.totalXpSeason.toLocaleString('id-ID'), lbl: 'Total XP Musim Ini' },
-            { num: dummyOverallStats.avgLevel, lbl: 'Rata-rata Level' },
-            { num: `${dummyOverallStats.completionRateOverall}%`, lbl: 'Completion Rate' },
+            { num: overall.totalXpSeason.toLocaleString('id-ID'), lbl: 'Total XP Musim Ini' },
+            { num: overall.avgLevel, lbl: 'Rata-rata Level' },
+            { num: `${overall.completionRateOverall}%`, lbl: 'Completion Rate' },
           ].map(s => (
             <div key={s.lbl} className="rpg-pixbox" style={{
               background: 'var(--rpg-bg-2)', border: '2px solid var(--rpg-line)',
@@ -72,7 +73,7 @@ export default function RpgAnalyticsPage() {
 
           <Panel title="DISTRIBUSI LEVEL">
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={dummyLevelDistribution}>
+              <BarChart data={levelDistribution}>
                 <CartesianGrid stroke="var(--rpg-line-dim)" strokeDasharray="2 2" />
                 <XAxis dataKey="bucket" tick={hudTick} axisLine={{ stroke: 'var(--rpg-line-dim)' }} tickLine={false} />
                 <YAxis tick={hudTick} axisLine={{ stroke: 'var(--rpg-line-dim)' }} tickLine={false} allowDecimals={false} />
@@ -84,7 +85,7 @@ export default function RpgAnalyticsPage() {
 
           <Panel title="TREN XP MINGGUAN">
             <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={dummyXpTrend}>
+              <LineChart data={xpTrend}>
                 <CartesianGrid stroke="var(--rpg-line-dim)" strokeDasharray="2 2" />
                 <XAxis dataKey="minggu" tick={hudTick} axisLine={{ stroke: 'var(--rpg-line-dim)' }} tickLine={false} />
                 <YAxis tick={hudTick} axisLine={{ stroke: 'var(--rpg-line-dim)' }} tickLine={false} />
@@ -96,11 +97,11 @@ export default function RpgAnalyticsPage() {
 
           <Panel title="COMPLETION RATE PER TIPE QUEST">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {dummyCompletionByType.map(c => (
+              {completionByType.map(c => (
                 <div key={c.tipe}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--rpg-font-hud)', fontSize: '1.05rem', marginBottom: '.35rem' }}>
                     <span style={{ color: 'var(--rpg-ink)' }}>{c.tipe}</span>
-                    <span style={{ color: 'var(--rpg-gold)' }}>{c.completionPct}%</span>
+                    <span style={{ color: c.n ? 'var(--rpg-gold)' : 'var(--rpg-ink-faint)' }}>{c.n ? `${c.completionPct}% · ${c.n} ${c.tipe === 'Harian' ? 'anggota' : 'tugas'}` : 'belum ada data'}</span>
                   </div>
                   <div style={{ height: 10, background: 'var(--rpg-bg-3)', border: '2px solid var(--rpg-line-dim)' }}>
                     <div style={{ height: '100%', width: `${c.completionPct}%`, background: 'var(--rpg-gold)' }} />
@@ -112,14 +113,14 @@ export default function RpgAnalyticsPage() {
 
           <Panel title="DISTRIBUSI TIPE ANGGOTA">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {dummyTipeDistribution.map(t => (
+              {tipeDistribution.map(t => (
                 <div key={t.tipe}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--rpg-font-hud)', fontSize: '1.05rem', marginBottom: '.35rem' }}>
                     <span style={{ color: 'var(--rpg-ink)' }}>{t.tipe}</span>
                     <span style={{ color: `var(${t.colorVar})` }}>{t.jumlah} orang</span>
                   </div>
                   <div style={{ height: 10, background: 'var(--rpg-bg-3)', border: '2px solid var(--rpg-line-dim)' }}>
-                    <div style={{ height: '100%', width: `${(t.jumlah / 17) * 100}%`, backgroundColor: `var(${t.colorVar})` }} />
+                    <div style={{ height: '100%', width: `${(t.jumlah / Math.max(1, overall.anggotaAktif)) * 100}%`, backgroundColor: `var(${t.colorVar})` }} />
                   </div>
                 </div>
               ))}
@@ -128,12 +129,6 @@ export default function RpgAnalyticsPage() {
 
         </div>
 
-        <p style={{
-          marginTop: '.5rem', paddingTop: '1.1rem', borderTop: '2px solid var(--rpg-line-dim)',
-          fontFamily: 'var(--rpg-font-hud)', fontSize: '1rem', color: 'var(--rpg-ink-faint)', textAlign: 'center',
-        }}>
-          Preview modul gamifikasi — data di atas dummy, belum tersambung ke API/database.
-        </p>
       </div>
     </div>
   );

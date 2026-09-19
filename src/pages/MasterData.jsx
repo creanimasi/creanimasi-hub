@@ -42,7 +42,7 @@ const SECTION_GROUPS = [
   { label: 'Program', keys: ['workshop', 'aktivitas-tim', 'reward', 'kader'] },
   { label: 'Laporan', keys: ['laporan-harian', 'laporan-mentor', 'laporan-bulanan'] },
   { label: 'Marketing', keys: ['ads-performance', 'laporan-profit'] },
-  { label: 'Lainnya', keys: ['jurnal-admin', 'sesi-1on1', 'friday-win', 'rpg-analytics', 'tim-kelola-legacy', 'ai-assistant', 'kalender'] },
+  { label: 'Lainnya', keys: ['jurnal-admin', 'sesi-1on1', 'friday-win', 'rpg-analytics', 'rpg-admin', 'tim-kelola-legacy', 'ai-assistant', 'kalender'] },
 ];
 
 const labelStyle = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 5, color: 'var(--text-2)' };

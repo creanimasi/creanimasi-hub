@@ -27,6 +27,7 @@ import QuestBoardPage from './modules/rpg/pages/QuestBoardPage';
 import GuildHallPage from './modules/rpg/pages/GuildHallPage';
 import AchievementsPage from './modules/rpg/pages/AchievementsPage';
 import RpgAnalyticsPage from './modules/rpg/pages/admin/RpgAnalyticsPage';
+import RpgKelolaPage from './modules/rpg/pages/admin/RpgKelolaPage';
 
 // Gerbang akses generik berbasis page_access (dihitung backend dari
 // role_page_access, dibawa lewat /auth/me & /auth/login). Menggantikan
@@ -76,7 +77,7 @@ function ProtectedRoutes() {
         <Route path="/skb"          element={<SKB />} />
         <Route path="/performa"     element={<Performa />} />
 
-        {/* Modul RPG — preview, data dummy, belum production-ready */}
+        {/* Modul RPG (gamifikasi) — halaman anggota terbuka untuk semua yang login */}
         <Route path="/rpg/character" element={<CharacterSheetPage />} />
         <Route path="/rpg/quests"    element={<QuestBoardPage />} />
         <Route path="/rpg/guild"     element={<GuildHallPage />} />
@@ -101,6 +102,7 @@ function ProtectedRoutes() {
         <Route path="/laporan-profit"     element={<RequirePage pageKey="laporan-profit"><LaporanProfit /></RequirePage>} />
         <Route path="/ai-assistant"       element={<RequirePage pageKey="ai-assistant"><AiAssistant /></RequirePage>} />
         <Route path="/kalender"     element={<RequirePage pageKey="kalender"><Kalender /></RequirePage>} />
+        <Route path="/rpg/kelola"    element={<RequirePage pageKey="rpg-admin"><RpgKelolaPage /></RequirePage>} />
         <Route path="/rpg/analytics" element={<RequirePage pageKey="rpg-analytics"><RpgAnalyticsPage /></RequirePage>} />
 
         <Route path="*"             element={<Navigate to="/" replace />} />

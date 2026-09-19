@@ -77,6 +77,20 @@ Catatan soal migrasi yang tidak lengkap:
   ADD COLUMN IF NOT EXISTS` yang jalan otomatis tiap kali server start) — tidak ada file SQL-nya,
   tapi ini "by design", bukan gap.
 
+## Modul RPG / Gamifikasi (backend/rpg.js + src/modules/rpg)
+Terdaftar dari `hub.js` (`require('./rpg')(router, {...})`), endpoint `/api/hub/rpg/*`. Tabel `rpg_*` dibuat
+otomatis (IIFE `CREATE TABLE IF NOT EXISTS` di rpg.js): `rpg_xp_event` (ledger XP, UNIQUE tim_id+sumber+ref_key →
+idempoten), `rpg_quest`, `rpg_quest_assignment`, `rpg_achievement`, `rpg_achievement_unlock`.
+- **Semua angka aturan** (XP per aktivitas, kurva level, stage, title, tanggal mulai `RPG_MULAI`) ada di objek
+  `CONFIG` di atas `backend/rpg.js`. Level tidak disimpan — selalu dihitung dari total XP ledger.
+- XP otomatis dari data terverifikasi (`syncXp`, maks 1×/60 dtk, dipanggil lazy saat endpoint dibaca): laporan
+  harian, jurnal mingguan, absensi hadir/terlambat, Friday Win diterima, dan quest yang **disetujui admin**.
+  Centang mandiri (workshop/modul) sengaja tidak dihitung. Pencocokan `LOWER(TRIM(nama))` ke `tim.nama`.
+- Hak akses: halaman anggota `/rpg/character|quests|guild|achievements` = baseline (semua login); `rpg-admin`
+  (`/rpg/kelola`: quest, persetujuan, achievement manual) dan `rpg-analytics` = admin-tier via Master Data.
+- `tim.tipe`/`kepuasan` TIDAK pernah dikirim ke endpoint anggota (hanya `distribusi tipe` di analytics admin).
+- Akun tanpa tautan ke `tim` → endpoint anggota 404 → UI menampilkan "Belum terhubung".
+
 ## Sistem Role & Akses
 **Admin (kholed/admin123):** Semua halaman + edit modul/workshop/SKB review/reset PW
 **Member (username/creanimasi123):** Dashboard, Modul divisi sendiri, Isi Jurnal,

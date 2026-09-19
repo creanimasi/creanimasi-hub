@@ -4,6 +4,18 @@ import { useTim } from './useTim';
 
 const STORAGE_KEY = 'hub_notif_read';
 const getRead = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; } };
+// Akun tanpa tautan tim → /rpg/quests selalu 404; jangan ditanyakan lagi tiap polling.
+let rpgTanpaTim = null; // id user yang terbukti tidak punya tautan tim
+const TIGA_HARI = 3 * 24 * 60 * 60 * 1000;
+// build() sering jalan dobel berbarengan (tim selesai dimuat) → satu request dipakai bersama.
+let rpgQuestCache = null; // { uid, at, promise }
+const fetchRpgQuests = (uid) => {
+  if (rpgQuestCache && rpgQuestCache.uid === uid && Date.now() - rpgQuestCache.at < 20000) return rpgQuestCache.promise;
+  const promise = api.rpgQuests();
+  rpgQuestCache = { uid, at: Date.now(), promise };
+  return promise;
+};
+
 const markRead = (ids) => localStorage.setItem(STORAGE_KEY, JSON.stringify([...new Set([...getRead(), ...ids])]));
 
 export function useNotifications(user) {
@@ -137,6 +149,36 @@ export function useNotifications(user) {
       }
     } catch {
       // Notifikasi bersifat opsional — gagal fetch tidak crash UI
+    }
+
+    // ── RPG: dipisah supaya kegagalannya tidak menghapus notifikasi lain ──
+    try {
+      if (!(user.page_access || []).includes('rpg-admin')) throw new Error('skip');
+      const rv = await api.rpgAdminReview();
+      const antre = rv.data || [];
+      if (antre.length > 0) {
+        const id = `rpg_review_${antre.map(a => a.id).join('_')}`;
+        list.push({ id, type: 'urgent', icon: '⚔️', unread: !read.includes(id),
+          title: `${antre.length} quest menunggu persetujuan`,
+          body: antre.slice(0, 4).map(a => `${a.nama.split(' ')[0]}: ${a.judul}`).join(' · '),
+          time: new Date(antre[0].diajukan_pada), path: '/rpg/kelola', urgent: true });
+      }
+    } catch { /* bukan pemegang rpg-admin, atau gagal — dilewati */ }
+    if (rpgTanpaTim !== user.id) {
+      try {
+        const q = (await fetchRpgQuests(user.id)).data;
+        const semua = q.groups.flatMap(g => g.quests).filter(x => x.reviewedAt && now - new Date(x.reviewedAt) < TIGA_HARI);
+        semua.filter(x => x.status === 'ditolak').forEach(x => {
+          const id = `rpg_tolak_${x.id}_${x.reviewedAt}`;
+          list.push({ id, type: 'warn', icon: '❌', unread: !read.includes(id), title: `Quest "${x.title}" ditolak`,
+            body: x.dueLabel.replace(/^Ditolak:? ?/, ''), time: new Date(x.reviewedAt), path: '/rpg/quests' });
+        });
+        q.completed.filter(x => x.reviewedAt && now - new Date(x.reviewedAt) < TIGA_HARI).forEach(x => {
+          const id = `rpg_ok_${x.id}`;
+          list.push({ id, type: 'ok', icon: '✅', unread: !read.includes(id), title: `Quest "${x.title}" disetujui`,
+            body: `+${x.xpReward} XP`, time: new Date(x.reviewedAt), path: '/rpg/quests' });
+        });
+      } catch (e) { if (/^404/.test(e.message || '')) rpgTanpaTim = user.id; }
     }
 
     setNotifs(list);

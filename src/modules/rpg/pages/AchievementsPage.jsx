@@ -1,21 +1,25 @@
 import { useState, useMemo } from 'react';
 import '../styles/rpg-components.css';
 import AchievementBadge from '../components/AchievementBadge';
-import { dummyAchievementsFull } from '../data/dummyGuildHall';
+import { rpgGuard } from '../components/RpgState';
+import { useAchievements } from '../hooks/useRpg';
 
 const TABS = ['Semua', 'Terbuka', 'Terkunci'];
 
-// Halaman Pencapaian — grid achievement penuh, PREVIEW data dummy.
+// Halaman Pencapaian — grid achievement penuh dari GET /rpg/achievements.
 export default function AchievementsPage() {
   const [tab, setTab] = useState('Semua');
+  const res = useAchievements();
+  const semua = useMemo(() => res.data || [], [res.data]);
 
   const filtered = useMemo(() => {
-    if (tab === 'Terbuka') return dummyAchievementsFull.filter(a => !a.locked);
-    if (tab === 'Terkunci') return dummyAchievementsFull.filter(a => a.locked);
-    return dummyAchievementsFull;
-  }, [tab]);
+    if (tab === 'Terbuka') return semua.filter(a => !a.locked);
+    if (tab === 'Terkunci') return semua.filter(a => a.locked);
+    return semua;
+  }, [tab, semua]);
 
-  const unlockedCount = dummyAchievementsFull.filter(a => !a.locked).length;
+  const unlockedCount = semua.filter(a => !a.locked).length;
+  const guard = res.data ? null : rpgGuard(res);
 
   return (
     <div style={{ fontFamily: 'var(--rpg-font-body)', color: 'var(--rpg-ink)' }}>
@@ -26,7 +30,7 @@ export default function AchievementsPage() {
             PENCAPAIAN
           </h1>
           <p style={{ fontFamily: 'var(--rpg-font-hud)', fontSize: '1.1rem', color: 'var(--rpg-ink-dim)', margin: 0 }}>
-            {unlockedCount} dari {dummyAchievementsFull.length} pencapaian terbuka.
+            {guard ? '' : `${unlockedCount} dari ${semua.length} pencapaian terbuka.`}
           </p>
         </div>
 
@@ -49,19 +53,15 @@ export default function AchievementsPage() {
           boxShadow: 'inset 2px 2px 0 rgba(159,227,255,.35), inset -2px -2px 0 rgba(0,0,0,.4), 3px 3px 0 var(--rpg-bg-3)',
           padding: 'clamp(1.1rem, 2.4vw, 1.6rem)',
         }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: '1.2rem' }}>
-            {filtered.map(a => (
-              <AchievementBadge key={a.code} label={a.label} locked={a.locked} progressLabel={a.progressLabel} />
-            ))}
-          </div>
+          {guard || (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: '1.2rem' }}>
+              {filtered.map(a => (
+                <AchievementBadge key={a.code} label={a.label} locked={a.locked} progressLabel={a.progressLabel} />
+              ))}
+            </div>
+          )}
         </div>
 
-        <p style={{
-          marginTop: '.5rem', paddingTop: '1.1rem', borderTop: '2px solid var(--rpg-line-dim)',
-          fontFamily: 'var(--rpg-font-hud)', fontSize: '1rem', color: 'var(--rpg-ink-faint)', textAlign: 'center',
-        }}>
-          Preview modul gamifikasi — data di atas dummy, belum tersambung ke API/database.
-        </p>
       </div>
     </div>
   );
