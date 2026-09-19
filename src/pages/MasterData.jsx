@@ -9,10 +9,40 @@ const DIVISI_OPTIONS = ['Admin', 'PM', 'Illustrator', 'Rigger', '3D Modeler', 'D
 const LEVEL_OPTIONS  = ['Magang / Probation', 'Junior', 'Senior', 'Admin (L4)', 'Secondline', 'Koordinator'];
 const TIPE_OPTIONS   = ['Rising Star', 'High Potential', 'Silent Expert', 'At Risk', ''];
 
+// Warna per role_key — dipakai ulang dari palet yang sudah ada di codebase
+// (persis token warna ENTITAS_COLOR di bekas KelolAnggota.jsx), bukan warna baru.
+const ROLE_COLORS = {
+  super_admin:  { bg: 'rgba(0,214,143,0.12)',  text: 'var(--green)' },
+  founder:      { bg: 'rgba(255,184,48,0.12)', text: 'var(--amber)' },
+  mentor:       { bg: 'rgba(99,102,241,0.12)', text: '#818cf8' },
+  admin_market: { bg: 'rgba(236,72,153,0.12)', text: '#f472b6' },
+  pm:           { bg: 'rgba(251,146,60,0.12)', text: '#fb923c' },
+  anggota:      { bg: 'var(--surface-2)',      text: 'var(--text-3)' },
+};
+
+// Pengelompokan halaman untuk matrix Tab 2 — mengikuti section yang sama
+// persis seperti di Sidebar (src/components/Sidebar.jsx NAV_ITEMS), supaya
+// urutan & pengelompokan konsisten dengan menu yang dilihat user sehari-hari.
+// "Lainnya" menampung halaman yang tidak punya entri menu di Sidebar sama sekali.
+const SECTION_GROUPS = [
+  { label: 'Tim', keys: ['tim', 'master-data', 'absensi'] },
+  { label: 'Aksi Cepat', keys: ['laporan-admin'] },
+  { label: 'Program', keys: ['workshop', 'aktivitas-tim', 'reward', 'kader'] },
+  { label: 'Laporan', keys: ['laporan-harian', 'laporan-mentor', 'laporan-bulanan'] },
+  { label: 'Marketing', keys: ['ads-performance', 'laporan-profit'] },
+  { label: 'Lainnya', keys: ['jurnal-admin', 'sesi-1on1', 'friday-win', 'rpg-analytics', 'tim-kelola-legacy', 'ai-assistant', 'kalender'] },
+];
+
 const labelStyle = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 5, color: 'var(--text-2)' };
 
 function genPassword() {
   return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 5).toUpperCase();
+}
+
+function formatTanggalLahir(d) {
+  if (!d) return '';
+  const dt = new Date(d);
+  return dt.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function ModalShell({ maxWidth = 440, onClose, children }) {
@@ -26,19 +56,19 @@ function ModalShell({ maxWidth = 440, onClose, children }) {
   );
 }
 
-function RoleBadge({ role_nama, is_protected }) {
+function RoleBadge({ role_nama, role_key }) {
+  const c = ROLE_COLORS[role_key] || ROLE_COLORS.anggota;
   return (
-    <span style={{
-      fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 20,
-      background: is_protected ? 'rgba(0,214,143,0.12)' : 'var(--surface-2)',
-      color: is_protected ? 'var(--green)' : 'var(--text-3)',
-    }}>
+    <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 20, background: c.bg, color: c.text }}>
       {role_nama || '—'}
     </span>
   );
 }
 
-// ── FORM TAMBAH / EDIT ANGGOTA + AKUN ─────────────────────────────────────────
+// ── FORM TAMBAH / EDIT ANGGOTA ────────────────────────────────────────────────
+// Mode tambah: bikin tim + akun sekaligus (username/password/role wajib).
+// Mode edit: fokus data HR saja — role diubah lewat aksi "Ubah Role" terpisah
+// (butuh konfirmasi eksplisit, lihat UbahRoleModal), bukan dropdown biasa di sini.
 function AnggotaFormModal({ initial, roles, onSave, onClose }) {
   const isEdit = Boolean(initial);
   const [form, setForm] = useState(isEdit ? {
@@ -46,7 +76,6 @@ function AnggotaFormModal({ initial, roles, onSave, onClose }) {
     divisi: initial.divisi || '', level: initial.level || '', tipe: initial.tipe || '',
     tanggal_lahir: initial.tanggal_lahir ? initial.tanggal_lahir.slice(0, 10) : '',
     username: initial.username || '', email: initial.email || '',
-    role_id: initial.role_id || '',
   } : {
     nama: '', entitas: 'Creanimasi Studio', divisi: '', level: '', tipe: '',
     tanggal_lahir: '', username: '', email: '', password: '', role_id: '',
@@ -58,8 +87,10 @@ function AnggotaFormModal({ initial, roles, onSave, onClose }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.nama.trim() || !form.divisi || !form.entitas) { setError('Nama, divisi, dan entitas wajib diisi'); return; }
-    if (!form.username.trim()) { setError('Username wajib diisi'); return; }
-    if (!isEdit && (!form.password || form.password.length < 8)) { setError('Password minimal 8 karakter'); return; }
+    if (!isEdit) {
+      if (!form.username.trim()) { setError('Username wajib diisi'); return; }
+      if (!form.password || form.password.length < 8) { setError('Password minimal 8 karakter'); return; }
+    }
     setLoading(true);
     setError('');
     try {
@@ -116,16 +147,18 @@ function AnggotaFormModal({ initial, roles, onSave, onClose }) {
             <input type="date" value={form.tanggal_lahir} onChange={e => set('tanggal_lahir', e.target.value)} />
           </div>
         </div>
+        {!isEdit && (
+          <div style={{ marginBottom: 12 }}>
+            <label style={labelStyle}>Role akun</label>
+            <select value={form.role_id} onChange={e => set('role_id', e.target.value)}>
+              <option value="">— Pakai default (Anggota) —</option>
+              {roles.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
+            </select>
+          </div>
+        )}
         <div style={{ marginBottom: 12 }}>
-          <label style={labelStyle}>Role akun</label>
-          <select value={form.role_id} onChange={e => set('role_id', e.target.value)}>
-            <option value="">— Pakai default (Anggota) —</option>
-            {roles.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
-          </select>
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <label style={labelStyle}>Username *</label>
-          <input value={form.username} onChange={e => set('username', e.target.value.toLowerCase())} placeholder="username (huruf kecil)" required />
+          <label style={labelStyle}>Username {!isEdit && '*'}</label>
+          <input value={form.username} onChange={e => set('username', e.target.value.toLowerCase())} placeholder="username (huruf kecil)" required={!isEdit} />
         </div>
         <div style={{ marginBottom: 12 }}>
           <label style={labelStyle}>Email <span style={{ fontWeight: 400 }}>(opsional)</span></label>
@@ -148,6 +181,109 @@ function AnggotaFormModal({ initial, roles, onSave, onClose }) {
           <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={loading}>{loading ? 'Menyimpan...' : 'Simpan'}</button>
         </div>
       </form>
+    </ModalShell>
+  );
+}
+
+// ── BUAT AKUN (anggota tanpa akun login) ──────────────────────────────────────
+function BuatAkunModal({ anggota, roles, onClose, onSuccess }) {
+  const [form, setForm] = useState({ username: '', password: '', role_id: '' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.username.trim()) { setError('Username wajib diisi'); return; }
+    if (form.password.length < 8) { setError('Password minimal 8 karakter'); return; }
+    setLoading(true); setError('');
+    try {
+      await api.buatAkunAnggota(anggota.id, { username: form.username.trim().toLowerCase(), password: form.password, role_id: form.role_id || undefined });
+      onSuccess();
+      onClose();
+    } catch (err) {
+      setError(err.message.replace(/^\d+: /, ''));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <ModalShell maxWidth={400} onClose={onClose}>
+      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>Buat Akun Login</div>
+      <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 16 }}>Buat akun untuk <strong>{anggota.nama}</strong> yang belum punya akses login.</div>
+      {error && <div className="alert alert-red" style={{ marginBottom: 12 }}><span>⚠️</span><div>{error}</div></div>}
+      <form onSubmit={handleSubmit}>
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle}>Username *</label>
+          <input value={form.username} onChange={e => set('username', e.target.value.toLowerCase())} placeholder="username" required />
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle}>Password * <span style={{ fontWeight: 400, color: 'var(--text-2)' }}>(min. 8 karakter)</span></label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input type="text" value={form.password} onChange={e => set('password', e.target.value)} placeholder="Password awal" style={{ flex: 1 }} required />
+            <button type="button" onClick={() => set('password', genPassword())}
+              style={{ padding: '0 12px', borderRadius: 8, border: '1px solid var(--border-2)', background: 'var(--surface-2)', cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap', color: 'var(--text-2)' }}>
+              Generate
+            </button>
+          </div>
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <label style={labelStyle}>Role</label>
+          <select value={form.role_id} onChange={e => set('role_id', e.target.value)}>
+            <option value="">— Pakai default (Anggota) —</option>
+            {roles.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
+          </select>
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button type="button" onClick={onClose} style={{ flex: 1, padding: '9px', borderRadius: 8, border: '1px solid var(--border-2)', background: 'var(--surface)', cursor: 'pointer', fontSize: 13 }}>Batal</button>
+          <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={loading}>{loading ? 'Membuat...' : 'Buat Akun'}</button>
+        </div>
+      </form>
+    </ModalShell>
+  );
+}
+
+// ── UBAH ROLE (aksi terpisah, butuh konfirmasi eksplisit) ─────────────────────
+function UbahRoleModal({ anggota, roles, onSave, onClose }) {
+  const currentRole = roles.find(r => r.id === anggota.role_id);
+  const [roleId, setRoleId] = useState(anggota.role_id || '');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const targetRole = roles.find(r => String(r.id) === String(roleId));
+  const touchesProtected = currentRole?.is_protected || targetRole?.is_protected;
+
+  const handleConfirm = async () => {
+    setLoading(true); setError('');
+    try { await onSave(roleId); onClose(); }
+    catch (err) { setError(err.message.replace(/^\d+: /, '')); setLoading(false); }
+  };
+
+  return (
+    <ModalShell maxWidth={400} onClose={onClose}>
+      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Ubah Role</div>
+      <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 16, lineHeight: 1.6 }}>
+        Role <strong>{anggota.nama}</strong> akan diubah dari <RoleBadge role_nama={currentRole?.nama} role_key={currentRole?.key} /> menjadi:
+      </div>
+      <select value={roleId} onChange={e => setRoleId(e.target.value)} style={{ marginBottom: 12 }}>
+        {roles.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
+      </select>
+      {touchesProtected && (
+        <div style={{ marginBottom: 14, padding: '8px 12px', borderRadius: 8, background: 'rgba(255,184,48,0.1)', border: '1px solid rgba(255,184,48,0.25)', fontSize: 12, color: 'var(--amber)' }}>
+          ⚠ Perubahan ini menyangkut role <strong>Super Admin</strong> (akses penuh ke semua halaman). Sistem akan menolak kalau ini bikin tidak ada Super Admin aktif tersisa.
+        </div>
+      )}
+      {error && <div className="alert alert-red" style={{ marginBottom: 12 }}><span>⚠️</span><div>{error}</div></div>}
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border-2)', background: 'var(--surface-2)', color: 'var(--text-2)', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>Batal</button>
+        <button onClick={handleConfirm} disabled={loading || String(roleId) === String(anggota.role_id)} style={{
+          padding: '8px 16px', borderRadius: 8, border: 'none',
+          background: touchesProtected ? 'var(--amber)' : 'var(--green)', color: touchesProtected ? '#000' : '#fff',
+          fontSize: 13, cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: loading ? .7 : 1,
+        }}>
+          {loading ? 'Menyimpan...' : `Jadikan ${targetRole?.nama || ''}`}
+        </button>
+      </div>
     </ModalShell>
   );
 }
@@ -219,6 +355,7 @@ function ManajemenUserTab({ roles }) {
   const [semua, setSemua] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('Semua');
+  const [filterRole, setFilterRole] = useState('Semua');
   const [search, setSearch] = useState('');
   const [showNonaktif, setShowNonaktif] = useState(false);
   const [modal, setModal] = useState(null);
@@ -240,6 +377,12 @@ function ManajemenUserTab({ roles }) {
     try { await api.updateTim(modal.data.id, form); showToast(`Data ${form.nama} berhasil diupdate`); load(); }
     catch (err) { showToast(err.message.replace(/^\d+: /, ''), 'error'); throw err; }
   };
+  const handleUbahRole = async (roleId) => {
+    const a = modal.data;
+    await api.updateTim(a.id, { nama: a.nama, divisi: a.divisi, entitas: a.entitas || 'Creanimasi Studio', level: a.level, tipe: a.tipe, role_id: roleId });
+    showToast(`Role ${a.nama} berhasil diubah`);
+    load();
+  };
   const handleNonaktifkan = async () => {
     await api.nonaktifkanTim(modal.data.id);
     showToast(`${modal.data.nama} dinonaktifkan`, 'warning');
@@ -254,19 +397,37 @@ function ManajemenUserTab({ roles }) {
   const filtered = semua.filter(a => {
     if (!showNonaktif && !a.aktif) return false;
     if (tab !== 'Semua' && a.entitas !== tab) return false;
+    if (filterRole !== 'Semua' && a.role_key !== filterRole) return false;
     if (search) {
       const q = search.toLowerCase();
-      return a.nama.toLowerCase().includes(q) || (a.username || '').toLowerCase().includes(q) || (a.divisi || '').toLowerCase().includes(q);
+      return a.nama.toLowerCase().includes(q) || (a.username || '').toLowerCase().includes(q) || (a.divisi || '').toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q);
     }
     return true;
   });
 
   const aktifCount = semua.filter(a => a.aktif).length;
+  const superAdminCount = semua.filter(a => a.aktif && a.role_key === 'super_admin').length;
+  const tanpaAkunCount = semua.filter(a => a.aktif && !a.username).length;
+  const nonaktifCount = semua.filter(a => !a.aktif).length;
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-        <div style={{ fontSize: 12, color: 'var(--text-2)' }}>{aktifCount} anggota aktif · {semua.length} total</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10, marginBottom: 16 }}>
+        {[
+          { label: 'Aktif', value: aktifCount, color: 'var(--green)' },
+          { label: 'Super Admin', value: superAdminCount, color: 'var(--green)' },
+          { label: 'Tanpa Akun', value: tanpaAkunCount, color: 'var(--red)' },
+          { label: 'Nonaktif', value: nonaktifCount, color: 'var(--text-3)' },
+        ].map(s => (
+          <div key={s.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px' }}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.value}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-2)' }}>{filtered.length} ditampilkan dari {semua.length} total</div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <label style={{ fontSize: 12, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
             <input type="checkbox" checked={showNonaktif} onChange={e => setShowNonaktif(e.target.checked)} />
@@ -276,7 +437,7 @@ function ManajemenUserTab({ roles }) {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
         {['Semua', ...ENTITAS_LIST].map(e => (
           <button key={e} onClick={() => setTab(e)} style={{
             padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: tab === e ? 700 : 500,
@@ -287,8 +448,23 @@ function ManajemenUserTab({ roles }) {
         ))}
       </div>
 
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+        {[{ key: 'Semua', nama: 'Semua Role' }, ...roles].map(r => {
+          const c = ROLE_COLORS[r.key] || ROLE_COLORS.anggota;
+          const isActive = filterRole === (r.key === 'Semua' ? 'Semua' : r.key);
+          return (
+            <button key={r.key || r.id} onClick={() => setFilterRole(r.key === 'Semua' ? 'Semua' : r.key)} style={{
+              padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: isActive ? 700 : 500,
+              border: isActive ? `1px solid ${c.text}` : '1px solid var(--border)',
+              background: isActive ? c.bg : 'var(--surface)',
+              color: isActive ? c.text : 'var(--text-2)', cursor: 'pointer',
+            }}>{r.nama}</button>
+          );
+        })}
+      </div>
+
       <div style={{ marginBottom: 14 }}>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari nama, username, atau divisi..." style={{ maxWidth: 360 }} />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari nama, username, divisi, atau email..." style={{ maxWidth: 360 }} />
       </div>
 
       {loading && <SkeletonList count={6} />}
@@ -299,6 +475,10 @@ function ManajemenUserTab({ roles }) {
             <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-2)' }}>Tidak ada anggota yang cocok.</div>
           ) : filtered.map((a, idx) => {
             const isSelf = a.user_id === currentUser?.id;
+            const detailLine = [
+              a.tanggal_lahir ? `🎂 ${formatTanggalLahir(a.tanggal_lahir)}` : null,
+              a.email || null,
+            ].filter(Boolean).join(' · ');
             return (
               <div key={a.id} style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px',
@@ -314,20 +494,26 @@ function ManajemenUserTab({ roles }) {
                     <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                       {a.nama}
                       {isSelf && <span style={{ fontSize: 10, color: 'var(--green)', fontWeight: 700 }}>(kamu)</span>}
-                      {a.username && <RoleBadge role_nama={a.role_nama} is_protected={a.role_key === 'super_admin'} />}
+                      {a.username && <RoleBadge role_nama={a.role_nama} role_key={a.role_key} />}
                       {!a.aktif && <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 10, background: 'var(--red-light)', color: 'var(--red)' }}>Nonaktif</span>}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 2 }}>
                       {a.username ? `@${a.username} · ` : ''}{a.divisi || '—'} · {a.level || '—'}
                     </div>
+                    {detailLine && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>{detailLine}</div>}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   {a.aktif ? (
                     <>
                       <button onClick={() => setModal({ type: 'edit', data: a })} style={{ padding: '5px 11px', borderRadius: 7, fontSize: 12, fontWeight: 500, border: '1px solid var(--border-2)', background: 'var(--surface)', cursor: 'pointer' }}>Edit</button>
-                      {a.username && (
-                        <button onClick={() => setModal({ type: 'reset', data: a })} style={{ padding: '5px 11px', borderRadius: 7, fontSize: 12, fontWeight: 500, border: '1px solid var(--amber)', background: 'var(--amber-light)', color: 'var(--amber)', cursor: 'pointer' }}>Reset PW</button>
+                      {a.username ? (
+                        <>
+                          <button onClick={() => setModal({ type: 'ubah-role', data: a })} style={{ padding: '5px 11px', borderRadius: 7, fontSize: 12, fontWeight: 500, border: '1px solid #818cf8', background: 'rgba(99,102,241,0.08)', color: '#818cf8', cursor: 'pointer' }}>Ubah Role</button>
+                          <button onClick={() => setModal({ type: 'reset', data: a })} style={{ padding: '5px 11px', borderRadius: 7, fontSize: 12, fontWeight: 500, border: '1px solid var(--amber)', background: 'var(--amber-light)', color: 'var(--amber)', cursor: 'pointer' }}>Reset PW</button>
+                        </>
+                      ) : (
+                        <button onClick={() => setModal({ type: 'buat-akun', data: a })} style={{ padding: '5px 11px', borderRadius: 7, fontSize: 12, fontWeight: 500, border: '1px solid #818cf8', background: 'rgba(99,102,241,0.1)', color: '#818cf8', cursor: 'pointer' }}>Buat Akun</button>
                       )}
                       {!isSelf && (
                         <button onClick={() => setModal({ type: 'nonaktif', data: a })} style={{ padding: '5px 11px', borderRadius: 7, fontSize: 12, fontWeight: 500, border: '1px solid #fca5a5', background: 'var(--surface)', color: 'var(--red)', cursor: 'pointer' }}>Nonaktifkan</button>
@@ -345,6 +531,8 @@ function ManajemenUserTab({ roles }) {
 
       {modal?.type === 'add' && <AnggotaFormModal roles={roles} onSave={handleTambah} onClose={() => setModal(null)} />}
       {modal?.type === 'edit' && <AnggotaFormModal roles={roles} initial={modal.data} onSave={handleEdit} onClose={() => setModal(null)} />}
+      {modal?.type === 'ubah-role' && <UbahRoleModal anggota={modal.data} roles={roles} onSave={handleUbahRole} onClose={() => setModal(null)} />}
+      {modal?.type === 'buat-akun' && <BuatAkunModal anggota={modal.data} roles={roles} onClose={() => setModal(null)} onSuccess={load} />}
       {modal?.type === 'nonaktif' && <ConfirmNonaktifModal anggota={modal.data} onConfirm={handleNonaktifkan} onClose={() => setModal(null)} />}
       {modal?.type === 'reset' && <ResetPwModal anggota={modal.data} onClose={() => setModal(null)} onSuccess={load} />}
     </div>
@@ -368,8 +556,12 @@ function RoleAccessTab({ roles, onRolesChanged }) {
   };
 
   const toggle = (page_key) => {
-    if (selectedRole?.is_protected && page_key === 'master-data') return; // dikunci, lihat catatan di bawah
+    if (selectedRole?.is_protected && page_key === 'master-data') return; // dikunci
     setMatrix(m => m.map(x => x.page_key === page_key ? { ...x, can_access: !x.can_access } : x));
+  };
+
+  const setAll = (value) => {
+    setMatrix(m => m.map(x => (selectedRole?.is_protected && x.page_key === 'master-data') ? x : { ...x, can_access: value }));
   };
 
   const save = async () => {
@@ -384,6 +576,13 @@ function RoleAccessTab({ roles, onRolesChanged }) {
       setSaving(false);
     }
   };
+
+  // Kelompokkan matrix sesuai SECTION_GROUPS; halaman yang tidak masuk daftar
+  // manapun ikut ditampilkan di grup terakhir yang cocok (fallback aman).
+  const grouped = SECTION_GROUPS.map(g => ({
+    label: g.label,
+    items: g.keys.map(k => matrix.find(m => m.page_key === k)).filter(Boolean),
+  })).filter(g => g.items.length > 0);
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: selectedRole ? '220px 1fr' : '1fr', gap: 16 }}>
@@ -403,29 +602,48 @@ function RoleAccessTab({ roles, onRolesChanged }) {
         ))}
       </div>
 
+      {!selectedRole && (
+        <div style={{ fontSize: 12, color: 'var(--text-3)', padding: '4px 2px' }}>
+          Pilih role di kiri untuk atur akses halamannya.
+        </div>
+      )}
+
       {selectedRole && (
         <div className="card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Akses halaman — {selectedRole.nama}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginBottom: 4 }}>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>Akses halaman — {selectedRole.nama}</div>
+            {!loadingMatrix && (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => setAll(true)} style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, border: '1px solid var(--border-2)', background: 'var(--surface-2)', color: 'var(--text-2)', cursor: 'pointer' }}>Centang semua</button>
+                <button onClick={() => setAll(false)} style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, border: '1px solid var(--border-2)', background: 'var(--surface-2)', color: 'var(--text-2)', cursor: 'pointer' }}>Kosongkan semua</button>
+              </div>
+            )}
+          </div>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 14 }}>
             Halaman baseline (Dashboard, Profil, Modul, dst) otomatis bisa diakses semua role, tidak perlu diatur di sini.
           </div>
           {loadingMatrix ? <SkeletonList count={5} /> : (
             <>
-              <div style={{ display: 'grid', gap: 6, marginBottom: 16 }}>
-                {matrix.map(m => {
-                  const locked = selectedRole.is_protected && m.page_key === 'master-data';
-                  return (
-                    <label key={m.page_key} style={{
-                      display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8,
-                      background: 'var(--surface-2)', cursor: locked ? 'not-allowed' : 'pointer', opacity: locked ? 0.8 : 1,
-                    }}>
-                      <input type="checkbox" checked={m.can_access} disabled={locked} onChange={() => toggle(m.page_key)} />
-                      <span style={{ fontSize: 13 }}>{m.nama}</span>
-                      {locked && <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 'auto' }}>🔒 wajib untuk Super Admin</span>}
-                    </label>
-                  );
-                })}
-              </div>
+              {grouped.map(g => (
+                <div key={g.label} style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>{g.label}</div>
+                  <div style={{ display: 'grid', gap: 6 }}>
+                    {g.items.map(m => {
+                      const locked = selectedRole.is_protected && m.page_key === 'master-data';
+                      return (
+                        <label key={m.page_key} style={{
+                          display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8,
+                          background: 'var(--surface-2)', cursor: locked ? 'not-allowed' : 'pointer', opacity: locked ? 0.8 : 1,
+                        }}>
+                          <input type="checkbox" checked={m.can_access} disabled={locked} onChange={() => toggle(m.page_key)} />
+                          <span style={{ fontSize: 13 }}>{m.nama}</span>
+                          {locked && <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 'auto' }}>🔒 wajib untuk Super Admin</span>}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
               <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan Akses'}</button>
             </>
           )}
