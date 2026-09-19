@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 import { useToast } from '../hooks/useToast';
 import { SkeletonTable } from '../components/Skeleton';
+import PanduanBrandAdsModal from '../components/PanduanBrandAdsModal';
 
 const BULAN_LABEL = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
 
@@ -424,6 +425,7 @@ export default function AdsPerformance() {
   const [editRow, setEditRow] = useState(null);
   const [showBrandModal, setShowBrandModal] = useState(false);
   const [showEditBrand, setShowEditBrand] = useState(false);
+  const [showPanduan, setShowPanduan] = useState(false);
   const [showSyncRange, setShowSyncRange] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [error,   setError]   = useState('');
@@ -504,6 +506,7 @@ export default function AdsPerformance() {
           {brands.map(b => <option key={b.id} value={b.id}>{b.nama}{b.aktif === false ? ' (nonaktif)' : ''}</option>)}
         </select>
         <div style={{ flex: 1 }} />
+        <button onClick={() => setShowPanduan(true)} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-2)', cursor: 'pointer', fontSize: 12 }}>📖 Panduan</button>
         <button onClick={() => setShowBrandModal(true)} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-2)', cursor: 'pointer', fontSize: 12 }}>+ Brand</button>
         {brandId && (
           <button onClick={() => setShowEditBrand(true)} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-2)', cursor: 'pointer', fontSize: 12 }}>✏️ Edit Brand</button>
@@ -596,6 +599,7 @@ export default function AdsPerformance() {
       {showEditBrand && brands.find(b => String(b.id) === String(brandId)) && (
         <BrandModal brand={brands.find(b => String(b.id) === String(brandId))} onClose={() => setShowEditBrand(false)} onSave={() => { setShowEditBrand(false); loadBrands(); }} onDeleted={() => { setShowEditBrand(false); setBrandId(''); loadBrands(); }} />
       )}
+      {showPanduan && <PanduanBrandAdsModal onClose={() => setShowPanduan(false)} />}
       {showSyncRange && (
         <SyncRangeModal brandId={brandId} brands={brands} onClose={() => setShowSyncRange(false)} onDone={loadData} />
       )}
