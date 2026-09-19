@@ -2541,14 +2541,19 @@ router.post('/meta-ads/brands', authMiddleware, requirePageAccess('ads-performan
 router.put('/meta-ads/brands/:id', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
   const { nama, ad_account_id, pixel_id, aktif } = req.body;
   const token_env = cleanTokenEnv(req.body.token_env);
+  if (!nama || !ad_account_id) return res.status(400).json({ error: 'nama dan ad_account_id wajib' });
   if (token_env && !META_TOKEN_ENV_RE.test(token_env)) return res.status(400).json({ error: 'Nama env token harus diawali META_ACCESS_TOKEN (huruf besar, angka, underscore)' });
   try {
-    await pool.query(
+    const r = await pool.query(
       `UPDATE meta_ads_brands SET nama=$1, ad_account_id=$2, pixel_id=$3, aktif=$4, token_env=$5 WHERE id=$6`,
       [nama, ad_account_id, pixel_id || null, aktif !== false, token_env, req.params.id]
     );
+    if (!r.rowCount) return res.status(404).json({ error: 'Brand tidak ditemukan' });
     res.json({ ok: true });
-  } catch { res.status(500).json({ error: 'Gagal update brand' }); }
+  } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'Nama brand sudah dipakai' });
+    res.status(500).json({ error: 'Gagal update brand' });
+  }
 });
 
 // GET /api/hub/meta-ads/insights?brand_id=&bulan=YYYY-MM

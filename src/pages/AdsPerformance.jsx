@@ -320,9 +320,16 @@ function SyncRangeModal({ brandId, brands, onDone, onClose }) {
   );
 }
 
-function BrandModal({ onSave, onClose }) {
+function BrandModal({ brand, onSave, onClose }) {
   const { showToast } = useToast();
-  const [form, setForm] = useState({ nama: '', ad_account_id: '', pixel_id: '', token_env: '' });
+  const isEdit = !!brand;
+  const [form, setForm] = useState({
+    nama: brand?.nama || '',
+    ad_account_id: brand?.ad_account_id || '',
+    pixel_id: brand?.pixel_id || '',
+    token_env: brand?.token_env || '',
+    aktif: brand ? brand.aktif !== false : true,
+  });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
   const inputStyle = { width: '100%', padding: '8px 10px', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-1)', fontSize: 13, boxSizing: 'border-box' };
@@ -332,9 +339,10 @@ function BrandModal({ onSave, onClose }) {
     if (!form.nama || !form.ad_account_id) { showToast('Nama dan Ad Account ID wajib diisi', 'warning'); return; }
     setSaving(true);
     try {
-      await api.createMetaBrand(form);
+      if (isEdit) await api.updateMetaBrand(brand.id, form);
+      else await api.createMetaBrand(form);
       onSave();
-      showToast(`Brand ${form.nama} berhasil ditambahkan`);
+      showToast(`Brand ${form.nama} berhasil ${isEdit ? 'diperbarui' : 'ditambahkan'}`);
     } catch (e) { showToast('Gagal: ' + e.message, 'error'); }
     finally { setSaving(false); }
   };
@@ -342,7 +350,7 @@ function BrandModal({ onSave, onClose }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: 16, padding: 24, width: '100%', maxWidth: 380, boxShadow: '0 8px 40px rgba(0,0,0,0.4)' }}>
-        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 20 }}>Tambah Brand</div>
+        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 20 }}>{isEdit ? 'Edit Brand' : 'Tambah Brand'}</div>
         <div style={{ display: 'grid', gap: 12 }}>
           <div>{label('Nama Brand')}<input value={form.nama} onChange={e => set('nama', e.target.value)} style={inputStyle} placeholder="Jester" /></div>
           <div>{label('Ad Account ID')}<input value={form.ad_account_id} onChange={e => set('ad_account_id', e.target.value)} style={inputStyle} placeholder="act_xxxxxxxxxx" /></div>
@@ -352,11 +360,17 @@ function BrandModal({ onSave, onClose }) {
             <input value={form.token_env} onChange={e => set('token_env', e.target.value.toUpperCase().replace(/\s/g, ''))} style={inputStyle} placeholder="META_ACCESS_TOKEN_BM2" />
             <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>Kosongkan untuk pakai META_ACCESS_TOKEN. Harus diawali META_ACCESS_TOKEN dan sudah dibuat di Coolify.</div>
           </div>
+          {isEdit && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-2)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={form.aktif} onChange={e => set('aktif', e.target.checked)} />
+              Brand aktif (ikut sync harian & Sync Meta)
+            </label>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
           <button onClick={onClose} style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 13 }}>Batal</button>
           <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: '9px 0', borderRadius: 8, border: 'none', background:'var(--green)', color:'var(--on-green)', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13 }}>
-            {saving ? 'Menyimpan...' : 'Tambah'}
+            {saving ? 'Menyimpan...' : isEdit ? 'Simpan' : 'Tambah'}
           </button>
         </div>
       </div>
@@ -375,6 +389,7 @@ export default function AdsPerformance() {
   const [syncing, setSyncing] = useState(false);
   const [editRow, setEditRow] = useState(null);
   const [showBrandModal, setShowBrandModal] = useState(false);
+  const [showEditBrand, setShowEditBrand] = useState(false);
   const [showSyncRange, setShowSyncRange] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [error,   setError]   = useState('');
@@ -452,10 +467,13 @@ export default function AdsPerformance() {
         </select>
         <select value={brandId} onChange={e => setBrandId(e.target.value)} style={{ padding: '7px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-1)', fontSize: 13, minWidth: 130 }}>
           <option value=''>Semua Brand</option>
-          {brands.map(b => <option key={b.id} value={b.id}>{b.nama}</option>)}
+          {brands.map(b => <option key={b.id} value={b.id}>{b.nama}{b.aktif === false ? ' (nonaktif)' : ''}</option>)}
         </select>
         <div style={{ flex: 1 }} />
         <button onClick={() => setShowBrandModal(true)} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-2)', cursor: 'pointer', fontSize: 12 }}>+ Brand</button>
+        {brandId && (
+          <button onClick={() => setShowEditBrand(true)} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-2)', cursor: 'pointer', fontSize: 12 }}>✏️ Edit Brand</button>
+        )}
         <button onClick={() => setEditRow({})} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-2)', cursor: 'pointer', fontSize: 12 }}>+ Input Harian</button>
         <button onClick={() => setShowSyncRange(true)} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-2)', cursor: 'pointer', fontSize: 12 }}>📅 Sync Range</button>
         <button onClick={() => setShowSettings(true)} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-2)', cursor: 'pointer', fontSize: 12 }}>⚙️ Setting</button>
@@ -540,6 +558,9 @@ export default function AdsPerformance() {
       )}
       {showBrandModal && (
         <BrandModal onClose={() => setShowBrandModal(false)} onSave={() => { setShowBrandModal(false); loadBrands(); }} />
+      )}
+      {showEditBrand && brands.find(b => String(b.id) === String(brandId)) && (
+        <BrandModal brand={brands.find(b => String(b.id) === String(brandId))} onClose={() => setShowEditBrand(false)} onSave={() => { setShowEditBrand(false); loadBrands(); }} />
       )}
       {showSyncRange && (
         <SyncRangeModal brandId={brandId} brands={brands} onClose={() => setShowSyncRange(false)} onDone={loadData} />
