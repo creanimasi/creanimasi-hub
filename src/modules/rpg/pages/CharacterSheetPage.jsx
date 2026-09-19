@@ -21,17 +21,20 @@ export default function CharacterSheetPage() {
   const guard = rpgGuard(res);
   if (guard) return <div className="rpg-page" style={{ fontFamily: 'var(--rpg-font-body)', color: 'var(--rpg-ink)' }}>{guard}</div>;
   const { character, stats, achievements, activeQuests, leaderboard } = res.data;
+  // Panel ringkasan hanya tampil bila role punya akses ke halaman aslinya (server juga menyaring datanya).
+  const akses = res.data.akses || { quests: true, guild: true, achievements: true };
+  const adaAside = akses.quests || akses.guild;
 
   return (
     <div className="rpg-page" style={{ fontFamily: 'var(--rpg-font-body)', color: 'var(--rpg-ink)' }}>
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'minmax(0,1fr) 300px',
+        gridTemplateColumns: adaAside ? 'minmax(0,1fr) 300px' : 'minmax(0,1fr)',
         gap: '1.5rem',
         alignItems: 'start',
       }}>
         {/* ── Stage utama ── */}
-        <main style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0 }}>
           <CharacterCard character={character} />
 
           <section className="rpg-pixbox" style={{
@@ -50,6 +53,7 @@ export default function CharacterSheetPage() {
             </div>
           </section>
 
+          {akses.achievements && (
           <section className="rpg-pixbox" style={{
             background: 'var(--rpg-bg-2)', border: '2px solid var(--rpg-line)',
             boxShadow: 'inset 2px 2px 0 rgba(159,227,255,.35), inset -2px -2px 0 rgba(0,0,0,.4), 3px 3px 0 var(--rpg-bg-3)',
@@ -65,10 +69,13 @@ export default function CharacterSheetPage() {
               ))}
             </div>
           </section>
-        </main>
+          )}
+        </div>
 
         {/* ── Side panel ── */}
+        {adaAside && (
         <aside style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0 }}>
+          {akses.quests && (
           <div className="rpg-pixbox" style={{
             background: 'var(--rpg-bg-2)', border: '2px solid var(--rpg-line)',
             boxShadow: 'inset 2px 2px 0 rgba(159,227,255,.35), inset -2px -2px 0 rgba(0,0,0,.4), 3px 3px 0 var(--rpg-bg-3)',
@@ -84,7 +91,9 @@ export default function CharacterSheetPage() {
                   <QuestCard key={q.id} title={q.title} xpReward={q.xpReward} dueLabel={q.dueLabel} progressPct={q.progressPct} warn={q.warn} />
                 ))}
           </div>
+          )}
 
+          {akses.guild && (
           <div className="rpg-pixbox" style={{
             background: 'var(--rpg-bg-2)', border: '2px solid var(--rpg-line)',
             boxShadow: 'inset 2px 2px 0 rgba(159,227,255,.35), inset -2px -2px 0 rgba(0,0,0,.4), 3px 3px 0 var(--rpg-bg-3)',
@@ -98,7 +107,9 @@ export default function CharacterSheetPage() {
               <LeaderboardRow key={l.rank} rank={l.rank} nama={l.nama} unit={l.unit} xp={l.xp} isYou={l.isYou} />
             ))}
           </div>
+          )}
         </aside>
+        )}
       </div>
 
     </div>

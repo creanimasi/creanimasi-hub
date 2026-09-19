@@ -21,6 +21,16 @@ export function rpgGuard({ loading, error, data, retry }) {
       </div>
     );
   }
+  if (error && error.status === 403) {
+    return (
+      <div className="rpg-pixbox" style={box}>
+        <div style={{ fontFamily: 'var(--rpg-font-display)', fontSize: '.7rem', color: 'var(--rpg-warn)', marginBottom: '.7rem' }}>AKSES DITUTUP</div>
+        <p style={{ margin: 0, fontSize: '1.1rem', color: 'var(--rpg-ink-dim)', maxWidth: '60ch' }}>
+          Role-mu tidak lagi punya akses ke halaman ini. Muat ulang halaman; bila menu ini masih kamu perlukan, minta admin mengaktifkannya di Master Data.
+        </p>
+      </div>
+    );
+  }
   if (error) {
     return (
       <div className="rpg-pixbox" style={box}>

@@ -164,7 +164,7 @@ export function useNotifications(user) {
           time: new Date(antre[0].diajukan_pada), path: '/rpg/kelola', urgent: true });
       }
     } catch { /* bukan pemegang rpg-admin, atau gagal — dilewati */ }
-    if (rpgTanpaTim !== user.id) {
+    if (rpgTanpaTim !== user.id && (user.page_access || []).includes('rpg-quests')) {
       try {
         const q = (await fetchRpgQuests(user.id)).data;
         const semua = q.groups.flatMap(g => g.quests).filter(x => x.reviewedAt && now - new Date(x.reviewedAt) < TIGA_HARI);
@@ -178,7 +178,7 @@ export function useNotifications(user) {
           list.push({ id, type: 'ok', icon: '✅', unread: !read.includes(id), title: `Quest "${x.title}" disetujui`,
             body: `+${x.xpReward} XP`, time: new Date(x.reviewedAt), path: '/rpg/quests' });
         });
-      } catch (e) { if (/^404/.test(e.message || '')) rpgTanpaTim = user.id; }
+      } catch (e) { if (/^(404|403)/.test(e.message || '')) rpgTanpaTim = user.id; }
     }
 
     setNotifs(list);

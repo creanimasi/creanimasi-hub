@@ -1,6 +1,6 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // MODUL RPG / GAMIFIKASI — XP, level, quest, achievement, leaderboard
-// Didaftarkan dari hub.js: require('./rpg')(router, { hubPool, authMiddleware, requirePageAccess })
+// Didaftarkan dari hub.js: require('./rpg')(router, { hubPool, authMiddleware, requirePageAccess, getPageAccessList })
 // Semua angka aturan (XP, kurva level, dst.) ada di CONFIG di bawah — satu tempat untuk disetel.
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -92,7 +92,7 @@ function labelSelesai(tanggalIso, hariIni) {
   return `Selesai ${selisih} hari lalu`;
 }
 
-module.exports = function registerRpg(router, { hubPool, authMiddleware, requirePageAccess }) {
+module.exports = function registerRpg(router, { hubPool, authMiddleware, requirePageAccess, getPageAccessList }) {
   const q = (text, params) => hubPool.query(text, params);
 
   // ── Migrasi (idempoten) ────────────────────────────────────────────────────
@@ -351,18 +351,22 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
   };
 
   // GET /api/hub/rpg/character — TIDAK pernah memuat tim.tipe / kepuasan
-  router.get('/rpg/character', authMiddleware, async (req, res) => {
+  router.get('/rpg/character', authMiddleware, requirePageAccess('rpg-character'), async (req, res) => {
     try {
       const tim = await perluTim(req, res); if (!tim) return;
       await syncXp();
       const m = await metrik(tim);
-      const [ach, quests, lb, xpMinggu, tanggal] = await Promise.all([
-        evaluasiAchievement(tim, m),
-        dataQuest(tim),
-        leaderboard({ period: 'weekly', timIdSaya: tim.id }),
+      // Character Sheet menampilkan ringkasan dari halaman lain; bagian itu hanya ikut bila role
+      // pemakai punya akses ke halaman aslinya (Papan Quest / Guild Hall / Pencapaian).
+      const akses = new Set(await getPageAccessList(req.user.role_id));
+      const bisa = { quests: akses.has('rpg-quests'), guild: akses.has('rpg-guild'), achievements: akses.has('rpg-achievements') };
+      const [ach, quests, lb, xpMinggu] = await Promise.all([
+        evaluasiAchievement(tim, m), // selalu: dipakai untuk title di kartu karakter
+        bisa.quests ? dataQuest(tim) : null,
+        bisa.guild ? leaderboard({ period: 'weekly', timIdSaya: tim.id }) : [],
         xpTotal(tim.id, new Date(Date.now() - 7 * 86400000)),
-        Promise.resolve(m.tanggal),
       ]);
+      const tanggal = m.tanggal;
       const level = m.level, levelLalu = levelDariXp(xpMinggu);
       let levelUpNote = null;
       if (level > levelLalu) {
@@ -374,7 +378,7 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
       const skala = (v) => Math.max(0, Math.min(100, Math.round((Number(v) || 0) * 20)));
       const top3 = lb.slice(0, 3);
       const saya = lb.find(x => x.isYou);
-      const aktifGabung = [...quests.groups[1].quests, ...quests.groups[2].quests, ...quests.groups[0].quests].slice(0, 3);
+      const aktifGabung = quests ? [...quests.groups[1].quests, ...quests.groups[2].quests, ...quests.groups[0].quests].slice(0, 3) : [];
       res.json({ success: true, data: {
         character: {
           nama: tim.nama, initial: tim.nama.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase(),
@@ -390,15 +394,16 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
           { key: 'inisiatif',     label: 'Inisiatif',     value: skala(tim.komunikasi), colorVar: '--rpg-stat-inisiatif' },
           { key: 'konsistensi',   label: 'Konsistensi',   value: hitungKonsistensi(tanggal, hariIniWib()), colorVar: '--rpg-stat-konsistensi' },
         ],
-        achievements: [...ach].sort((a, b) => Number(a.locked) - Number(b.locked)).slice(0, 5),
+        achievements: bisa.achievements ? [...ach].sort((a, b) => Number(a.locked) - Number(b.locked)).slice(0, 5) : [],
         activeQuests: aktifGabung,
-        leaderboard: publik(saya && !top3.includes(saya) ? [...top3, saya] : top3),
+        leaderboard: bisa.guild ? publik(saya && !top3.includes(saya) ? [...top3, saya] : top3) : [],
+        akses: bisa, // supaya UI menyembunyikan panel (bukan menampilkan "kosong" yang menyesatkan)
       } });
     } catch (e) { console.error('[RPG] character:', e.message); res.status(500).json({ error: 'Gagal memuat karakter' }); }
   });
 
   // GET /api/hub/rpg/quests
-  router.get('/rpg/quests', authMiddleware, async (req, res) => {
+  router.get('/rpg/quests', authMiddleware, requirePageAccess('rpg-quests'), async (req, res) => {
     try {
       const tim = await perluTim(req, res); if (!tim) return;
       await syncXp();
@@ -408,7 +413,7 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
   });
 
   // PATCH /api/hub/rpg/quests/:id/progress — hanya milik sendiri
-  router.patch('/rpg/quests/:id/progress', authMiddleware, async (req, res) => {
+  router.patch('/rpg/quests/:id/progress', authMiddleware, requirePageAccess('rpg-quests'), async (req, res) => {
     try {
       const tim = await perluTim(req, res); if (!tim) return;
       const pct = Number(req.body.progress_pct);
@@ -422,7 +427,7 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
   });
 
   // POST /api/hub/rpg/quests/:id/ajukan — anggota menandai selesai, menunggu persetujuan admin
-  router.post('/rpg/quests/:id/ajukan', authMiddleware, async (req, res) => {
+  router.post('/rpg/quests/:id/ajukan', authMiddleware, requirePageAccess('rpg-quests'), async (req, res) => {
     try {
       const tim = await perluTim(req, res); if (!tim) return;
       const catatan = String(req.body.catatan || '').slice(0, 1000) || null;
@@ -436,7 +441,7 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
   });
 
   // GET /api/hub/rpg/leaderboard?period=weekly|season|all&divisi=
-  router.get('/rpg/leaderboard', authMiddleware, async (req, res) => {
+  router.get('/rpg/leaderboard', authMiddleware, requirePageAccess('rpg-guild'), async (req, res) => {
     try {
       await syncXp();
       const tim = await timUntukUser(req.user.id);
@@ -448,7 +453,7 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
   });
 
   // GET /api/hub/rpg/achievements
-  router.get('/rpg/achievements', authMiddleware, async (req, res) => {
+  router.get('/rpg/achievements', authMiddleware, requirePageAccess('rpg-achievements'), async (req, res) => {
     try {
       const tim = await perluTim(req, res); if (!tim) return;
       await syncXp();

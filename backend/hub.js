@@ -797,10 +797,6 @@ router.patch('/skb/:id', authMiddleware, async (req, res) => {
       ['sop', 'SOP Brief', '/sop'],
       ['skb', 'Ajukan SKB', '/skb'],
       ['performa', 'Grafik Performa', '/performa'],
-      ['rpg-character', 'RPG Character', '/rpg/character'],
-      ['rpg-quests', 'RPG Quests', '/rpg/quests'],
-      ['rpg-guild', 'RPG Guild', '/rpg/guild'],
-      ['rpg-achievements', 'RPG Achievements', '/rpg/achievements'],
     ];
     const ADMIN_TIER = [
       ['tim', 'Direktori Tim', '/tim'],
@@ -822,7 +818,7 @@ router.patch('/skb/:id', authMiddleware, async (req, res) => {
       ['ai-assistant', 'AI Assistant', '/ai-assistant'],
       ['kalender', 'Kalender', '/kalender'],
       ['rpg-analytics', 'RPG Analytics', '/rpg/analytics'],
-      ['rpg-admin', 'RPG Kelola', '/rpg/kelola'],
+      ['rpg-admin', 'Kelola RPG', '/rpg/kelola'],
       ['tim-kelola-legacy', 'Kelola Tim (legacy)', '/tim/kelola'],
     ];
     for (let i = 0; i < BASELINE.length; i++) {
@@ -839,6 +835,50 @@ router.patch('/skb/:id', authMiddleware, async (req, res) => {
         [key, nama, path, 100 + i]
       );
     }
+
+    // Halaman Guild untuk anggota dulu baseline (semua yang login). Sekarang diatur per role lewat
+    // matriks Hak Akses/Role. Urutan langkah menjaga tidak ada jeda tanpa akses: (1) beri SEMUA role
+    // akses, (2) baru ubah flag baseline — satu transaksi. ON CONFLICT DO NOTHING → pencabutan yang
+    // dilakukan admin sesudahnya TIDAK ditimpa lagi saat server restart. Dibungkus try/catch sendiri:
+    // kalau gagal, transaksi di-rollback, flag tetap baseline (semua orang tetap punya akses) dan
+    // migrasi lain di bawah tetap jalan.
+    const GUILD_MEMBER = [
+      ['rpg-character', 'Character Sheet', '/rpg/character'],
+      ['rpg-quests', 'Papan Quest', '/rpg/quests'],
+      ['rpg-guild', 'Guild Hall', '/rpg/guild'],
+      ['rpg-achievements', 'Pencapaian', '/rpg/achievements'],
+    ];
+    const gc = await hubPool.connect();
+    try {
+      await gc.query('BEGIN');
+      for (let i = 0; i < GUILD_MEMBER.length; i++) {
+        const [key, nama, path] = GUILD_MEMBER[i];
+        // ada dulu (instalasi baru); baris lama (masih baseline) dibiarkan sampai langkah (2)
+        await gc.query(
+          'INSERT INTO halaman (page_key, nama, route_path, is_baseline, urutan) VALUES ($1,$2,$3,TRUE,$4) ON CONFLICT (page_key) DO NOTHING',
+          [key, nama, path, 90 + i]
+        );
+      }
+      await gc.query(
+        `INSERT INTO role_page_access (role_id, page_key, can_access)
+         SELECT r.id, k, TRUE FROM roles r CROSS JOIN unnest($1::text[]) AS k
+         ON CONFLICT (role_id, page_key) DO NOTHING`,
+        [GUILD_MEMBER.map(g => g[0])]
+      );
+      for (let i = 0; i < GUILD_MEMBER.length; i++) {
+        const [key, nama, path] = GUILD_MEMBER[i];
+        await gc.query(
+          'UPDATE halaman SET is_baseline = FALSE, nama = $2, route_path = $3, urutan = $4 WHERE page_key = $1',
+          [key, nama, path, 90 + i]
+        );
+      }
+      // dua halaman admin Guild: samakan nama dengan label sidebar (baris lama di production bernama "RPG Kelola")
+      await gc.query("UPDATE halaman SET nama = 'Kelola RPG' WHERE page_key = 'rpg-admin'");
+      await gc.query('COMMIT');
+    } catch (e) {
+      await gc.query('ROLLBACK').catch(() => {});
+      console.error('Migration halaman Guild gagal (dibiarkan baseline):', e.message);
+    } finally { gc.release(); }
 
     // Seed matriks role_page_access — nilai awal, semua BISA diedit lewat
     // Tab "Hak Akses/Role" setelah fitur ini live. super_admin selalu penuh,
@@ -2931,7 +2971,7 @@ try {
 } catch { /* node-cron belum terinstall — skip */ }
 
 // Modul RPG/gamifikasi — endpoint /rpg/* (lihat backend/rpg.js)
-require('./rpg')(router, { hubPool, authMiddleware, requirePageAccess });
+require('./rpg')(router, { hubPool, authMiddleware, requirePageAccess, getPageAccessList });
 
 module.exports = router;
 

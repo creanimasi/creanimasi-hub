@@ -37,12 +37,13 @@ const ROLE_DESCRIPTIONS = {
 // urutan & pengelompokan konsisten dengan menu yang dilihat user sehari-hari.
 // "Lainnya" menampung halaman yang tidak punya entri menu di Sidebar sama sekali.
 const SECTION_GROUPS = [
+  { label: 'Guild', keys: ['rpg-character', 'rpg-quests', 'rpg-guild', 'rpg-achievements', 'rpg-admin', 'rpg-analytics'] },
   { label: 'Tim', keys: ['tim', 'master-data', 'absensi'] },
   { label: 'Aksi Cepat', keys: ['laporan-admin'] },
   { label: 'Program', keys: ['workshop', 'aktivitas-tim', 'reward', 'kader'] },
   { label: 'Laporan', keys: ['laporan-harian', 'laporan-mentor', 'laporan-bulanan'] },
   { label: 'Marketing', keys: ['ads-performance', 'laporan-profit'] },
-  { label: 'Lainnya', keys: ['jurnal-admin', 'sesi-1on1', 'friday-win', 'rpg-analytics', 'rpg-admin', 'tim-kelola-legacy', 'ai-assistant', 'kalender'] },
+  { label: 'Lainnya', keys: ['jurnal-admin', 'sesi-1on1', 'friday-win', 'tim-kelola-legacy', 'ai-assistant', 'kalender'] },
 ];
 
 const labelStyle = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 5, color: 'var(--text-2)' };
@@ -630,15 +631,22 @@ function RoleAccessTab({ roles, onRolesChanged }) {
 
   // Kelompokkan matrix sesuai SECTION_GROUPS; halaman yang tidak masuk daftar
   // manapun ikut ditampilkan di grup terakhir yang cocok (fallback aman).
+  // Halaman yang belum terdaftar di SECTION_GROUPS ditaruh di grup "Lainnya" — tanpa ini halaman baru
+  // diam-diam tak terlihat di matriks (tapi tetap terhitung di "X dari Y dipilih").
+  const dikenal = new Set(SECTION_GROUPS.flatMap(g => g.keys));
+  const belumTergrup = matrix.filter(m => !dikenal.has(m.page_key));
   const grouped = SECTION_GROUPS.map(g => ({
     label: g.label,
-    items: g.keys.map(k => matrix.find(m => m.page_key === k)).filter(Boolean),
+    items: [
+      ...g.keys.map(k => matrix.find(m => m.page_key === k)).filter(Boolean),
+      ...(g.label === 'Lainnya' ? belumTergrup : []),
+    ],
   })).filter(g => g.items.length > 0);
   const checkedCount = matrix.filter(m => m.can_access).length;
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: selectedRole ? '220px 1fr' : '1fr', gap: 16 }}>
-      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: selectedRole ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+      <div style={{ display: 'grid', gap: 8, alignContent: 'start', gridTemplateColumns: selectedRole ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))' }}>
         {roles.map(r => {
           const c = ROLE_COLORS[r.key] || ROLE_COLORS.anggota;
           const active = selectedRole?.id === r.id;

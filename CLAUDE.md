@@ -86,8 +86,12 @@ idempoten), `rpg_quest`, `rpg_quest_assignment`, `rpg_achievement`, `rpg_achieve
 - XP otomatis dari data terverifikasi (`syncXp`, maks 1×/60 dtk, dipanggil lazy saat endpoint dibaca): laporan
   harian, jurnal mingguan, absensi hadir/terlambat, Friday Win diterima, dan quest yang **disetujui admin**.
   Centang mandiri (workshop/modul) sengaja tidak dihitung. Pencocokan `LOWER(TRIM(nama))` ke `tim.nama`.
-- Hak akses: halaman anggota `/rpg/character|quests|guild|achievements` = baseline (semua login); `rpg-admin`
-  (`/rpg/kelola`: quest, persetujuan, achievement manual) dan `rpg-analytics` = admin-tier via Master Data.
+- Hak akses: SEMUA 6 halaman diatur lewat Master Data > Hak Akses/Role (grup "Guild"): 4 halaman anggota
+  (`rpg-character|rpg-quests|rpg-guild|rpg-achievements`, default TRUE untuk semua role — dulu baseline) dan 2 halaman
+  admin (`rpg-admin` = /rpg/kelola, `rpg-analytics`, default hanya Super Admin). Endpoint anggota memakai
+  `requirePageAccess`; /rpg/character menyaring panel Quest/Guild/Pencapaian sesuai akses (`data.akses`).
+  Migrasi di IIFE master hub.js: beri semua role akses dulu, baru lepas flag baseline (satu transaksi, tidak menimpa
+  pencabutan admin saat restart).
 - `tim.tipe`/`kepuasan` TIDAK pernah dikirim ke endpoint anggota (hanya `distribusi tipe` di analytics admin).
 - Akun tanpa tautan ke `tim` → endpoint anggota 404 → UI menampilkan "Belum terhubung".
 

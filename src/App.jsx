@@ -77,11 +77,11 @@ function ProtectedRoutes() {
         <Route path="/skb"          element={<SKB />} />
         <Route path="/performa"     element={<Performa />} />
 
-        {/* Modul RPG (gamifikasi) — halaman anggota terbuka untuk semua yang login */}
-        <Route path="/rpg/character" element={<CharacterSheetPage />} />
-        <Route path="/rpg/quests"    element={<QuestBoardPage />} />
-        <Route path="/rpg/guild"     element={<GuildHallPage />} />
-        <Route path="/rpg/achievements" element={<AchievementsPage />} />
+        {/* Modul RPG (gamifikasi) — semua halaman diatur lewat Master Data > Hak Akses/Role (grup "Guild") */}
+        <Route path="/rpg/character" element={<RequirePage pageKey="rpg-character"><CharacterSheetPage /></RequirePage>} />
+        <Route path="/rpg/quests"    element={<RequirePage pageKey="rpg-quests"><QuestBoardPage /></RequirePage>} />
+        <Route path="/rpg/guild"     element={<RequirePage pageKey="rpg-guild"><GuildHallPage /></RequirePage>} />
+        <Route path="/rpg/achievements" element={<RequirePage pageKey="rpg-achievements"><AchievementsPage /></RequirePage>} />
 
         {/* Diatur lewat Master Data > Hak Akses/Role, bukan lagi admin/member biner */}
         <Route path="/tim"          element={<RequirePage pageKey="tim"><Tim /></RequirePage>} />
