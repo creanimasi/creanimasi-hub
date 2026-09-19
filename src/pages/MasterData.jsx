@@ -3,6 +3,7 @@ import { api } from '../services/api';
 import { useToast } from '../hooks/useToast';
 import { useAuth } from '../hooks/useAuth';
 import { SkeletonList } from '../components/Skeleton';
+import { invalidateTimCache } from '../hooks/useTim';
 
 const ENTITAS_LIST = ['Creanimasi Studio', 'Flip Studio', 'Creillustra', 'Shuyou'];
 const DIVISI_OPTIONS = ['Admin', 'PM', 'Illustrator', 'Rigger', '3D Modeler', 'Developer', 'Marketing', 'Desainer'];
@@ -373,6 +374,7 @@ function ManajemenUserTab({ roles }) {
 
   const load = useCallback(async () => {
     setLoading(true);
+    invalidateTimCache(); // load dipanggil setelah tiap perubahan — komponen lain ikut dapat data terbaru
     try { const res = await api.getTim(true); setSemua(res.data); }
     catch { showToast('Gagal memuat data anggota', 'error'); }
     finally { setLoading(false); }

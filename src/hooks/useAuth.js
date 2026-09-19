@@ -1,5 +1,6 @@
 import { useState, useEffect, createContext, useContext } from 'react';
 import { api } from '../services/api';
+import { invalidateTimCache } from './useTim';
 
 const AuthContext = createContext(null);
 
@@ -36,7 +37,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const onUnauthorized = () => { localStorage.removeItem('hub_token'); setUser(null); };
+    const onUnauthorized = () => { localStorage.removeItem('hub_token'); invalidateTimCache(); setUser(null); };
     window.addEventListener('hub-unauthorized', onUnauthorized);
     return () => window.removeEventListener('hub-unauthorized', onUnauthorized);
   }, []);
@@ -61,12 +62,14 @@ export function AuthProvider({ children }) {
   const login = async (username, password) => {
     const res = await api.login(username, password);
     localStorage.setItem('hub_token', res.token);
+    invalidateTimCache();
     setUser(res.user);
     return res.user;
   };
 
   const logout = () => {
     localStorage.removeItem('hub_token');
+    invalidateTimCache();
     setUser(null);
   };
 

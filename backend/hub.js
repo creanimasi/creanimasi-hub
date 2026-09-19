@@ -62,10 +62,24 @@ const loginLimiterUser = rateLimit({
   message: { error: 'Terlalu banyak percobaan login untuk akun ini. Coba lagi dalam beberapa menit.' },
 });
 
-// Batasi request umum ke seluruh API (selain login) per klien
+// Heartbeat & presence berdenyut otomatis (30 dtk sekali per tab) — dipisah dari
+// jatah API supaya tidak memakan kuota request yang dipakai user saat bekerja.
+const isPresencePath = (req) => req.path === '/auth/heartbeat' || req.path.startsWith('/presence');
+
+// Batasi request umum ke seluruh API (selain login & presence) per klien
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 1000, // heartbeat presence saja sudah ~30 request/15 menit per tab
+  max: 1000,
+  skip: isPresencePath,
+  keyGenerator: clientIp,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Terlalu banyak permintaan. Coba lagi nanti.' },
+});
+const presenceLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300, // normal ≈ 30/15 mnt per tab; ruang untuk beberapa tab + reconnect
+  skip: (req) => !isPresencePath(req),
   keyGenerator: clientIp,
   standardHeaders: true,
   legacyHeaders: false,
@@ -253,6 +267,7 @@ router.post('/auth/login', loginLimiterIp, loginLimiterUser, async (req, res) =>
 
 // Rate limit untuk semua route lain (di luar /auth/login yang sudah punya limiter sendiri)
 router.use(apiLimiter);
+router.use(presenceLimiter);
 
 // ── GLOBAL AUTH GUARD ─────────────────────────────
 // Semua route wajib login KECUALI /auth/login dan /presence (SSE pakai tiket sekali-pakai via query param)
