@@ -511,7 +511,7 @@ export default function LaporanMingguan() {
                   background:'var(--surface)', cursor:'pointer', fontSize:13 }}>Batal</button>
               <button onClick={() => handleHapus(confirmHapus)}
                 style={{ flex:1, padding:'9px', borderRadius:8, border:'none',
-                  background:'var(--red)', color:'#fff', cursor:'pointer', fontSize:13, fontWeight:600 }}>
+                  background:'var(--red-solid)', color:'#fff', cursor:'pointer', fontSize:13, fontWeight:600 }}>
                 Ya, Hapus
               </button>
             </div>

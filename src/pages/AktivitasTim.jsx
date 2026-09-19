@@ -44,7 +44,7 @@ export default function AktivitasTim() {
                 fontSize: 13, fontWeight: 600, cursor: 'pointer',
                 transition: 'background .15s, color .15s',
                 background: activeTab === tab.key ? 'var(--green)' : 'transparent',
-                color: activeTab === tab.key ? '#fff' : 'var(--text-2)',
+                color: activeTab === tab.key ? 'var(--on-green)' : 'var(--text-2)',
               }}
             >
               {tab.label}

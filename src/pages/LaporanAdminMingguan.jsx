@@ -220,7 +220,7 @@ function LaporanAdminPreview({ laporan }) {
                 {todo_list.map((t, i) => t ? (
                   <div key={i} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6, fontSize:13 }}>
                     <div style={{ width:22, height:22, borderRadius:'50%', background:'#f59e0b',
-                      color:'#fff', fontSize:11, fontWeight:700, display:'flex', alignItems:'center',
+                      color:'#1a1206', fontSize:11, fontWeight:700, display:'flex', alignItems:'center',
                       justifyContent:'center', flexShrink:0 }}>{i+1}</div>
                     <span>{t}</span>
                   </div>
@@ -324,7 +324,7 @@ function ImgUpload({ label, icon, value, onChange }) {
                 style={{ width:'100%', borderRadius:8, border:'1px solid var(--border)',
                   display:'block', objectFit:'cover', maxHeight:160 }} />
               <button type="button" onClick={() => removeImg(i)}
-                style={{ position:'absolute', top:4, right:4, background:'var(--red)', color:'#fff',
+                style={{ position:'absolute', top:4, right:4, background:'var(--red-solid)', color:'#fff',
                   border:'none', borderRadius:5, padding:'2px 7px', cursor:'pointer',
                   fontSize:11, fontWeight:600, lineHeight:1.4 }}>✕</button>
             </div>
@@ -376,7 +376,7 @@ function MiniImgUpload({ label, value, onField, fieldKey }) {
               <img src={src} alt={`${label} ${i+1}`}
                 style={{ width:'100%', borderRadius:6, border:'1px solid var(--border)', display:'block' }} />
               <button type="button" onClick={() => removeImg(i)}
-                style={{ position:'absolute', top:3, right:3, background:'var(--red)', color:'#fff',
+                style={{ position:'absolute', top:3, right:3, background:'var(--red-solid)', color:'#fff',
                   border:'none', borderRadius:4, padding:'1px 6px', cursor:'pointer', fontSize:10 }}>✕</button>
             </div>
           ))}
@@ -633,7 +633,7 @@ function FormLaporanAdmin({ initial, onSave, onCancel, saving, error }) {
             {(form.todo_list || ['']).map((item, i) => (
               <div key={i} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:7 }}>
                 <div style={{ width:20, height:20, borderRadius:'50%', background:'var(--amber)',
-                  color:'#fff', fontSize:11, fontWeight:700, display:'flex', alignItems:'center',
+                  color:'var(--on-amber)', fontSize:11, fontWeight:700, display:'flex', alignItems:'center',
                   justifyContent:'center', flexShrink:0 }}>{i+1}</div>
                 <input value={item}
                   onChange={e => setField('todo_list', (form.todo_list||['']).map((v,idx)=>idx===i?e.target.value:v))}
@@ -659,7 +659,7 @@ function FormLaporanAdmin({ initial, onSave, onCancel, saving, error }) {
             {(form.kendala_list || ['']).map((item, i) => (
               <div key={i} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:7 }}>
                 <div style={{ width:20, height:20, borderRadius:'50%', background:'var(--amber)',
-                  color:'#fff', fontSize:11, fontWeight:700, display:'flex', alignItems:'center',
+                  color:'var(--on-amber)', fontSize:11, fontWeight:700, display:'flex', alignItems:'center',
                   justifyContent:'center', flexShrink:0 }}>{i+1}</div>
                 <input value={item}
                   onChange={e => setField('kendala_list', (form.kendala_list||['']).map((v,idx)=>idx===i?e.target.value:v))}
@@ -923,7 +923,7 @@ export default function LaporanAdminMingguan() {
                   background:'var(--surface)', cursor:'pointer', fontSize:13 }}>Batal</button>
               <button onClick={() => handleHapus(confirmHapus)}
                 style={{ flex:1, padding:'9px', borderRadius:8, border:'none',
-                  background:'var(--red)', color:'#fff', cursor:'pointer', fontSize:13, fontWeight:600 }}>
+                  background:'var(--red-solid)', color:'#fff', cursor:'pointer', fontSize:13, fontWeight:600 }}>
                 Ya, Hapus
               </button>
             </div>

@@ -32,11 +32,11 @@ const tooltipStyle = {
 export default function RpgAnalyticsPage() {
   const res = useAnalytics();
   const guard = rpgGuard(res);
-  if (guard) return <div style={{ fontFamily: 'var(--rpg-font-body)', color: 'var(--rpg-ink)' }}>{guard}</div>;
+  if (guard) return <div className="rpg-page" style={{ fontFamily: 'var(--rpg-font-body)', color: 'var(--rpg-ink)' }}>{guard}</div>;
   const { overall, levelDistribution, xpTrend, completionByType, tipeDistribution } = res.data;
 
   return (
-    <div style={{ fontFamily: 'var(--rpg-font-body)', color: 'var(--rpg-ink)' }}>
+    <div className="rpg-page" style={{ fontFamily: 'var(--rpg-font-body)', color: 'var(--rpg-ink)' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
         <div>

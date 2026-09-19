@@ -191,7 +191,7 @@ function NotificationBell({ user }) {
         {unreadCount > 0 && (
           <span style={{ position:'absolute', top:-4, right:-4,
             width:16, height:16, borderRadius:'50%',
-            background:'var(--red)', color:'#fff',
+            background:'var(--red-solid)', color:'#fff',
             fontSize:9, fontWeight:700,
             display:'flex', alignItems:'center', justifyContent:'center',
             border:'2px solid var(--bg)' }}>

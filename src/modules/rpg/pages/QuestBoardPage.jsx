@@ -48,7 +48,7 @@ export default function QuestBoardPage() {
   };
 
   return (
-    <div style={{ fontFamily: 'var(--rpg-font-body)', color: 'var(--rpg-ink)' }}>
+    <div className="rpg-page" style={{ fontFamily: 'var(--rpg-font-body)', color: 'var(--rpg-ink)' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
         <div>

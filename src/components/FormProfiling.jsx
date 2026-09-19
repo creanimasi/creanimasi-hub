@@ -442,7 +442,7 @@ export default function FormProfiling({ onSuccess }) {
                 background: divisi === d.id ? 'var(--green-light)' : 'var(--surface)',
                 color: divisi === d.id ? 'var(--green)' : 'var(--text)',
                 fontWeight: divisi === d.id ? 600 : 400, fontSize: 13,
-                opacity: autoDiv && divisi !== d.id ? 0.4 : 1,
+                opacity: autoDiv && divisi !== d.id ? 0.6 : 1,
               }}>
               {d.ico} {d.label}
             </button>

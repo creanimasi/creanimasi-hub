@@ -136,7 +136,7 @@ function EditReportModal({ row, brands, onSave, onClose }) {
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
           <button onClick={onClose} style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 13 }}>Batal</button>
-          <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: '9px 0', borderRadius: 8, border: 'none', background: 'var(--green)', color: '#fff', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13 }}>
+          <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: '9px 0', borderRadius: 8, border: 'none', background:'var(--green)', color:'var(--on-green)', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13 }}>
             {saving ? 'Menyimpan...' : 'Simpan'}
           </button>
         </div>
@@ -202,7 +202,7 @@ function BrandSettingsModal({ brands, onSave, onClose }) {
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
           <button onClick={onClose} style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 13 }}>Batal</button>
-          <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: '9px 0', borderRadius: 8, border: 'none', background: 'var(--green)', color: '#fff', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13 }}>
+          <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: '9px 0', borderRadius: 8, border: 'none', background:'var(--green)', color:'var(--on-green)', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13 }}>
             {saving ? 'Menyimpan...' : 'Simpan Setting'}
           </button>
         </div>
@@ -311,7 +311,7 @@ function SyncRangeModal({ brandId, brands, onDone, onClose }) {
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
           <button onClick={onClose} disabled={loading} style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 13 }}>Batal</button>
-          <button onClick={handleSync} disabled={loading || dayCount === 0} style={{ flex: 2, padding: '9px 0', borderRadius: 8, border: 'none', background: 'var(--green)', color: '#fff', fontWeight: 700, cursor: (loading || dayCount === 0) ? 'not-allowed' : 'pointer', fontSize: 13 }}>
+          <button onClick={handleSync} disabled={loading || dayCount === 0} style={{ flex: 2, padding: '9px 0', borderRadius: 8, border: 'none', background:'var(--green)', color:'var(--on-green)', fontWeight: 700, cursor: (loading || dayCount === 0) ? 'not-allowed' : 'pointer', fontSize: 13 }}>
             {loading ? `⏳ Sync...` : `🔄 Sync ${dayCount} Hari`}
           </button>
         </div>
@@ -322,7 +322,7 @@ function SyncRangeModal({ brandId, brands, onDone, onClose }) {
 
 function BrandModal({ onSave, onClose }) {
   const { showToast } = useToast();
-  const [form, setForm] = useState({ nama: '', ad_account_id: '', pixel_id: '' });
+  const [form, setForm] = useState({ nama: '', ad_account_id: '', pixel_id: '', token_env: '' });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
   const inputStyle = { width: '100%', padding: '8px 10px', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-1)', fontSize: 13, boxSizing: 'border-box' };
@@ -347,10 +347,15 @@ function BrandModal({ onSave, onClose }) {
           <div>{label('Nama Brand')}<input value={form.nama} onChange={e => set('nama', e.target.value)} style={inputStyle} placeholder="Jester" /></div>
           <div>{label('Ad Account ID')}<input value={form.ad_account_id} onChange={e => set('ad_account_id', e.target.value)} style={inputStyle} placeholder="act_xxxxxxxxxx" /></div>
           <div>{label('Pixel ID (opsional)')}<input value={form.pixel_id} onChange={e => set('pixel_id', e.target.value)} style={inputStyle} placeholder="1234567890" /></div>
+          <div>
+            {label('Nama Env Token (opsional)')}
+            <input value={form.token_env} onChange={e => set('token_env', e.target.value.toUpperCase().replace(/\s/g, ''))} style={inputStyle} placeholder="META_ACCESS_TOKEN_BM2" />
+            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>Kosongkan untuk pakai META_ACCESS_TOKEN. Harus diawali META_ACCESS_TOKEN dan sudah dibuat di Coolify.</div>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
           <button onClick={onClose} style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 13 }}>Batal</button>
-          <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: '9px 0', borderRadius: 8, border: 'none', background: 'var(--green)', color: '#fff', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13 }}>
+          <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: '9px 0', borderRadius: 8, border: 'none', background:'var(--green)', color:'var(--on-green)', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13 }}>
             {saving ? 'Menyimpan...' : 'Tambah'}
           </button>
         </div>
@@ -454,7 +459,7 @@ export default function AdsPerformance() {
         <button onClick={() => setEditRow({})} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-2)', cursor: 'pointer', fontSize: 12 }}>+ Input Harian</button>
         <button onClick={() => setShowSyncRange(true)} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-2)', cursor: 'pointer', fontSize: 12 }}>📅 Sync Range</button>
         <button onClick={() => setShowSettings(true)} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-2)', cursor: 'pointer', fontSize: 12 }}>⚙️ Setting</button>
-        <button onClick={brandId ? handleSync : handleSyncAll} disabled={syncing} style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: 'var(--green)', color: '#fff', fontWeight: 700, cursor: syncing ? 'not-allowed' : 'pointer', fontSize: 12 }}>
+        <button onClick={brandId ? handleSync : handleSyncAll} disabled={syncing} style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background:'var(--green)', color:'var(--on-green)', fontWeight: 700, cursor: syncing ? 'not-allowed' : 'pointer', fontSize: 12 }}>
           {syncing ? '⏳ Sync...' : '🔄 Sync Meta'}
         </button>
       </div>

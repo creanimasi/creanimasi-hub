@@ -352,7 +352,7 @@ function ConfirmNonaktifModal({ anggota, onConfirm, onClose }) {
         <button
           onClick={async () => { setLoading(true); setError(''); try { await onConfirm(); } catch (err) { setError(err.message.replace(/^\d+: /, '')); setLoading(false); } }}
           disabled={loading}
-          style={{ flex: 1, padding: '9px', borderRadius: 8, border: 'none', background: 'var(--red)', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+          style={{ flex: 1, padding: '9px', borderRadius: 8, border: 'none', background:'var(--red-solid)', color:'#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
           {loading ? 'Memproses...' : 'Nonaktifkan'}
         </button>
       </div>
@@ -563,7 +563,7 @@ function ConfirmSwitchModal({ onConfirm, onClose }) {
       </div>
       <div style={{ display: 'flex', gap: 10 }}>
         <button onClick={onClose} style={{ flex: 1, padding: '9px', borderRadius: 8, border: '1px solid var(--border-2)', background: 'var(--surface)', cursor: 'pointer', fontSize: 13 }}>Batal</button>
-        <button onClick={onConfirm} style={{ flex: 1, padding: '9px', borderRadius: 8, border: 'none', background: 'var(--red)', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Lanjut tanpa simpan</button>
+        <button onClick={onConfirm} style={{ flex: 1, padding: '9px', borderRadius: 8, border: 'none', background:'var(--red-solid)', color:'#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Lanjut tanpa simpan</button>
       </div>
     </ModalShell>
   );

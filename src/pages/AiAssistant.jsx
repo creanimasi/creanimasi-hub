@@ -112,7 +112,7 @@ function MsgBubble({ msg, userInitials = '?' }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: isUser ? 13 : 16,
         background: isUser ? 'var(--green)' : 'linear-gradient(135deg, #7C5CFC, #A78BFA)',
-        color: '#fff', fontWeight: 700,
+        color: isUser ? 'var(--on-green)' : '#fff', fontWeight: 700,
       }}>
         {isUser ? userInitials : '✨'}
       </div>

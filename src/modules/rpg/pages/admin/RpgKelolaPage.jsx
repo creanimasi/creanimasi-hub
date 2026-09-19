@@ -35,6 +35,45 @@ const inputStyle = {
 };
 // CSS global "input" melebarkan semua input; checkbox harus tetap selebar kotaknya.
 const cbStyle = { width: 'auto', flex: 'none', margin: 0, cursor: 'pointer' };
+// Tanggal lokal → 'YYYY-MM-DD' (toISOString memakai UTC dan bisa mundur sehari di WIB)
+const isoLokal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const tambahHari = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return isoLokal(d); };
+const labelTanggal = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+const PILIHAN_TENGGAT = [['Hari ini', 0], ['Besok', 1], ['+3 hari', 3], ['+1 minggu', 7], ['+2 minggu', 14]];
+
+// Pemilih tanggal: klik di mana saja pada kolom membuka kalender (bukan hanya ikon kecil di ujung),
+// plus tombol pintas untuk tenggat yang umum dan tombol hapus.
+function TenggatField({ value, onChange }) {
+  const bukaKalender = (e) => { try { e.currentTarget.showPicker(); } catch { /* browser lama: tetap bisa ketik / pakai ikon */ } };
+  return (
+    <div>
+      <Field label="Tenggat (opsional)">
+        <input style={{ ...inputStyle, colorScheme: 'dark', cursor: 'pointer' }} type="date" value={value}
+          onChange={(e) => onChange(e.target.value)} onClick={bukaKalender} />
+      </Field>
+      <div style={{ display: 'flex', gap: '.35rem', flexWrap: 'wrap', marginTop: '.4rem' }}>
+        {PILIHAN_TENGGAT.map(([t, n]) => (
+          <button key={t} type="button" onClick={() => onChange(tambahHari(n))} aria-pressed={value === tambahHari(n)} style={{
+            ...hud, fontSize: '.9rem', cursor: 'pointer', padding: '.1rem .5rem',
+            background: value === tambahHari(n) ? 'var(--rpg-gold)' : 'var(--rpg-bg-3)',
+            color: value === tambahHari(n) ? '#1a1206' : 'var(--rpg-ink-dim)',
+            border: `2px solid ${value === tambahHari(n) ? 'var(--rpg-gold)' : 'var(--rpg-line-dim)'}`,
+          }}>{t}</button>
+        ))}
+        {value && (
+          <button type="button" onClick={() => onChange('')} style={{
+            ...hud, fontSize: '.9rem', cursor: 'pointer', padding: '.1rem .5rem', background: 'transparent',
+            color: 'var(--rpg-warn)', border: '2px solid var(--rpg-warn)',
+          }}>Hapus</button>
+        )}
+      </div>
+      <div style={{ ...hud, fontSize: '.9rem', color: 'var(--rpg-ink-faint)', marginTop: '.3rem' }}>
+        {value ? labelTanggal(value) : 'Tanpa tenggat'}
+      </div>
+    </div>
+  );
+}
+
 function Field({ label, hint, children }) {
   return (
     <label style={{ display: 'block' }}>
@@ -160,7 +199,7 @@ function QuestFormModal({ quest, anggota, onClose, onSaved }) {
           <Field label="XP hadiah" hint="1–1000">
             <input style={inputStyle} type="number" min="1" max="1000" value={f.xp} onChange={set('xp')} />
           </Field>
-          <Field label="Tenggat (opsional)"><input style={inputStyle} type="date" value={f.tenggat} onChange={set('tenggat')} /></Field>
+          <TenggatField value={f.tenggat} onChange={(v) => setF(s => ({ ...s, tenggat: v }))} />
           <Field label="Ikon">
             <select style={inputStyle} value={f.ikon} onChange={set('ikon')}>{IKON.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
           </Field>
@@ -227,7 +266,7 @@ function QuestTab({ anggota, onChanged }) {
         </div>
       )}
       {res.data && res.data.map(q => (
-        <div key={q.id} className="rpg-pixbox" style={{ ...pixbox, padding: '.9rem 1.1rem', opacity: q.aktif ? 1 : .6 }}>
+        <div key={q.id} className="rpg-pixbox" style={{ ...pixbox, padding: '.9rem 1.1rem', ...(q.aktif ? {} : { borderStyle: 'dashed', borderColor: 'var(--rpg-line-dim)' }) }}>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div style={{ flex: '1 1 260px', minWidth: 0 }}>
               <div style={{ fontWeight: 600, fontSize: '.98rem', color: 'var(--rpg-ink)' }}>{q.judul}</div>
@@ -382,7 +421,7 @@ export default function RpgKelolaPage() {
   const tabs = [['quest', 'Quest'], ['review', `Persetujuan${menunggu ? ` (${menunggu})` : ''}`], ['achievement', 'Achievement']];
 
   return (
-    <div style={{ fontFamily: 'var(--rpg-font-body)', color: 'var(--rpg-ink)' }}>
+    <div className="rpg-page" style={{ fontFamily: 'var(--rpg-font-body)', color: 'var(--rpg-ink)' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         <div>
           <h1 style={{ fontFamily: 'var(--rpg-font-display)', fontWeight: 400, fontSize: 'clamp(1rem, 2.4vw, 1.4rem)', margin: '0 0 .6rem' }}>KELOLA RPG</h1>

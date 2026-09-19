@@ -30,8 +30,12 @@
   --border:       rgba(255,255,255,0.06);
   --border-2:     rgba(255,255,255,0.11);
   --text:         #E8EEFF;
-  --text-2:       #7B89A8;
-  --text-3:       #3D4A63;
+  --text-2:       #A3AFCB;   /* kontras ≥ 7:1 di semua permukaan */
+  --text-3:       #8C99B6;   /* ≥ 4.5:1 di semua permukaan (sebelumnya #3D4A63 = 1.7:1) */
+  --red-solid:    #D32F2F;   /* latar tombol/badge merah + teks putih (≥ 4.5:1) */
+  --on-green:     #04140D;   /* teks di atas latar --green */
+  --on-amber:     #1A1206;   /* teks di atas latar --amber */
+  color-scheme:   dark;      /* kontrol bawaan browser (ikon tanggal, scrollbar, select) ikut gelap */
 
   --glow-green:   0 0 20px rgba(0,214,143,0.25);
   --glow-purple:  0 0 20px rgba(155,143,255,0.25);
@@ -49,19 +53,24 @@
 
 /* ── LIGHT MODE OVERRIDE ───────────────────────────────────────── */
 [data-theme="light"] {
-  --green:        #1D9E75;
-  --green-dark:   #0F6E56;
+  /* Aksen dipakai sebagai warna TEKS di tema terang → dibuat ≥ 4.5:1 di atas putih & abu muda */
+  --green:        #0C7052;
+  --green-dark:   #095E45;
   --green-light:  #E1F5EE;
-  --purple:       #7F77DD;
+  --purple:       #5A4FBE;
   --purple-light: #EEEDFE;
-  --amber:        #BA7517;
+  --amber:        #855308;
   --amber-light:  #FAEEDA;
-  --coral:        #D85A30;
+  --coral:        #A93E19;
   --coral-light:  #FAECE7;
-  --blue:         #378ADD;
+  --blue:         #1B65AE;
   --blue-light:   #E6F1FB;
-  --red:          #E24B4A;
+  --red:          #B72B2A;
   --red-light:    #FCEBEB;
+  --red-solid:    #C62828;
+  --on-green:     #FFFFFF;
+  --on-amber:     #FFFFFF;
+  color-scheme:   light;
 
   --bg:           #F0F2F8;
   --surface:      #FFFFFF;
@@ -70,8 +79,8 @@
   --border:       rgba(0,0,0,0.07);
   --border-2:     rgba(0,0,0,0.13);
   --text:         #1A1A2E;
-  --text-2:       #6B7280;
-  --text-3:       #9CA3AF;
+  --text-2:       #4B5563;
+  --text-3:       #5B6472;
 
   --glow-green:   none;
   --glow-purple:  none;
@@ -94,8 +103,12 @@
   --coral-light:  rgba(251,122,92,0.12);
   --blue:         var(--rpg-stat-kolaborasi);
   --blue-light:   rgba(95,180,250,0.12);
-  --red:          #ff4d6a;
-  --red-light:    rgba(255,77,106,0.12);
+  --red:          #ff6a84;
+  --red-light:    rgba(255,106,132,0.12);
+  --red-solid:    #D6303A;
+  --on-green:     #04140D;
+  --on-amber:     #1A1206;
+  color-scheme:   dark;
 
   --bg:           var(--rpg-bg);
   --surface:      var(--rpg-bg-2);
@@ -128,6 +141,11 @@
   );
   opacity: .35;
 }
+
+/* Tombol tanpa warna eksplisit memakai warna teks tema (bukan hitam bawaan browser) */
+button { color: inherit; }
+/* Placeholder terbaca; Firefox menurunkan opacity-nya secara bawaan */
+::placeholder { color: var(--text-3); opacity: 1; }
 
 body {
   font-family: var(--font);
@@ -374,14 +392,13 @@ body {
 .btn-primary {
   background: var(--green);
   border-color: var(--green);
-  color: #000;
+  color: var(--on-green);
   font-weight: 700;
 }
 .btn-primary:hover {
   background: var(--green-dark);
   box-shadow: var(--glow-green);
 }
-[data-theme="light"] .btn-primary { color: #fff; }
 [data-theme="light"] .btn-primary:hover { box-shadow: none; }
 .btn-sm { padding: 4px 9px; font-size: 11px; }
 .btn-icon { padding: 7px; }
@@ -715,3 +732,42 @@ select option { background: var(--surface-2); color: var(--text); }
   /* Hide some topbar elements */
   .topbar-status { display: none; }
 }
+
+/* ── TEMA TERANG: warna teks aksen yang ditulis hex di banyak halaman ─────────
+   Hex-hex ini dirancang untuk latar gelap (mis. #00D68F = 1.9:1 di atas putih).
+   Di tema terang dipetakan ke token tema yang sudah dibuat ≥ 4.5:1. Hanya memetakan
+   properti `color` (bukan background/border, yang sering memakai sufiks alfa). */
+[data-theme="light"] [style^="color: rgb(0, 214, 143)"],
+[data-theme="light"] [style*="; color: rgb(0, 214, 143)"] { color: var(--green) !important; }
+[data-theme="light"] [style^="color: rgb(255, 184, 75)"],
+[data-theme="light"] [style*="; color: rgb(255, 184, 75)"] { color: var(--amber) !important; }
+[data-theme="light"] [style^="color: rgb(255, 184, 48)"],
+[data-theme="light"] [style*="; color: rgb(255, 184, 48)"] { color: var(--amber) !important; }
+[data-theme="light"] [style^="color: rgb(255, 107, 107)"],
+[data-theme="light"] [style*="; color: rgb(255, 107, 107)"] { color: var(--red) !important; }
+[data-theme="light"] [style^="color: rgb(255, 82, 82)"],
+[data-theme="light"] [style*="; color: rgb(255, 82, 82)"] { color: var(--red) !important; }
+[data-theme="light"] [style^="color: rgb(155, 143, 255)"],
+[data-theme="light"] [style*="; color: rgb(155, 143, 255)"] { color: var(--purple) !important; }
+[data-theme="light"] [style^="color: rgb(129, 140, 248)"],
+[data-theme="light"] [style*="; color: rgb(129, 140, 248)"] { color: var(--purple) !important; }
+[data-theme="light"] [style^="color: rgb(79, 195, 247)"],
+[data-theme="light"] [style*="; color: rgb(79, 195, 247)"] { color: var(--blue) !important; }
+[data-theme="light"] [style^="color: rgb(75, 200, 255)"],
+[data-theme="light"] [style*="; color: rgb(75, 200, 255)"] { color: var(--blue) !important; }
+[data-theme="light"] [style^="color: rgb(167, 139, 250)"],
+[data-theme="light"] [style*="; color: rgb(167, 139, 250)"] { color: var(--purple) !important; }
+[data-theme="light"] [style^="color: rgb(176, 123, 255)"],
+[data-theme="light"] [style*="; color: rgb(176, 123, 255)"] { color: var(--purple) !important; }
+[data-theme="light"] [style^="color: rgb(96, 165, 250)"],
+[data-theme="light"] [style*="; color: rgb(96, 165, 250)"] { color: var(--blue) !important; }
+[data-theme="light"] [style^="color: rgb(59, 130, 246)"],
+[data-theme="light"] [style*="; color: rgb(59, 130, 246)"] { color: var(--blue) !important; }
+[data-theme="light"] [style^="color: rgb(255, 107, 157)"],
+[data-theme="light"] [style*="; color: rgb(255, 107, 157)"] { color: var(--red) !important; }
+[data-theme="light"] [style^="color: rgb(168, 224, 99)"],
+[data-theme="light"] [style*="; color: rgb(168, 224, 99)"] { color: var(--green) !important; }
+[data-theme="light"] [style^="color: rgb(245, 158, 11)"],
+[data-theme="light"] [style*="; color: rgb(245, 158, 11)"] { color: var(--amber) !important; }
+[data-theme="light"] [style^="color: rgb(239, 68, 68)"],
+[data-theme="light"] [style*="; color: rgb(239, 68, 68)"] { color: var(--red) !important; }

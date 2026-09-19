@@ -471,7 +471,7 @@ export function Absensi() {
                     onClick={() => setFilterDiv(d)} style={{ fontSize: 11 }}>
                     {d}
                     {d !== 'Semua' && (
-                      <span style={{ marginLeft: 4, fontSize: 10, opacity: .6 }}>
+                      <span style={{ marginLeft: 4, fontSize: 10 }}>
                         {kehadiran.filter(k => tim.find(t => t.nama === k.nama && t.divisi === d))
                           .filter(k => k.status === 'hadir' || k.status === 'terlambat').length}/
                         {tim.filter(t => t.divisi === d).length}
@@ -523,7 +523,7 @@ export function Absensi() {
                 Batal
               </button>
               <button onClick={() => handleDelete(confirmHapus.id, confirmHapus.label)} disabled={!!deletingId}
-                style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: 'none', background: 'var(--red)', color: '#fff', fontWeight: 700, cursor: deletingId ? 'not-allowed' : 'pointer', fontSize: 13 }}>
+                style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: 'none', background:'var(--red-solid)', color:'#fff', fontWeight: 700, cursor: deletingId ? 'not-allowed' : 'pointer', fontSize: 13 }}>
                 {deletingId ? 'Menghapus...' : 'Ya, Hapus'}
               </button>
             </div>

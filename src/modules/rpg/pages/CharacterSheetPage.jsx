@@ -19,11 +19,11 @@ const STAT_ICONS = {
 export default function CharacterSheetPage() {
   const res = useCharacter();
   const guard = rpgGuard(res);
-  if (guard) return <div style={{ fontFamily: 'var(--rpg-font-body)', color: 'var(--rpg-ink)' }}>{guard}</div>;
+  if (guard) return <div className="rpg-page" style={{ fontFamily: 'var(--rpg-font-body)', color: 'var(--rpg-ink)' }}>{guard}</div>;
   const { character, stats, achievements, activeQuests, leaderboard } = res.data;
 
   return (
-    <div style={{ fontFamily: 'var(--rpg-font-body)', color: 'var(--rpg-ink)' }}>
+    <div className="rpg-page" style={{ fontFamily: 'var(--rpg-font-body)', color: 'var(--rpg-ink)' }}>
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'minmax(0,1fr) 300px',

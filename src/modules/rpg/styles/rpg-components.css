@@ -40,3 +40,14 @@
 @media (prefers-reduced-motion: reduce) {
   .rpg-bar-fill { transition: none; }
 }
+
+/* Halaman RPG memakai palet gelap sendiri; di tema terang dibungkus panel gelap agar
+   judul/teks berwarna terang tetap terbaca (bukan putih di atas abu muda). */
+[data-theme="light"] .rpg-page {
+  background: var(--rpg-bg);
+  border: 2px solid var(--rpg-line-dim);
+  padding: clamp(1rem, 2.5vw, 1.6rem);
+}
+
+/* Kolom input di halaman/modal RPG bergaya gelap — placeholder ikut palet RPG, bukan warna tema global */
+.rpg-page ::placeholder { color: var(--rpg-ink-faint); opacity: 1; }

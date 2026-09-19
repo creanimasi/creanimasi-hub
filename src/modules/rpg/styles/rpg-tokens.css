@@ -24,8 +24,8 @@
 
   /* --- Teks --- */
   --rpg-ink: #f2f6ff;
-  --rpg-ink-dim: #8593c9;
-  --rpg-ink-faint: #4c5690;
+  --rpg-ink-dim: #b2bce8;    /* ≥ 6:1 di semua panel RPG */
+  --rpg-ink-faint: #8b97d0;  /* ≥ 4.5:1 (sebelumnya #4c5690 = 2.1:1) */
 
   /* --- Warna stat PILAR --- */
   --rpg-stat-produktivitas: #fb7a5c;

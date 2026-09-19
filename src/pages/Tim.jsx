@@ -491,7 +491,7 @@ export default function Tim() {
         {divisis.map(d => (
           <div key={d} className={`tab ${filter === d ? 'active' : ''}`}
             onClick={() => setFilter(d)}>
-            {d} <span style={{ fontSize: 10, opacity: .7 }}>
+            {d} <span style={{ fontSize: 10 }}>
               ({d === 'Semua' ? tim.length : tim.filter(t => t.divisi === d).length})
             </span>
           </div>

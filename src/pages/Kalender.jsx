@@ -129,7 +129,7 @@ export default function Kalender() {
                         width:22, height:22, borderRadius:'50%', marginBottom:3,
                         display:'flex', alignItems:'center', justifyContent:'center',
                         background: today ? 'var(--green)' : 'transparent',
-                        color: today ? '#000' : 'var(--text)',
+                        color: today ? 'var(--on-green)' : 'var(--text)',
                         fontSize:11, fontWeight: today ? 800 : 400,
                       }}>{day}</div>
                       {evs.slice(0,2).map((e, ei) => (
