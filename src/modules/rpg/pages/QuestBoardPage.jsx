@@ -5,6 +5,8 @@ import { rpgGuard } from '../components/RpgState';
 import { useQuests } from '../hooks/useRpg';
 import { api } from '../../../services/api';
 import { useToast } from '../../../hooks/useToast';
+import { useAuth } from '../../../hooks/useAuth';
+import PapanQuestAdmin from './admin/PapanQuestAdmin';
 
 const QUEST_ICONS = {
   sync:   <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="square" strokeLinejoin="miter" stroke="var(--rpg-gold)" width={17} height={17}><path d="M21 11.5a8.5 8.5 0 1 1-4-7.2L21 3l-1.2 4.7" /></svg>,
@@ -25,7 +27,7 @@ const pixbox = {
 // Halaman Quest Board — data dari GET /rpg/quests.
 // "Selesai" tidak langsung memberi XP: quest diajukan ke admin (POST …/ajukan) lalu XP
 // baru masuk setelah admin menyetujui. Quest Harian otomatis selesai lewat laporan harian.
-export default function QuestBoardPage() {
+function PapanSaya({ atas, opsiGuard }) {
   const [tab, setTab] = useState('Semua');
   const [busyId, setBusyId] = useState(null);
   const { showToast } = useToast();
@@ -37,7 +39,7 @@ export default function QuestBoardPage() {
     return tab === 'Semua' ? data.groups : data.groups.filter(g => g.id === TAB_TO_GROUP[tab]);
   }, [tab, data]);
 
-  const guard = data ? null : rpgGuard(res);
+  const guard = data ? null : rpgGuard(res, opsiGuard);
   const showCompleted = tab === 'Semua' || tab === 'Selesai';
 
   const aksi = async (id, fn, pesan) => {
@@ -50,7 +52,7 @@ export default function QuestBoardPage() {
   return (
     <div className="rpg-page" style={{ fontFamily: 'var(--rpg-font-body)', color: 'var(--rpg-ink)' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-
+        {atas}
         <div>
           <h1 style={{ fontFamily: 'var(--rpg-font-display)', fontWeight: 400, fontSize: 'clamp(1rem, 2.4vw, 1.4rem)', color: 'var(--rpg-ink)', margin: '0 0 .6rem' }}>
             PAPAN QUEST
@@ -151,5 +153,35 @@ export default function QuestBoardPage() {
         </>)}
       </div>
     </div>
+  );
+}
+
+// Sakelar tampilan untuk admin: papan semua tim (Kanban) atau papan pribadi.
+function SakelarPapan({ mode, setMode }) {
+  const tombol = (k, label) => (
+    <button key={k} type="button" aria-pressed={mode === k} onClick={() => setMode(k)} style={{
+      fontFamily: 'var(--rpg-font-hud)', fontSize: '1.05rem', cursor: 'pointer',
+      color: mode === k ? '#1a1206' : 'var(--rpg-ink-dim)', background: mode === k ? 'var(--rpg-gold)' : 'var(--rpg-bg-2)',
+      border: `2px solid ${mode === k ? 'var(--rpg-gold)' : 'var(--rpg-line-dim)'}`, padding: '.35rem 1rem',
+    }}>{label}</button>
+  );
+  return <div style={{ display: 'flex', gap: '.6rem', flexWrap: 'wrap' }}>{tombol('tim', 'Semua tim')}{tombol('saya', 'Papan saya')}</div>;
+}
+
+// Pemegang akses admin/pantau melihat Kanban semua tim (default); anggota biasa tetap melihat papan pribadinya.
+export default function QuestBoardPage() {
+  const { user } = useAuth();
+  const akses = user?.page_access || [];
+  const bisaLihatTim = akses.includes('rpg-admin') || akses.includes('rpg-pantau');
+  const [mode, setMode] = useState('tim');
+  if (!bisaLihatTim) return <PapanSaya />;
+  const sakelar = <SakelarPapan mode={mode} setMode={setMode} />;
+  if (mode === 'tim') return <PapanQuestAdmin atas={sakelar} />;
+  return (
+    <PapanSaya atas={sakelar} opsiGuard={{
+      judul: 'TIDAK PUNYA PAPAN PRIBADI',
+      teks: 'Akun ini tidak tertaut ke data anggota tim (umum untuk akun admin), jadi tidak punya quest pribadi. Lihat quest semua anggota di tampilan Semua tim.',
+      tombol: { label: 'Lihat papan semua tim →', onClick: () => setMode('tim') },
+    }} />
   );
 }

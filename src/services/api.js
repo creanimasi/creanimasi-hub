@@ -182,6 +182,7 @@ export const api = {
   rpgLeaderboard:   (period, divisi)   => request('GET', `/rpg/leaderboard?period=${period}${divisi && divisi !== 'Semua' ? `&divisi=${encodeURIComponent(divisi)}` : ''}`),
   rpgAchievements:  ()                 => request('GET', '/rpg/achievements'),
   rpgAnalytics:     ()                 => request('GET', '/rpg/admin/analytics'),
+  rpgAdminPapan:    ()                 => request('GET', '/rpg/admin/papan'),
   rpgPantauAnggota: ()                 => request('GET', '/rpg/pantau/anggota'),
   rpgPantauDetail:  (id)               => request('GET', `/rpg/pantau/anggota/${id}`),
   rpgAdminQuests:   ()                 => request('GET', '/rpg/admin/quests'),

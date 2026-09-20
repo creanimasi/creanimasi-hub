@@ -11,10 +11,24 @@ const box = {
 // Akun yang tidak tertaut ke data anggota tim (umumnya akun admin) tidak punya Character Sheet/quest sendiri.
 // Bila akun itu pemegang akses Pantau Anggota, arahkan ke sana — saran "minta admin menautkan" tidak relevan
 // untuk Super Admin, dan tanpa petunjuk ini fitur pantau semua anggota tidak mudah ditemukan.
-function BelumTerhubung() {
+function BelumTerhubung({ opsi }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const bisaPantau = (user?.page_access || []).includes('rpg-pantau');
+  if (opsi) {
+    return (
+      <div className="rpg-pixbox" style={box}>
+        <div style={{ fontFamily: 'var(--rpg-font-display)', fontSize: '.7rem', color: 'var(--rpg-gold)', marginBottom: '.7rem' }}>{opsi.judul}</div>
+        <p style={{ margin: opsi.tombol ? '0 0 .9rem' : 0, fontSize: '1.1rem', color: 'var(--rpg-ink-dim)', maxWidth: '64ch' }}>{opsi.teks}</p>
+        {opsi.tombol && (
+          <button type="button" onClick={opsi.tombol.onClick} style={{
+            fontFamily: 'var(--rpg-font-hud)', fontSize: '1.1rem', cursor: 'pointer',
+            background: 'var(--rpg-gold)', color: '#1a1206', border: 'none', padding: '.4rem 1.1rem',
+          }}>{opsi.tombol.label}</button>
+        )}
+      </div>
+    );
+  }
   return (
     <div className="rpg-pixbox" style={box}>
       <div style={{ fontFamily: 'var(--rpg-font-display)', fontSize: '.7rem', color: 'var(--rpg-gold)', marginBottom: '.7rem' }}>
@@ -44,9 +58,9 @@ function BelumTerhubung() {
 
 // Kondisi data halaman RPG: memuat / gagal / belum terhubung ke anggota tim.
 // Mengembalikan elemen bila halaman TIDAK boleh menampilkan konten normal, selain itu null.
-export function rpgGuard({ loading, error, data, retry }) {
+export function rpgGuard({ loading, error, data, retry }, opsi) {
   if (loading && !data) return <div style={{ padding: '.5rem 0' }}><SkeletonList count={4} /></div>;
-  if (error && error.status === 404) return <BelumTerhubung />;
+  if (error && error.status === 404) return <BelumTerhubung opsi={opsi} />;
   if (error && error.status === 403) {
     return (
       <div className="rpg-pixbox" style={box}>

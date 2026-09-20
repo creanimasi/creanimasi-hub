@@ -635,6 +635,53 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
     } catch (e) { console.error('[RPG] grant:', e.message); res.status(500).json({ error: 'Gagal memberikan achievement' }); }
   });
 
+  // ══════════════════════ PAPAN QUEST ADMIN (Kanban: satu kolom per anggota) ══════════════════════
+  // Baca: pemegang rpg-admin ATAU rpg-pantau (pantau = hanya lihat). Aksi setujui/tolak TIDAK ada di sini —
+  // tetap lewat PATCH /rpg/admin/assignments/:id yang mensyaratkan rpg-admin. Endpoint ini tidak mengubah data.
+  const salahSatuAkses = (...kunci) => async (req, res, next) => {
+    try {
+      const akses = await getPageAccessList(req.user.role_id);
+      if (kunci.some(k => akses.includes(k))) return next();
+      res.status(403).json({ error: 'Anda tidak memiliki akses ke halaman ini' });
+    } catch (e) { console.error('[RPG] cek akses:', e.message); res.status(500).json({ error: 'Gagal memeriksa hak akses' }); }
+  };
+  const SELESAI_HARI = 30; // kartu Selesai lebih lama dari ini tidak dikirim (hanya dihitung)
+
+  router.get('/rpg/admin/papan', authMiddleware, salahSatuAkses('rpg-admin', 'rpg-pantau'), async (req, res) => {
+    try {
+      await syncXp();
+      const hariIni = hariIniWib();
+      const [timR, xpR, kartuR, selesaiR, belumR] = await Promise.all([
+        q('SELECT id, nama, divisi, entitas FROM tim WHERE aktif = TRUE ORDER BY nama'),
+        q('SELECT tim_id, SUM(xp)::int AS xp FROM rpg_xp_event GROUP BY tim_id'),
+        // Aturan tampil sama dengan Papan Quest anggota: quest nonaktif disembunyikan kecuali yang sudah disetujui.
+        q(`SELECT a.id, a.tim_id, a.status, a.progress_pct, a.catatan_anggota, a.catatan_review, a.diajukan_pada, a.ditinjau_pada,
+                  qs.id AS quest_id, qs.judul, qs.deskripsi, qs.tipe, qs.xp, qs.ikon, to_char(qs.tenggat, 'YYYY-MM-DD') AS tenggat
+           FROM rpg_quest_assignment a
+           JOIN rpg_quest qs ON qs.id = a.quest_id
+           JOIN tim t ON t.id = a.tim_id AND t.aktif = TRUE
+           WHERE (qs.aktif = TRUE OR a.status = 'disetujui')
+             AND (a.status <> 'disetujui' OR a.ditinjau_pada >= now() - make_interval(days => $1))
+           ORDER BY qs.tenggat NULLS LAST, a.id`, [SELESAI_HARI]),
+        q("SELECT tim_id, COUNT(*)::int AS n FROM rpg_quest_assignment WHERE status = 'disetujui' GROUP BY tim_id"),
+        q('SELECT COUNT(*)::int AS n FROM rpg_quest qs WHERE qs.aktif = TRUE AND NOT EXISTS (SELECT 1 FROM rpg_quest_assignment a WHERE a.quest_id = qs.id)'),
+      ]);
+      const xpPer = Object.fromEntries(xpR.rows.map(r => [r.tim_id, r.xp]));
+      const selesaiPer = Object.fromEntries(selesaiR.rows.map(r => [r.tim_id, r.n]));
+      const anggota = timR.rows.map(t => ({
+        id: t.id, nama: t.nama, divisi: t.divisi, entitas: t.entitas,
+        level: levelDariXp(xpPer[t.id] || 0), selesaiTotal: selesaiPer[t.id] || 0,
+      }));
+      const kartu = kartuR.rows.map(a => ({
+        id: a.id, timId: a.tim_id, questId: a.quest_id, judul: a.judul, deskripsi: a.deskripsi, tipe: a.tipe, xp: a.xp, ikon: a.ikon,
+        tenggat: a.tenggat, ...labelTenggat(a.tenggat, hariIni),
+        status: a.status, progressPct: a.progress_pct, catatanAnggota: a.catatan_anggota, catatanReview: a.catatan_review,
+        diajukanPada: a.diajukan_pada, ditinjauPada: a.ditinjau_pada,
+      }));
+      res.json({ success: true, data: { selesaiHari: SELESAI_HARI, anggota, kartu, belumDitugaskan: belumR.rows[0].n } });
+    } catch (e) { console.error('[RPG] papan admin:', e.message); res.status(500).json({ error: 'Gagal memuat papan quest' }); }
+  });
+
   // ══════════════════════ PANTAU ANGGOTA (rpg-pantau) ══════════════════════
   // Hanya-baca. Menampilkan kondisi RPG tiap anggota persis seperti yang dilihat anggota itu (fungsi yang
   // sama dipakai ulang), ditambah asal XP dan aktivitas yang namanya tak cocok dengan anggota mana pun.

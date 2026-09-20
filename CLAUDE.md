@@ -96,6 +96,12 @@ idempoten), `rpg_quest`, `rpg_quest_assignment`, `rpg_achievement`, `rpg_achieve
   hanya-baca. Daftar semua anggota aktif + detail per anggota (kartu karakter/stat/quest/pencapaian dibangun oleh fungsi
   yang SAMA dengan milik anggota → identik) + asal XP per sumber + "aktivitas tak dikenali" (nama di laporan/jurnal/
   absensi/Friday Win yang tak cocok dengan anggota mana pun → tak menghasilkan XP; biasanya salah ketik).
+- **Papan Quest admin (Kanban)**: menu Papan Quest untuk pemegang `rpg-admin`/`rpg-pantau` menampilkan satu KOLOM per anggota,
+  kartu = penugasan quest dengan status di dalam kartu (urut: Menunggu → Perlu perbaikan → Aktif → Selesai terlipat, 30 hari).
+  Filter divisi/cari/tipe/status di state React (URL sebagai cermin), kolom anggota tanpa kartu disembunyikan. Data:
+  `GET /rpg/admin/papan` (baca: rpg-admin ATAU rpg-pantau; hanya-baca). Setujui/tolak dari kartu memakai
+  `PATCH /rpg/admin/assignments/:id` (rpg-admin saja, transaksi + 409 bila sudah diproses). Admin TIDAK bisa memindahkan
+  status Aktif/Diajukan (itu hak anggota). Akun tanpa tautan tim punya sakelar "Papan saya" (pesan netral).
 - `tim.tipe`/`kepuasan` TIDAK pernah dikirim ke endpoint anggota (hanya `distribusi tipe` di analytics admin).
 - Akun tanpa tautan ke `tim` → endpoint anggota 404 → UI menampilkan "Belum terhubung".
 

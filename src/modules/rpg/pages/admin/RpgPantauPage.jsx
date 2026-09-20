@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import '../../styles/rpg-components.css';
 import { rpgGuard } from '../../components/RpgState';
 import { usePantau } from '../../hooks/useRpg';
@@ -8,6 +9,7 @@ import CharacterCard from '../../components/CharacterCard';
 import StatMeter from '../../components/StatMeter';
 import AchievementBadge from '../../components/AchievementBadge';
 import QuestCard from '../../components/QuestCard';
+import { lalu, tglPendek } from '../../utils/waktu';
 
 const pixbox = {
   background: 'var(--rpg-bg-2)', border: '2px solid var(--rpg-line)',
@@ -20,17 +22,6 @@ const SORTS = [
   ['terakhirAktif', 'Aktivitas terakhir'], ['nama', 'Nama (A–Z)'],
 ];
 
-// "hari ini" / "kemarin" / "N hari lalu" / "N minggu lalu" dari selisih hari kalender (zona waktu lokal)
-function lalu(iso) {
-  if (!iso) return 'Belum ada';
-  const d = new Date(iso), n = new Date();
-  const sel = Math.round((new Date(n.getFullYear(), n.getMonth(), n.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
-  if (sel <= 0) return 'Hari ini';
-  if (sel === 1) return 'Kemarin';
-  if (sel < 14) return `${sel} hari lalu`;
-  return `${Math.floor(sel / 7)} minggu lalu`;
-}
-const tglPendek = (iso) => new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
 const angka = (n) => Number(n).toLocaleString('id-ID');
 
 function Kotak({ children, style }) {
@@ -180,6 +171,17 @@ export default function RpgPantauPage() {
   const [pilih, setPilih] = useState(null); // { id, nama }
   const [semuaTak, setSemuaTak] = useState(false);
   const { reload } = res;
+  const [sp, setSp] = useSearchParams();
+
+  // tautan dari Papan Quest: /rpg/anggota?id=<timId> membuka detail anggota itu (sekali, lalu param dibuang)
+  useEffect(() => {
+    const id = sp.get('id');
+    if (!id || !res.data) return;
+    const a = res.data.anggota.find(x => String(x.id) === id);
+    if (a) setPilih({ id: a.id, nama: a.nama });
+    const n = new URLSearchParams(sp); n.delete('id'); setSp(n, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [res.data]);
 
   // data berubah kapan saja (aktivitas baru, quest disetujui) — segarkan saat tab browser aktif lagi
   useEffect(() => {
