@@ -117,6 +117,7 @@ export const api = {
 
   // Tim
   getTim:          (semua) => request('GET', `/tim${semua ? '?semua=1' : ''}`),
+  getAkunTanpaTim: ()      => request('GET', '/akun-tanpa-tim'),
   tambahTim:       (data)  => request('POST', '/tim', data),
   updateTim:       (id, data) => request('PATCH', `/tim/${id}`, data),
   nonaktifkanTim:  (id)    => request('DELETE', `/tim/${id}`),

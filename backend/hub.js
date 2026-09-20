@@ -1058,6 +1058,27 @@ router.get('/tim', authMiddleware, async (req, res) => {
   }
 });
 
+// GET /api/hub/akun-tanpa-tim — akun login yang TIDAK tertaut ke baris anggota tim (mis. Super Admin
+// pemilik: tim_id NULL dan namanya tidak ada di tabel tim). GET /tim dibangun dari tabel tim sehingga
+// akun seperti ini tidak pernah muncul di daftar Manajemen User. Kriteria "tertaut" identik dengan
+// join di GET /tim (tim_id, atau nama sama bila tim_id NULL). Hanya pemegang akses Master Data.
+router.get('/akun-tanpa-tim', authMiddleware, requirePageAccess('master-data'), async (req, res) => {
+  try {
+    const r = await hubPool.query(`
+      SELECT u.id, u.nama, u.username, u.email, u.aktif, u.role_id, r.key AS role_key, r.nama AS role_nama, u.last_seen
+      FROM hub_users u
+      LEFT JOIN roles r ON r.id = u.role_id
+      WHERE NOT EXISTS (
+        SELECT 1 FROM tim t WHERE t.id = u.tim_id OR (u.tim_id IS NULL AND t.nama = u.nama)
+      )
+      ORDER BY (r.is_protected IS TRUE) DESC, u.nama`);
+    res.json({ success: true, data: r.rows });
+  } catch (e) {
+    console.error('GET /akun-tanpa-tim:', e.message);
+    res.status(500).json({ error: 'Gagal mengambil akun sistem' });
+  }
+});
+
 // POST /api/hub/tim — tambah anggota + buat akun sekaligus
 router.post('/tim', authMiddleware, requirePageAccess('master-data'), async (req, res) => {
   const { nama, divisi, level, tipe, entitas, username, password, role_id, email, tanggal_lahir } = req.body;

@@ -376,7 +376,16 @@ function ManajemenUserTab({ roles }) {
   const load = useCallback(async () => {
     setLoading(true);
     invalidateTimCache(); // load dipanggil setelah tiap perubahan — komponen lain ikut dapat data terbaru
-    try { const res = await api.getTim(true); setSemua(res.data); }
+    try {
+      // Akun tanpa baris anggota (mis. Super Admin pemilik) diambil terpisah; kalau gagal, daftar anggota tetap tampil.
+      const [res, sistem] = await Promise.all([api.getTim(true), api.getAkunTanpaTim().catch(() => ({ data: [] }))]);
+      const akunSistem = (sistem.data || []).map(u => ({
+        id: `akun-${u.id}`, user_id: u.id, akunSistem: true, nama: u.nama, username: u.username, email: u.email,
+        role_id: u.role_id, role_key: u.role_key, role_nama: u.role_nama, aktif: u.aktif,
+        divisi: null, level: null, entitas: null, tanggal_lahir: null,
+      }));
+      setSemua([...akunSistem, ...res.data]);
+    }
     catch { showToast('Gagal memuat data anggota', 'error'); }
     finally { setLoading(false); }
   }, [showToast]);
@@ -512,13 +521,16 @@ function ManajemenUserTab({ roles }) {
                       {!a.aktif && <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 10, background: 'var(--red-light)', color: 'var(--red)' }}>Nonaktif</span>}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 2 }}>
-                      {a.username ? `@${a.username} · ` : ''}{a.divisi || '—'} · {a.level || '—'}
+                      {a.username ? `@${a.username} · ` : ''}
+                      {a.akunSistem ? 'Akun sistem · tidak tertaut ke data anggota tim' : `${a.divisi || '—'} · ${a.level || '—'}`}
                     </div>
                     {detailLine && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>{detailLine}</div>}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  {a.aktif ? (
+                  {a.akunSistem ? (
+                    <span title="Ubah, reset password, dan nonaktifkan hanya tersedia untuk akun yang tertaut ke data anggota tim" style={{ fontSize: 11, color: 'var(--text-3)' }}>Hanya lihat</span>
+                  ) : a.aktif ? (
                     <>
                       <button onClick={() => setModal({ type: 'edit', data: a })} style={{ padding: '5px 11px', borderRadius: 7, fontSize: 12, fontWeight: 500, border: '1px solid var(--border-2)', background: 'var(--surface)', cursor: 'pointer' }}>Edit</button>
                       {a.username ? (
