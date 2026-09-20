@@ -102,6 +102,13 @@ idempoten), `rpg_quest`, `rpg_quest_assignment`, `rpg_achievement`, `rpg_achieve
   `GET /rpg/admin/papan` (baca: rpg-admin ATAU rpg-pantau; hanya-baca). Setujui/tolak dari kartu memakai
   `PATCH /rpg/admin/assignments/:id` (rpg-admin saja, transaksi + 409 bila sudah diproses). Admin TIDAK bisa memindahkan
   status Aktif/Diajukan (itu hak anggota). Akun tanpa tautan tim punya sakelar "Papan saya" (pesan netral).
+- **Urgensi quest 1–7** (`rpg_quest.urgensi`, SMALLINT NOT NULL DEFAULT 4, CHECK 1–7; 7 = paling mendesak; nama: Santai,
+  Rendah, Agak rendah, Normal, Tinggi, Mendesak, Kritis). Konstanta `URGENSI_*` di `CONFIG` rpg.js; daftar nama/keterangan +
+  warna (`--rpg-urg-1..7`, skala panas, semua ≥4,5:1) di `src/modules/rpg/utils/urgensi.js` + `rpg-tokens.css`. TIDAK
+  memengaruhi XP. Memengaruhi urutan (papan anggota & kartu Kanban non-Selesai: urgensi desc) dan filter Kanban "Urgensi ≥ N"
+  (`?urg=`). Warna = saluran terpisah dari warna status; angka + batang sinyal (`UrgensiChip`) adalah isyarat utama karena
+  beberapa pasangan warna berdekatan bagi penderita buta warna. Jangan beri `opacity` pada baris yang berisi teks (menurunkan
+  kontras di bawah 4,5:1).
 - `tim.tipe`/`kepuasan` TIDAK pernah dikirim ke endpoint anggota (hanya `distribusi tipe` di analytics admin).
 - Akun tanpa tautan ke `tim` → endpoint anggota 404 → UI menampilkan "Belum terhubung".
 

@@ -27,6 +27,8 @@ const CONFIG = {
   STREAK_LOOKBACK_HARI: 90,
   SYNC_MIN_INTERVAL_MS: 60 * 1000,
   IKON_QUEST: ['sync', 'board', 'shield', 'badge', 'target'],
+  // Urgensi quest 1–7 (7 = paling mendesak). Tidak memengaruhi XP; hanya pengurutan & tampilan.
+  URGENSI_MIN: 1, URGENSI_MAX: 7, URGENSI_DEFAULT: 4,
 };
 
 const ACHIEVEMENTS_SEED = [
@@ -128,6 +130,9 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
         tim_id INTEGER NOT NULL REFERENCES tim(id) ON DELETE CASCADE,
         code VARCHAR(30) NOT NULL REFERENCES rpg_achievement(code) ON DELETE CASCADE,
         unlocked_at TIMESTAMPTZ DEFAULT NOW(), PRIMARY KEY (tim_id, code))`);
+      // Urgensi quest: tambah kolom bila belum ada. Baris lama otomatis bernilai default (4 = Normal); CHECK 1–7 di level DB.
+      await q(`ALTER TABLE rpg_quest ADD COLUMN IF NOT EXISTS urgensi SMALLINT NOT NULL DEFAULT ${CONFIG.URGENSI_DEFAULT}
+               CHECK (urgensi BETWEEN ${CONFIG.URGENSI_MIN} AND ${CONFIG.URGENSI_MAX})`);
       for (const [code, label, deskripsi, tipe, nilai, urutan] of ACHIEVEMENTS_SEED) {
         await q(`INSERT INTO rpg_achievement (code, label, deskripsi, syarat_tipe, syarat_nilai, urutan)
                  VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (code) DO NOTHING`, [code, label, deskripsi, tipe, nilai, urutan]);
@@ -298,10 +303,10 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
     const hariIni = hariIniWib();
     const [asg, tanggal] = await Promise.all([
       q(`SELECT a.id, a.status, a.progress_pct, a.catatan_review, a.ditinjau_pada, qs.id AS quest_id, qs.judul, qs.deskripsi,
-                qs.tipe, qs.xp, qs.ikon, to_char(qs.tenggat, 'YYYY-MM-DD') AS tenggat
+                qs.tipe, qs.xp, qs.ikon, qs.urgensi, to_char(qs.tenggat, 'YYYY-MM-DD') AS tenggat
          FROM rpg_quest_assignment a JOIN rpg_quest qs ON qs.id = a.quest_id
          WHERE a.tim_id = $1 AND (qs.aktif = TRUE OR a.status = 'disetujui')
-         ORDER BY qs.tenggat NULLS LAST, a.id`, [tim.id]),
+         ORDER BY qs.urgensi DESC, qs.tenggat NULLS LAST, a.id`, [tim.id]),
       tanggalLaporan(tim.nama),
     ]);
     const streak = hitungStreak(tanggal, hariIni);
@@ -311,7 +316,7 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
       if (a.status === 'diajukan') due = { dueLabel: 'Menunggu persetujuan admin', warn: false };
       else if (a.status === 'ditolak') due = { dueLabel: 'Ditolak' + (a.catatan_review ? ': ' + a.catatan_review : ' — perbaiki lalu ajukan lagi'), warn: true };
       else due = labelTenggat(a.tenggat, hariIni);
-      return { id: a.id, type: a.ikon, title: a.judul, deskripsi: a.deskripsi, xpReward: a.xp, status: a.status, progressPct: a.progress_pct, reviewedAt: a.ditinjau_pada, ...due };
+      return { id: a.id, type: a.ikon, title: a.judul, deskripsi: a.deskripsi, xpReward: a.xp, status: a.status, progressPct: a.progress_pct, reviewedAt: a.ditinjau_pada, urgensi: a.urgensi, ...due };
     };
     const aktif = asg.rows.filter(a => a.status !== 'disetujui');
     const harian = {
@@ -476,7 +481,7 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
   router.get('/rpg/admin/quests', ...adminOnly, async (req, res) => {
     try {
       const r = await q(`
-        SELECT qs.id, qs.judul, qs.deskripsi, qs.tipe, qs.xp, qs.ikon, qs.aktif, to_char(qs.tenggat, 'YYYY-MM-DD') AS tenggat, qs.created_at,
+        SELECT qs.id, qs.judul, qs.deskripsi, qs.tipe, qs.xp, qs.ikon, qs.urgensi, qs.aktif, to_char(qs.tenggat, 'YYYY-MM-DD') AS tenggat, qs.created_at,
                COUNT(a.id)::int AS ditugaskan,
                COUNT(a.id) FILTER (WHERE a.status = 'diajukan')::int AS menunggu,
                COUNT(a.id) FILTER (WHERE a.status = 'disetujui')::int AS selesai
@@ -501,6 +506,13 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
       const xp = Number(b.xp);
       if (!Number.isInteger(xp) || xp < 1 || xp > 1000) return { error: 'XP harus bilangan bulat 1–1000' };
       out.xp = xp;
+    }
+    if (b.urgensi !== undefined) {
+      // hanya angka atau string angka murni (Number(true)/Number([5]) akan lolos tanpa pengecekan tipe)
+      const mentah = b.urgensi;
+      const u = (typeof mentah === 'number' || (typeof mentah === 'string' && /^\d+$/.test(mentah.trim()))) ? Number(mentah) : NaN;
+      if (!Number.isInteger(u) || u < CONFIG.URGENSI_MIN || u > CONFIG.URGENSI_MAX) return { error: `Urgensi harus bilangan bulat ${CONFIG.URGENSI_MIN}–${CONFIG.URGENSI_MAX}` };
+      out.urgensi = u;
     }
     if (b.deskripsi !== undefined) out.deskripsi = String(b.deskripsi || '').slice(0, 2000) || null;
     if (b.tenggat !== undefined) {
@@ -532,8 +544,8 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
     try {
       await client.query('BEGIN');
       const r = await client.query(
-        `INSERT INTO rpg_quest (judul, deskripsi, tipe, xp, tenggat, ikon, dibuat_oleh) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-        [out.judul, out.deskripsi ?? null, out.tipe, out.xp, out.tenggat ?? null, out.ikon || (out.tipe === 'proyek' ? 'shield' : 'target'), req.user.nama]);
+        `INSERT INTO rpg_quest (judul, deskripsi, tipe, xp, tenggat, ikon, urgensi, dibuat_oleh) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+        [out.judul, out.deskripsi ?? null, out.tipe, out.xp, out.tenggat ?? null, out.ikon || (out.tipe === 'proyek' ? 'shield' : 'target'), out.urgensi ?? CONFIG.URGENSI_DEFAULT, req.user.nama]);
       const ditugaskan = await tugaskan(client, r.rows[0].id, req.body.tim_ids);
       await client.query('COMMIT');
       res.status(201).json({ success: true, data: { id: r.rows[0].id, ditugaskan } });
@@ -568,7 +580,7 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
   router.get('/rpg/admin/review', ...adminOnly, async (req, res) => {
     try {
       const r = await q(`
-        SELECT a.id, a.progress_pct, a.catatan_anggota, a.diajukan_pada, qs.id AS quest_id, qs.judul, qs.xp, qs.tipe,
+        SELECT a.id, a.progress_pct, a.catatan_anggota, a.diajukan_pada, qs.id AS quest_id, qs.judul, qs.xp, qs.tipe, qs.urgensi,
                t.id AS tim_id, t.nama, t.divisi
         FROM rpg_quest_assignment a JOIN rpg_quest qs ON qs.id = a.quest_id JOIN tim t ON t.id = a.tim_id
         WHERE a.status = 'diajukan' ORDER BY a.diajukan_pada`);
@@ -656,7 +668,7 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
         q('SELECT tim_id, SUM(xp)::int AS xp FROM rpg_xp_event GROUP BY tim_id'),
         // Aturan tampil sama dengan Papan Quest anggota: quest nonaktif disembunyikan kecuali yang sudah disetujui.
         q(`SELECT a.id, a.tim_id, a.status, a.progress_pct, a.catatan_anggota, a.catatan_review, a.diajukan_pada, a.ditinjau_pada,
-                  qs.id AS quest_id, qs.judul, qs.deskripsi, qs.tipe, qs.xp, qs.ikon, to_char(qs.tenggat, 'YYYY-MM-DD') AS tenggat
+                  qs.id AS quest_id, qs.judul, qs.deskripsi, qs.tipe, qs.xp, qs.ikon, qs.urgensi, to_char(qs.tenggat, 'YYYY-MM-DD') AS tenggat
            FROM rpg_quest_assignment a
            JOIN rpg_quest qs ON qs.id = a.quest_id
            JOIN tim t ON t.id = a.tim_id AND t.aktif = TRUE
@@ -673,7 +685,7 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
         level: levelDariXp(xpPer[t.id] || 0), selesaiTotal: selesaiPer[t.id] || 0,
       }));
       const kartu = kartuR.rows.map(a => ({
-        id: a.id, timId: a.tim_id, questId: a.quest_id, judul: a.judul, deskripsi: a.deskripsi, tipe: a.tipe, xp: a.xp, ikon: a.ikon,
+        id: a.id, timId: a.tim_id, questId: a.quest_id, judul: a.judul, deskripsi: a.deskripsi, tipe: a.tipe, xp: a.xp, ikon: a.ikon, urgensi: a.urgensi,
         tenggat: a.tenggat, ...labelTenggat(a.tenggat, hariIni),
         status: a.status, progressPct: a.progress_pct, catatanAnggota: a.catatan_anggota, catatanReview: a.catatan_review,
         diajukanPada: a.diajukan_pada, ditinjauPada: a.ditinjau_pada,

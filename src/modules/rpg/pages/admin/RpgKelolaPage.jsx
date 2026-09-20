@@ -4,6 +4,9 @@ import { rpgGuard } from '../../components/RpgState';
 import { useAdminQuests, useAdminReview, useAdminAchievements } from '../../hooks/useRpg';
 import { api } from '../../../../services/api';
 import { useToast } from '../../../../hooks/useToast';
+import UrgensiChip from '../../components/UrgensiChip';
+import UrgensiPicker from '../../components/UrgensiPicker';
+import { URGENSI_DEFAULT } from '../../utils/urgensi';
 
 const pixbox = {
   background: 'var(--rpg-bg-2)', border: '2px solid var(--rpg-line)',
@@ -162,7 +165,7 @@ function QuestFormModal({ quest, anggota, onClose, onSaved }) {
   const edit = !!quest;
   const [f, setF] = useState({
     judul: quest?.judul || '', deskripsi: quest?.deskripsi || '', tipe: quest?.tipe || 'proyek',
-    xp: quest?.xp ?? 100, tenggat: quest?.tenggat || '', ikon: quest?.ikon || 'target',
+    xp: quest?.xp ?? 100, tenggat: quest?.tenggat || '', ikon: quest?.ikon || 'target', urgensi: quest?.urgensi ?? URGENSI_DEFAULT,
   });
   const [terpilih, setTerpilih] = useState(new Set());
   const [saving, setSaving] = useState(false);
@@ -176,7 +179,7 @@ function QuestFormModal({ quest, anggota, onClose, onSaved }) {
     if (!Number.isInteger(xp) || xp < 1 || xp > 1000) return setErr('XP harus bilangan bulat 1–1000');
     setErr(''); setSaving(true);
     try {
-      const body = { judul: f.judul.trim(), deskripsi: f.deskripsi, tipe: f.tipe, xp, tenggat: f.tenggat || null, ikon: f.ikon };
+      const body = { judul: f.judul.trim(), deskripsi: f.deskripsi, tipe: f.tipe, xp, tenggat: f.tenggat || null, ikon: f.ikon, urgensi: f.urgensi };
       if (edit) await api.rpgAdminUbahQuest(quest.id, body);
       else await api.rpgAdminBuatQuest({ ...body, tim_ids: [...terpilih] });
       showToast(edit ? 'Quest diperbarui' : `Quest dibuat${terpilih.size ? ` dan ditugaskan ke ${terpilih.size} anggota` : ''}`);
@@ -203,6 +206,10 @@ function QuestFormModal({ quest, anggota, onClose, onSaved }) {
           <Field label="Ikon">
             <select style={inputStyle} value={f.ikon} onChange={set('ikon')}>{IKON.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
           </Field>
+        </div>
+        <div>
+          <span style={{ ...hud, fontSize: '1rem', color: 'var(--rpg-ink-dim)', display: 'block', marginBottom: '.35rem' }}>Urgensi <span style={{ color: 'var(--rpg-ink-faint)' }}>(7 = paling mendesak; tidak memengaruhi XP)</span></span>
+          <UrgensiPicker nilai={f.urgensi} onChange={(u) => setF(s => ({ ...s, urgensi: u }))} />
         </div>
         {edit
           ? <p style={{ ...hud, fontSize: '.95rem', color: 'var(--rpg-ink-faint)', margin: 0 }}>Perubahan XP hanya berlaku untuk persetujuan berikutnya; XP yang sudah diberikan tidak berubah. Gunakan tombol “Tugaskan” untuk menambah penerima.</p>
@@ -269,7 +276,7 @@ function QuestTab({ anggota, onChanged }) {
         <div key={q.id} className="rpg-pixbox" style={{ ...pixbox, padding: '.9rem 1.1rem', ...(q.aktif ? {} : { borderStyle: 'dashed', borderColor: 'var(--rpg-line-dim)' }) }}>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: '.98rem', color: 'var(--rpg-ink)' }}>{q.judul}</div>
+              <div style={{ fontWeight: 600, fontSize: '.98rem', color: 'var(--rpg-ink)', display: 'flex', gap: '.6rem', alignItems: 'center', flexWrap: 'wrap' }}>{q.judul} <UrgensiChip nilai={q.urgensi} tampilNama /></div>
               <div style={{ ...hud, fontSize: '1rem', color: 'var(--rpg-ink-faint)', marginTop: '.25rem' }}>
                 {TIPE_LABEL[q.tipe]} · <span style={{ color: 'var(--rpg-success)' }}>+{q.xp} XP</span> · {q.tenggat ? `tenggat ${q.tenggat}` : 'tanpa tenggat'}{!q.aktif && ' · NONAKTIF'}
               </div>
@@ -322,7 +329,7 @@ function ReviewTab({ res, onChanged }) {
         <div key={r.id} className="rpg-pixbox" style={{ ...pixbox, padding: '.9rem 1.1rem' }}>
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
             <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: '.98rem' }}>{r.judul} <span style={{ ...hud, color: 'var(--rpg-success)' }}>+{r.xp} XP</span></div>
+              <div style={{ fontWeight: 600, fontSize: '.98rem' }}>{r.judul} <span style={{ ...hud, color: 'var(--rpg-success)' }}>+{r.xp} XP</span> <UrgensiChip nilai={r.urgensi} /></div>
               <div style={{ ...hud, fontSize: '1rem', color: 'var(--rpg-ink-dim)', marginTop: '.2rem' }}>
                 {r.nama} · {r.divisi} · diajukan {new Date(r.diajukan_pada).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
               </div>

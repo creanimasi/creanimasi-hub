@@ -33,6 +33,15 @@
   --rpg-stat-inisiatif: #b98cf0;
   --rpg-stat-konsistensi: #4ade80;
 
+  /* --- Urgensi quest 1–7 (skala panas: abu → biru → toska → hijau → kuning → oranye → merah) --- */
+  --rpg-urg-1: #aab3d6;
+  --rpg-urg-2: #5aa9ff;
+  --rpg-urg-3: #2dd4bf;
+  --rpg-urg-4: #8be04e;
+  --rpg-urg-5: #ffd23f;
+  --rpg-urg-6: #ff9a3c;
+  --rpg-urg-7: #ff6b80;
+
   /* --- Semantik --- */
   --rpg-success: #4ade80;
   --rpg-warn: #ffa64c;

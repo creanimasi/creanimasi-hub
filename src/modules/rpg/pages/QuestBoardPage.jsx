@@ -113,6 +113,7 @@ function PapanSaya({ atas, opsiGuard }) {
                   dueLabel={q.dueLabel}
                   warn={q.warn}
                   status={q.status}
+                  urgensi={q.urgensi}
                   progressPct={q.otomatis ? undefined : q.progressPct}
                   busy={busyId === q.id}
                   onProgress={q.otomatis ? undefined : (pct) => aksi(q.id, () => api.rpgProgress(q.id, pct))}
@@ -131,7 +132,7 @@ function PapanSaya({ atas, opsiGuard }) {
                 <p style={{ fontFamily: 'var(--rpg-font-hud)', color: 'var(--rpg-ink-faint)', margin: 0 }}>Belum ada quest yang disetujui.</p>
               )}
               {data.completed.map(q => (
-                <div key={q.id} className="rpg-pixbox" style={{ ...pixbox, padding: '.7rem 1.1rem', display: 'flex', alignItems: 'center', gap: '.8rem', opacity: .72 }}>
+                <div key={q.id} className="rpg-pixbox" style={{ ...pixbox, padding: '.7rem 1.1rem', display: 'flex', alignItems: 'center', gap: '.8rem' }}>
                   <div style={{ width: 22, height: 22, flex: 'none', background: 'var(--rpg-success)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <svg viewBox="0 0 24 24" fill="none" strokeWidth="3" strokeLinecap="square" strokeLinejoin="miter" stroke="#08240f" width={13} height={13}><path d="m5 12 5 5 9-10" /></svg>
                   </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import UrgensiChip from './UrgensiChip';
 
 const STATUS_BADGE = {
   diajukan: { text: 'MENUNGGU', color: 'var(--rpg-gold)' },
@@ -12,7 +13,7 @@ const STATUS_BADGE = {
 //   onComplete → tombol "Selesai" (atau "Ajukan lagi" bila ditolak); onProgress(pct) → slider progres
 export default function QuestCard({
   variant = 'compact', title, xpReward, dueLabel, progressPct, warn, icon, status = 'aktif',
-  onComplete, onProgress, busy = false,
+  onComplete, onProgress, busy = false, urgensi,
 }) {
   const [pct, setPct] = useState(progressPct ?? 0);
   useEffect(() => { setPct(progressPct ?? 0); }, [progressPct]);
@@ -47,6 +48,7 @@ export default function QuestCard({
             marginTop: '.25rem', display: 'flex', gap: '.9rem', flexWrap: 'wrap',
           }}>
             <span style={{ color: warn ? 'var(--rpg-warn)' : 'var(--rpg-ink-faint)' }}>{dueLabel}</span>
+            {urgensi ? <UrgensiChip nilai={urgensi} tampilNama /> : null}
           </div>
           {typeof progressPct === 'number' && (
             onProgress && bisaUbah ? (

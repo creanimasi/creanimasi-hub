@@ -8,6 +8,8 @@ import { useToast } from '../../../../hooks/useToast';
 import { useAuth } from '../../../../hooks/useAuth';
 import RpgModal from '../../components/RpgModal';
 import { lalu } from '../../utils/waktu';
+import UrgensiChip from '../../components/UrgensiChip';
+import { URGENSI } from '../../utils/urgensi';
 
 const hud = { fontFamily: 'var(--rpg-font-hud)' };
 const STATUS = {
@@ -21,7 +23,7 @@ const LEBAR_KOLOM = 290;
 const pesanError = (e) => (e?.message || 'Terjadi kesalahan').replace(/^\d{3}: /, '');
 const inisial = (nama) => nama.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
 
-const FILTER_AWAL = { divisi: [], q: '', tipe: 'Semua', kosong: false, status: URUT }; // divisi kosong = semua divisi
+const FILTER_AWAL = { divisi: [], q: '', tipe: 'Semua', urg: 1, kosong: false, status: URUT }; // divisi kosong = semua divisi
 
 // Filter dibaca dari URL saat halaman dibuka (tautan/bookmark), atau dari divisi terakhir yang diingat.
 function filterDariUrl(params) {
@@ -31,6 +33,7 @@ function filterDariUrl(params) {
   if (!divisi) { try { divisi = localStorage.getItem('rpg_papan_divisi') || ''; } catch { /* abaikan */ } }
   return {
     divisi: [...new Set(divisi.split(',').map(x => x.trim()).filter(Boolean))], q: params.get('q') || '', tipe: params.get('tipe') || 'Semua',
+    urg: (() => { const u = parseInt(params.get('urg'), 10); return u >= 2 && u <= 7 ? u : 1; })(),
     kosong: params.get('kosong') === '1', status: dari.length ? URUT.filter(x => dari.includes(x)) : URUT,
   };
 }
@@ -53,6 +56,9 @@ function urutKartu(arr) {
   return [...arr].sort((a, b) => {
     const s = URUT.indexOf(a.status) - URUT.indexOf(b.status);
     if (s) return s;
+    if (a.status === 'disetujui') return t(b.ditinjauPada) - t(a.ditinjauPada) || b.id - a.id;
+    const u = (b.urgensi || 0) - (a.urgensi || 0); // urgensi tertinggi di atas
+    if (u) return u;
     if (a.status === 'diajukan') return t(a.diajukanPada) - t(b.diajukanPada);
     if (a.status === 'aktif') return t(a.tenggat) - t(b.tenggat) || a.id - b.id;
     return t(b.ditinjauPada) - t(a.ditinjauPada) || b.id - a.id;
@@ -120,7 +126,10 @@ function Kartu({ k, bisaAksi, onSetujui, onTolak }) {
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem', alignItems: 'flex-start' }}>
         <span style={{ fontWeight: 600, fontSize: '.92rem', lineHeight: 1.3, color: 'var(--rpg-ink)', minWidth: 0, overflowWrap: 'anywhere' }}>{k.judul}</span>
-        <span style={{ ...hud, fontSize: '1.05rem', color: 'var(--rpg-success)', whiteSpace: 'nowrap' }}>+{k.xp} XP</span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '.25rem', flex: 'none' }}>
+          <span style={{ ...hud, fontSize: '1.05rem', color: 'var(--rpg-success)', whiteSpace: 'nowrap' }}>+{k.xp} XP</span>
+          <UrgensiChip nilai={k.urgensi} />
+        </div>
       </div>
       <div style={{ ...hud, fontSize: '.9rem', display: 'flex', gap: '.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
         <span style={{ color: st.warna, border: `2px solid ${st.warna}`, padding: '0 .35rem', fontFamily: 'var(--rpg-font-display)', fontSize: '.5rem', lineHeight: 1.8 }}>{st.label}</span>
@@ -224,13 +233,14 @@ export default function PapanQuestAdmin({ atas }) {
   // Filter disimpan di state React (pembaruan fungsional, selalu dari nilai terbaru → tidak ada perubahan yang
   // saling menimpa); URL hanya cermin agar bisa dibagikan / di-bookmark.
   const [filter, setFilter] = useState(() => filterDariUrl(sp));
-  const { divisi, q: cari, tipe, kosong } = filter;
+  const { divisi, q: cari, tipe, kosong, urg } = filter;
   const statusSet = useMemo(() => new Set(filter.status), [filter.status]);
   const ubah = (kv) => setFilter(prev => {
     const n = { ...prev };
     if ('divisi' in kv) n.divisi = kv.divisi || [];
     if ('q' in kv) n.q = kv.q || '';
     if ('tipe' in kv) n.tipe = kv.tipe || 'Semua';
+    if ('urg' in kv) n.urg = Number(kv.urg) >= 2 && Number(kv.urg) <= 7 ? Number(kv.urg) : 1;
     if ('kosong' in kv) n.kosong = kv.kosong === '1';
     return n;
   });
@@ -241,10 +251,11 @@ export default function PapanQuestAdmin({ atas }) {
 
   useEffect(() => {
     const n = new URLSearchParams(window.location.search);
-    ['divisi', 'q', 'tipe', 'kosong', 'status'].forEach(kk => n.delete(kk));
+    ['divisi', 'q', 'tipe', 'urg', 'kosong', 'status'].forEach(kk => n.delete(kk));
     if (filter.divisi.length) n.set('divisi', filter.divisi.join(','));
     if (filter.q) n.set('q', filter.q);
     if (filter.tipe !== 'Semua') n.set('tipe', filter.tipe);
+    if (filter.urg > 1) n.set('urg', String(filter.urg));
     if (filter.kosong) n.set('kosong', '1');
     if (filter.status.length !== URUT.length) n.set('status', filter.status.join(','));
     if (n.toString() !== window.location.search.replace(/^\?/, '')) setSp(n, { replace: true });
@@ -275,17 +286,17 @@ export default function PapanQuestAdmin({ atas }) {
   }, [d, divisiDipilih, cari]);
   const hitung = useMemo(() => {
     const h = { diajukan: 0, ditolak: 0, aktif: 0, disetujui: 0 };
-    cocok.forEach(a => (kartuPer[a.id] || []).forEach(k => { if (tipe === 'Semua' || k.tipe === tipe) h[k.status] += 1; }));
+    cocok.forEach(a => (kartuPer[a.id] || []).forEach(k => { if ((tipe === 'Semua' || k.tipe === tipe) && k.urgensi >= urg) h[k.status] += 1; }));
     return h;
-  }, [cocok, kartuPer, tipe]);
+  }, [cocok, kartuPer, tipe, urg]);
 
   const kolom = useMemo(() => cocok
     .map(a => {
       const semua = kartuPer[a.id] || [];
-      const kartu = urutKartu(semua.filter(k => statusSet.has(k.status) && (tipe === 'Semua' || k.tipe === tipe)));
+      const kartu = urutKartu(semua.filter(k => statusSet.has(k.status) && (tipe === 'Semua' || k.tipe === tipe) && k.urgensi >= urg));
       return { a, kartu, menunggu: semua.filter(k => k.status === 'diajukan').length };
     })
-    .filter(k => k.kartu.length > 0 || kosong), [cocok, kartuPer, statusSet, tipe, kosong]);
+    .filter(k => k.kartu.length > 0 || kosong), [cocok, kartuPer, statusSet, tipe, urg, kosong]);
   const tersembunyi = cocok.length - kolom.length;
 
   const grup = useMemo(() => {
@@ -348,6 +359,11 @@ export default function PapanQuestAdmin({ atas }) {
             <select aria-label="Filter tipe quest" value={tipe} onChange={e => ubah({ tipe: e.target.value === 'Semua' ? null : e.target.value })}
               style={{ ...hud, fontSize: '1.05rem', width: 'auto', color: 'var(--rpg-ink)', background: 'var(--rpg-bg)', border: '2px solid var(--rpg-line-dim)', padding: '.35rem .6rem' }}>
               <option value="Semua">Semua tipe</option><option value="proyek">Proyek</option><option value="sekali">Sekali</option>
+            </select>
+            <select aria-label="Filter urgensi minimum" value={urg} onChange={e => ubah({ urg: e.target.value })}
+              style={{ ...hud, fontSize: '1.05rem', width: 'auto', color: 'var(--rpg-ink)', background: 'var(--rpg-bg)', border: `2px solid ${urg > 1 ? 'var(--rpg-gold)' : 'var(--rpg-line-dim)'}`, padding: '.35rem .6rem' }}>
+              <option value={1}>Semua urgensi</option>
+              {URGENSI.filter(u => u.n >= 3).map(u => <option key={u.n} value={u.n}>{u.n === 7 ? `Urgensi 7 (${u.nama})` : `Urgensi ≥ ${u.n} (${u.nama}+)`}</option>)}
             </select>
             <label style={{ ...hud, fontSize: '1.02rem', color: 'var(--rpg-ink-dim)', display: 'flex', gap: '.4rem', alignItems: 'center', cursor: 'pointer' }}>
               <input type="checkbox" checked={kosong} onChange={e => ubah({ kosong: e.target.checked ? '1' : null })} />
