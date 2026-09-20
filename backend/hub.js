@@ -2475,6 +2475,42 @@ router.delete('/laporan-admin/:id', authMiddleware, requirePageAccessOrAdminDivi
     await pool.query(`ALTER TABLE meta_ads_brands ADD COLUMN IF NOT EXISTS token_env VARCHAR(60)`);
     // Mata uang ad account (IDR/USD/…), terdeteksi otomatis dari Meta saat sync. NULL = belum terdeteksi (dianggap IDR).
     await pool.query(`ALTER TABLE meta_ads_brands ADD COLUMN IF NOT EXISTS mata_uang VARCHAR(10)`);
+
+    // Laporan Ads Mingguan (PDF slide): profil tampilan per brand, isian manual per brand+bulan, dan gambar.
+    // Gambar (data URL) disimpan di tabel sendiri & diunggah satu per satu supaya request tetap kecil.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS laporan_ads_profil (
+        brand_id    INTEGER PRIMARY KEY REFERENCES meta_ads_brands(id) ON DELETE CASCADE,
+        judul       VARCHAR(100),
+        ig_handle   VARCHAR(100),
+        updated_at  TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS laporan_ads_bulan (
+        id          SERIAL PRIMARY KEY,
+        brand_id    INTEGER NOT NULL REFERENCES meta_ads_brands(id) ON DELETE CASCADE,
+        bulan       CHAR(7) NOT NULL,
+        kpi         JSONB NOT NULL DEFAULT '{}',
+        mingguan    JSONB NOT NULL DEFAULT '[]',
+        kreatif     JSONB NOT NULL DEFAULT '[]',
+        updated_by  VARCHAR(100),
+        updated_at  TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (brand_id, bulan)
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS laporan_ads_gambar (
+        id          SERIAL PRIMARY KEY,
+        brand_id    INTEGER NOT NULL REFERENCES meta_ads_brands(id) ON DELETE CASCADE,
+        bulan       CHAR(7),
+        minggu      SMALLINT,
+        jenis       VARCHAR(12) NOT NULL,
+        data        TEXT NOT NULL,
+        created_at  TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_laporan_ads_gambar_brand ON laporan_ads_gambar (brand_id, bulan)`);
     // Hapus hpp_persen dari meta_ads_reports (tidak lagi dipakai per-hari)
     // Tidak drop kolom agar data lama aman — cukup abaikan di logic baru
   } catch (e) { console.error('Meta Ads migration:', e.message); }
@@ -2760,6 +2796,186 @@ router.post('/meta-ads/sync-all', authMiddleware, requirePageAccess('ads-perform
     }));
     res.json({ ok: true, tanggal: tgl, summary });
   } catch (e) { console.error('Gagal sync all:', e.message); res.status(500).json({ error: 'Gagal sync all' }); }
+});
+
+// ── LAPORAN ADS MINGGUAN (PDF slide) ─────────────────────────────────────────
+// Angka performa dihitung otomatis dari meta_ads_insights + meta_ads_reports per "minggu" tetap:
+// M1 = tgl 1–7, M2 = 8–14, M3 = 15–21, M4 = 22–akhir bulan. Sisanya isian manual per brand+bulan.
+// Hak akses memakai page key 'ads-performance' (bagian dari modul Ads).
+
+const RE_BULAN  = /^\d{4}-(0[1-9]|1[0-2])$/;
+const RE_GAMBAR = /^data:image\/(png|jpe?g|webp);base64,/;
+const GAMBAR_MAKS_CHAR = 1_400_000;
+const JENIS_GAMBAR = ['maskot', 'kreatif', 'proyek', 'portofolio'];
+const GAMBAR_MAKS = { kreatif: 6, proyek: 8, portofolio: 8 }; // per brand+bulan (proyek/portofolio: per minggu)
+
+const laAngka = (v, maks = 1e9) => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? Math.min(n, maks) : 0; };
+const laTeks  = (v, maks = 300) => String(v ?? '').trim().slice(0, maks);
+const laDaftar = (v) => (Array.isArray(v) ? v : []).map(x => laTeks(x)).filter(Boolean).slice(0, 20);
+
+function bersihkanLaporanAds({ kpi, mingguan, kreatif }) {
+  const k = kpi || {};
+  return {
+    kpi: { impresi: laAngka(k.impresi), ctr: laAngka(k.ctr, 100), profile_visit: laAngka(k.profile_visit), chat_masuk: laAngka(k.chat_masuk), order: laAngka(k.order) },
+    mingguan: Array.from({ length: 4 }, (_, i) => {
+      const m = (Array.isArray(mingguan) && mingguan[i]) || {};
+      const oq = m.order_queue || {};
+      return {
+        profile_visit: laAngka(m.profile_visit), chat_masuk: laAngka(m.chat_masuk),
+        todo: laDaftar(m.todo), kendala: laDaftar(m.kendala),
+        order_queue: { in_progress: laAngka(oq.in_progress), revisi: laAngka(oq.revisi), ready: laAngka(oq.ready) },
+        flow_new: laAngka(m.flow_new), flow_complete: laAngka(m.flow_complete),
+      };
+    }),
+    kreatif: (Array.isArray(kreatif) ? kreatif : []).slice(0, GAMBAR_MAKS.kreatif).map(c => ({
+      gambar_id: Number.isInteger(Number(c?.gambar_id)) && c?.gambar_id !== null ? Number(c.gambar_id) : null,
+      nama: laTeks(c?.nama, 100),
+      mingguan: Array.from({ length: 4 }, (_, i) => ({ chat: laAngka(c?.mingguan?.[i]?.chat), order: laAngka(c?.mingguan?.[i]?.order) })),
+    })),
+  };
+}
+
+// GET /api/hub/meta-ads/laporan-ads?brand_id=&bulan=YYYY-MM
+router.get('/meta-ads/laporan-ads', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
+  const { brand_id, bulan } = req.query;
+  if (!brand_id || !RE_BULAN.test(bulan || '')) return res.status(400).json({ error: 'brand_id dan bulan (YYYY-MM) wajib' });
+  try {
+    const br = await pool.query('SELECT id, nama, hpp_default, mata_uang FROM meta_ads_brands WHERE id=$1', [brand_id]);
+    if (!br.rows.length) return res.status(404).json({ error: 'Brand tidak ditemukan' });
+    const brand = br.rows[0];
+    const awal = bulan + '-01';
+
+    const [profil, bln, prev, gambar, auto] = await Promise.all([
+      pool.query('SELECT judul, ig_handle FROM laporan_ads_profil WHERE brand_id=$1', [brand.id]),
+      pool.query('SELECT kpi, mingguan, kreatif FROM laporan_ads_bulan WHERE brand_id=$1 AND bulan=$2', [brand.id, bulan]),
+      pool.query('SELECT kpi FROM laporan_ads_bulan WHERE brand_id=$1 AND bulan<$2 ORDER BY bulan DESC LIMIT 1', [brand.id, bulan]),
+      pool.query(`SELECT id, jenis, minggu, data FROM laporan_ads_gambar
+                  WHERE brand_id=$1 AND (jenis='maskot' OR bulan=$2) ORDER BY id`, [brand.id, bulan]),
+      pool.query(`
+        WITH hari AS (
+          SELECT tanggal FROM meta_ads_insights WHERE brand_id=$1 AND tanggal >= $2::date AND tanggal < ($2::date + INTERVAL '1 month')
+          UNION
+          SELECT tanggal FROM meta_ads_reports  WHERE brand_id=$1 AND tanggal >= $2::date AND tanggal < ($2::date + INTERVAL '1 month')
+        )
+        SELECT LEAST((EXTRACT(DAY FROM h.tanggal)::int - 1) / 7 + 1, 4) AS minggu,
+               COALESCE(SUM(i.impresi), 0)::bigint                        AS impresi,
+               COALESCE(SUM(i.klik), 0)::bigint                           AS klik,
+               COALESCE(SUM(i.spend * ${KURS_KE_IDR}), 0)::numeric(16,2)  AS spend,
+               COALESCE(SUM(r.jumlah_order), 0)::int                      AS jumlah_order,
+               COALESCE(SUM(r.omzet), 0)::numeric(16,2)                   AS omzet
+        FROM hari h
+        JOIN meta_ads_brands b ON b.id = $1
+        LEFT JOIN meta_ads_insights i ON i.brand_id = b.id AND i.tanggal = h.tanggal
+        LEFT JOIN meta_ads_reports  r ON r.brand_id = b.id AND r.tanggal = h.tanggal
+        GROUP BY 1
+      `, [brand.id, awal]),
+    ]);
+
+    const hpp = Number(brand.hpp_default || 0);
+    const perMinggu = new Map(auto.rows.map(r => [Number(r.minggu), r]));
+    const angkaAuto = [1, 2, 3, 4].map(m => {
+      const r = perMinggu.get(m);
+      const impresi = Number(r?.impresi || 0), klik = Number(r?.klik || 0);
+      const spend = Number(r?.spend || 0), omzet = Number(r?.omzet || 0);
+      return {
+        minggu: m, ada_data: !!r, impresi, klik,
+        ctr: impresi > 0 ? (klik / impresi) * 100 : null,
+        spend, omzet, jumlah_order: Number(r?.jumlah_order || 0),
+        profit: omzet - (omzet * hpp / 100) - spend,
+      };
+    });
+
+    res.json({ data: {
+      brand: { id: brand.id, nama: brand.nama, mata_uang: brand.mata_uang, hpp_default: hpp },
+      profil: { judul: profil.rows[0]?.judul || brand.nama, ig_handle: profil.rows[0]?.ig_handle || '' },
+      kpi: bln.rows[0]?.kpi || prev.rows[0]?.kpi || {},
+      mingguan: bln.rows[0]?.mingguan || [],
+      kreatif: bln.rows[0]?.kreatif || [],
+      tersimpan: !!bln.rows[0],
+      gambar: gambar.rows,
+      auto: angkaAuto,
+    } });
+  } catch (e) { console.error('Gagal ambil laporan ads:', e.message); res.status(500).json({ error: 'Gagal ambil laporan ads' }); }
+});
+
+// PUT /api/hub/meta-ads/laporan-ads — simpan profil + isian manual sebulan (gambar lewat endpoint terpisah)
+router.put('/meta-ads/laporan-ads', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
+  const { brand_id, bulan, profil } = req.body;
+  if (!brand_id || !RE_BULAN.test(bulan || '')) return res.status(400).json({ error: 'brand_id dan bulan (YYYY-MM) wajib' });
+  try {
+    const br = await pool.query('SELECT id FROM meta_ads_brands WHERE id=$1', [brand_id]);
+    if (!br.rows.length) return res.status(404).json({ error: 'Brand tidak ditemukan' });
+    const bersih = bersihkanLaporanAds(req.body);
+
+    // gambar_id kreatif harus gambar milik brand ini
+    const ids = bersih.kreatif.map(c => c.gambar_id).filter(Boolean);
+    const sah = new Set(ids.length
+      ? (await pool.query(`SELECT id FROM laporan_ads_gambar WHERE brand_id=$1 AND jenis='kreatif' AND id = ANY($2::int[])`, [brand_id, ids])).rows.map(r => r.id)
+      : []);
+    bersih.kreatif.forEach(c => { if (!sah.has(c.gambar_id)) c.gambar_id = null; });
+
+    await pool.query(`
+      INSERT INTO laporan_ads_bulan (brand_id, bulan, kpi, mingguan, kreatif, updated_by, updated_at)
+      VALUES ($1,$2,$3,$4,$5,$6,NOW())
+      ON CONFLICT (brand_id, bulan) DO UPDATE SET kpi=$3, mingguan=$4, kreatif=$5, updated_by=$6, updated_at=NOW()
+    `, [brand_id, bulan, JSON.stringify(bersih.kpi), JSON.stringify(bersih.mingguan), JSON.stringify(bersih.kreatif), req.user.nama]);
+    await pool.query(`
+      INSERT INTO laporan_ads_profil (brand_id, judul, ig_handle, updated_at) VALUES ($1,$2,$3,NOW())
+      ON CONFLICT (brand_id) DO UPDATE SET judul=$2, ig_handle=$3, updated_at=NOW()
+    `, [brand_id, laTeks(profil?.judul, 100), laTeks(profil?.ig_handle, 100)]);
+    res.json({ ok: true });
+  } catch (e) { console.error('Gagal simpan laporan ads:', e.message); res.status(500).json({ error: 'Gagal simpan laporan ads' }); }
+});
+
+// POST /api/hub/meta-ads/laporan-ads/gambar — unggah satu gambar (data URL, sudah dikompres di browser)
+router.post('/meta-ads/laporan-ads/gambar', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
+  const { brand_id, bulan, minggu, jenis, data } = req.body;
+  if (!brand_id) return res.status(400).json({ error: 'brand_id wajib' });
+  if (!JENIS_GAMBAR.includes(jenis)) return res.status(400).json({ error: 'jenis gambar tidak valid' });
+  if (jenis !== 'maskot' && !RE_BULAN.test(bulan || '')) return res.status(400).json({ error: 'bulan (YYYY-MM) wajib' });
+  const perMinggu = jenis === 'proyek' || jenis === 'portofolio';
+  if (perMinggu && ![1, 2, 3, 4].includes(Number(minggu))) return res.status(400).json({ error: 'minggu harus 1–4' });
+  if (typeof data !== 'string' || !RE_GAMBAR.test(data)) return res.status(400).json({ error: 'Format gambar tidak valid (png/jpg/webp)' });
+  if (data.length > GAMBAR_MAKS_CHAR) return res.status(413).json({ error: 'Gambar terlalu besar, kecilkan dulu' });
+  try {
+    if (jenis === 'maskot') {
+      await pool.query(`DELETE FROM laporan_ads_gambar WHERE brand_id=$1 AND jenis='maskot'`, [brand_id]);
+    } else {
+      const c = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM laporan_ads_gambar WHERE brand_id=$1 AND jenis=$2 AND bulan=$3 AND ($4::int IS NULL OR minggu=$4)`,
+        [brand_id, jenis, bulan, perMinggu ? Number(minggu) : null]
+      );
+      if (c.rows[0].n >= GAMBAR_MAKS[jenis]) return res.status(400).json({ error: `Maksimal ${GAMBAR_MAKS[jenis]} gambar untuk bagian ini` });
+    }
+    const r = await pool.query(
+      `INSERT INTO laporan_ads_gambar (brand_id, bulan, minggu, jenis, data) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+      [brand_id, jenis === 'maskot' ? null : bulan, perMinggu ? Number(minggu) : null, jenis, data]
+    );
+    res.status(201).json({ data: { id: r.rows[0].id } });
+  } catch (e) {
+    if (e.code === '23503') return res.status(404).json({ error: 'Brand tidak ditemukan' });
+    console.error('Gagal simpan gambar laporan ads:', e.message);
+    res.status(500).json({ error: 'Gagal simpan gambar' });
+  }
+});
+
+// DELETE /api/hub/meta-ads/laporan-ads/gambar/:id — hapus gambar (kreatif juga dilepas dari daftar kreatif bulannya)
+router.delete('/meta-ads/laporan-ads/gambar/:id', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'id tidak valid' });
+  try {
+    const r = await pool.query('DELETE FROM laporan_ads_gambar WHERE id=$1 RETURNING brand_id, bulan, jenis', [id]);
+    if (!r.rowCount) return res.status(404).json({ error: 'Gambar tidak ditemukan' });
+    const g = r.rows[0];
+    if (g.jenis === 'kreatif') {
+      await pool.query(`
+        UPDATE laporan_ads_bulan
+        SET kreatif = COALESCE((SELECT jsonb_agg(e) FROM jsonb_array_elements(kreatif) e WHERE (e->>'gambar_id')::int IS DISTINCT FROM $3::int), '[]'::jsonb)
+        WHERE brand_id=$1 AND bulan=$2
+      `, [g.brand_id, g.bulan, id]);
+    }
+    res.json({ ok: true });
+  } catch (e) { console.error('Gagal hapus gambar laporan ads:', e.message); res.status(500).json({ error: 'Gagal hapus gambar' }); }
 });
 
 // ── AI INSIGHT ───────────────────────────────────────────────────────────────

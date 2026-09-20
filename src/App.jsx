@@ -20,6 +20,7 @@ import LaporanHarian from './pages/LaporanHarian';
 import LaporanBulanan from './pages/LaporanBulanan';
 import AdsPerformance from './pages/AdsPerformance';
 import LaporanProfit from './pages/LaporanProfit';
+import LaporanAdsMingguan from './pages/LaporanAdsMingguan';
 import AiAssistant from './pages/AiAssistant';
 import Kalender from './pages/Kalender';
 import CharacterSheetPage from './modules/rpg/pages/CharacterSheetPage';
@@ -100,6 +101,7 @@ function ProtectedRoutes() {
         <Route path="/laporan-bulanan"   element={<RequirePage pageKey="laporan-bulanan"><LaporanBulanan /></RequirePage>} />
         <Route path="/ads-performance"    element={<RequirePage pageKey="ads-performance"><AdsPerformance /></RequirePage>} />
         <Route path="/laporan-profit"     element={<RequirePage pageKey="laporan-profit"><LaporanProfit /></RequirePage>} />
+        <Route path="/laporan-ads-mingguan" element={<RequirePage pageKey="ads-performance"><LaporanAdsMingguan /></RequirePage>} />
         <Route path="/ai-assistant"       element={<RequirePage pageKey="ai-assistant"><AiAssistant /></RequirePage>} />
         <Route path="/kalender"     element={<RequirePage pageKey="kalender"><Kalender /></RequirePage>} />
         <Route path="/rpg/kelola"    element={<RequirePage pageKey="rpg-admin"><RpgKelolaPage /></RequirePage>} />
