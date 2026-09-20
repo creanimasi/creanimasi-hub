@@ -343,6 +343,37 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
     };
   }
 
+  // Kartu karakter + 4 stat. Satu-satunya tempat yang membangunnya, dipakai Character Sheet anggota
+  // DAN halaman Pantau Anggota → tampilan admin dijamin identik dengan yang dilihat anggota.
+  // TIDAK pernah memuat tim.tipe / kepuasan.
+  function bentukKarakter(tim, m, ach, xpMinggu) {
+    const level = m.level, levelLalu = levelDariXp(xpMinggu);
+    let levelUpNote = null;
+    if (level > levelLalu) {
+      const stageBaru = stageDariLevel(level), stageLama = stageDariLevel(levelLalu);
+      levelUpNote = stageBaru !== stageLama
+        ? `Naik dari ${stageLama} ke ${stageBaru} minggu ini.`
+        : `Naik ke Level ${level} minggu ini.`;
+    }
+    const skala = (v) => Math.max(0, Math.min(100, Math.round((Number(v) || 0) * 20)));
+    return {
+      character: {
+        nama: tim.nama, initial: tim.nama.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase(),
+        divisi: tim.divisi, entitas: tim.entitas,
+        roleLine: `${tim.divisi} · Unit ${tim.entitas || 'Creanimasi Studio'}`,
+        level, careerStage: stageDariLevel(level), title: titleDariAchievement(ach),
+        rarity: rarityDariLevel(level), rarityMax: 5,
+        xpTotal: m.xp, xpNextTier: xpMenujuLevelBerikut(level, m.xp), levelUpNote,
+      },
+      stats: [
+        { key: 'produktivitas', label: 'Produktivitas', value: skala(tim.skill), colorVar: '--rpg-stat-produktivitas' },
+        { key: 'kolaborasi',    label: 'Kolaborasi',    value: skala(tim.kriteria), colorVar: '--rpg-stat-kolaborasi' },
+        { key: 'inisiatif',     label: 'Inisiatif',     value: skala(tim.komunikasi), colorVar: '--rpg-stat-inisiatif' },
+        { key: 'konsistensi',   label: 'Konsistensi',   value: hitungKonsistensi(m.tanggal, hariIniWib()), colorVar: '--rpg-stat-konsistensi' },
+      ],
+    };
+  }
+
   // ══════════════════════ ENDPOINT ANGGOTA ══════════════════════
   const perluTim = async (req, res) => {
     const tim = await timUntukUser(req.user.id);
@@ -366,34 +397,11 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
         bisa.guild ? leaderboard({ period: 'weekly', timIdSaya: tim.id }) : [],
         xpTotal(tim.id, new Date(Date.now() - 7 * 86400000)),
       ]);
-      const tanggal = m.tanggal;
-      const level = m.level, levelLalu = levelDariXp(xpMinggu);
-      let levelUpNote = null;
-      if (level > levelLalu) {
-        const stageBaru = stageDariLevel(level), stageLama = stageDariLevel(levelLalu);
-        levelUpNote = stageBaru !== stageLama
-          ? `Naik dari ${stageLama} ke ${stageBaru} minggu ini.`
-          : `Naik ke Level ${level} minggu ini.`;
-      }
-      const skala = (v) => Math.max(0, Math.min(100, Math.round((Number(v) || 0) * 20)));
       const top3 = lb.slice(0, 3);
       const saya = lb.find(x => x.isYou);
       const aktifGabung = quests ? [...quests.groups[1].quests, ...quests.groups[2].quests, ...quests.groups[0].quests].slice(0, 3) : [];
       res.json({ success: true, data: {
-        character: {
-          nama: tim.nama, initial: tim.nama.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase(),
-          divisi: tim.divisi, entitas: tim.entitas,
-          roleLine: `${tim.divisi} · Unit ${tim.entitas || 'Creanimasi Studio'}`,
-          level, careerStage: stageDariLevel(level), title: titleDariAchievement(ach),
-          rarity: rarityDariLevel(level), rarityMax: 5,
-          xpTotal: m.xp, xpNextTier: xpMenujuLevelBerikut(level, m.xp), levelUpNote,
-        },
-        stats: [
-          { key: 'produktivitas', label: 'Produktivitas', value: skala(tim.skill), colorVar: '--rpg-stat-produktivitas' },
-          { key: 'kolaborasi',    label: 'Kolaborasi',    value: skala(tim.kriteria), colorVar: '--rpg-stat-kolaborasi' },
-          { key: 'inisiatif',     label: 'Inisiatif',     value: skala(tim.komunikasi), colorVar: '--rpg-stat-inisiatif' },
-          { key: 'konsistensi',   label: 'Konsistensi',   value: hitungKonsistensi(tanggal, hariIniWib()), colorVar: '--rpg-stat-konsistensi' },
-        ],
+        ...bentukKarakter(tim, m, ach, xpMinggu),
         achievements: bisa.achievements ? [...ach].sort((a, b) => Number(a.locked) - Number(b.locked)).slice(0, 5) : [],
         activeQuests: aktifGabung,
         leaderboard: bisa.guild ? publik(saya && !top3.includes(saya) ? [...top3, saya] : top3) : [],
@@ -625,6 +633,117 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
       await q('INSERT INTO rpg_achievement_unlock (tim_id, code) VALUES ($1, $2) ON CONFLICT DO NOTHING', [timId, req.params.code]);
       res.json({ success: true });
     } catch (e) { console.error('[RPG] grant:', e.message); res.status(500).json({ error: 'Gagal memberikan achievement' }); }
+  });
+
+  // ══════════════════════ PANTAU ANGGOTA (rpg-pantau) ══════════════════════
+  // Hanya-baca. Menampilkan kondisi RPG tiap anggota persis seperti yang dilihat anggota itu (fungsi yang
+  // sama dipakai ulang), ditambah asal XP dan aktivitas yang namanya tak cocok dengan anggota mana pun.
+  // Membuka halaman ini tidak mengubah XP/quest; satu-satunya efek samping = sinkronisasi XP otomatis dan
+  // pencatatan achievement yang MEMANG sudah memenuhi syarat (idempoten, sama seperti saat anggota membukanya).
+  const pantau = [authMiddleware, requirePageAccess('rpg-pantau')];
+
+  // Jalankan fungsi async pada daftar dengan konkurensi terbatas (jangan menghabiskan pool koneksi).
+  async function petakan(daftar, batas, fn) {
+    const hasil = new Array(daftar.length);
+    for (let i = 0; i < daftar.length; i += batas) {
+      const potong = daftar.slice(i, i + batas);
+      const r = await Promise.all(potong.map((x, j) => fn(x, i + j)));
+      r.forEach((v, j) => { hasil[i + j] = v; });
+    }
+    return hasil;
+  }
+
+  router.get('/rpg/pantau/anggota', ...pantau, async (req, res) => {
+    try {
+      await syncXp();
+      const [timR, questR, terakhirR, mingguR] = await Promise.all([
+        q(`SELECT t.id, t.nama, t.divisi, t.entitas, t.skill, t.komunikasi, t.kriteria,
+                  EXISTS (SELECT 1 FROM hub_users u WHERE u.tim_id = t.id OR (u.tim_id IS NULL AND u.nama = t.nama)) AS punya_akun
+           FROM tim t WHERE t.aktif = TRUE ORDER BY t.nama`),
+        q(`SELECT a.tim_id, a.status, COUNT(*)::int AS n FROM rpg_quest_assignment a JOIN rpg_quest qs ON qs.id = a.quest_id
+           WHERE qs.aktif = TRUE OR a.status = 'disetujui' GROUP BY a.tim_id, a.status`),
+        q('SELECT tim_id, MAX(terjadi_pada) AS terakhir FROM rpg_xp_event GROUP BY tim_id'),
+        q(`SELECT tim_id, SUM(xp)::int AS xp FROM rpg_xp_event
+           WHERE terjadi_pada AT TIME ZONE ${TZ} >= date_trunc('week', now() AT TIME ZONE ${TZ}) GROUP BY tim_id`),
+      ]);
+      const questPer = {}; questR.rows.forEach(r => { (questPer[r.tim_id] = questPer[r.tim_id] || {})[r.status] = r.n; });
+      const terakhirPer = Object.fromEntries(terakhirR.rows.map(r => [r.tim_id, r.terakhir]));
+      const mingguPer = Object.fromEntries(mingguR.rows.map(r => [r.tim_id, r.xp]));
+
+      const anggota = await petakan(timR.rows, 5, async (t) => {
+        const m = await metrik(t);
+        const ach = await evaluasiAchievement(t, m);
+        const qs = questPer[t.id] || {};
+        return {
+          id: t.id, nama: t.nama, divisi: t.divisi, entitas: t.entitas, punyaAkun: t.punya_akun,
+          level: m.level, careerStage: stageDariLevel(m.level), xpTotal: m.xp, xpMinggu: mingguPer[t.id] || 0,
+          streak: m.streak, konsistensi: hitungKonsistensi(m.tanggal, hariIniWib()),
+          quest: { aktif: qs.aktif || 0, diajukan: qs.diajukan || 0, ditolak: qs.ditolak || 0, disetujui: qs.disetujui || 0 },
+          achievement: { terbuka: ach.filter(a => !a.locked).length, total: ach.length },
+          terakhirAktif: terakhirPer[t.id] || null,
+        };
+      });
+
+      // Nama pada data sumber yang TIDAK cocok dengan anggota mana pun → tidak menghasilkan XP (mis. salah ketik di bot).
+      // Kriteria cocok identik dengan sinkronisasi XP: LOWER(TRIM(nama)) terhadap tim.nama (semua baris tim).
+      const tak = await q(`
+        SELECT * FROM (
+          SELECT 'Laporan harian' AS sumber, TRIM(l.nama) AS nama, COUNT(*)::int AS jumlah, MAX(l.tanggal)::text AS terakhir
+            FROM laporan_harian l WHERE l.tanggal >= $1::date AND TRIM(COALESCE(l.nama, '')) <> ''
+             AND NOT EXISTS (SELECT 1 FROM tim t WHERE LOWER(TRIM(t.nama)) = LOWER(TRIM(l.nama))) GROUP BY TRIM(l.nama)
+          UNION ALL
+          SELECT 'Jurnal mingguan', TRIM(j.nama), COUNT(*)::int, MAX(j.tanggal_jurnal)::text
+            FROM jurnal_mingguan j WHERE j.tanggal_jurnal >= $1::date AND TRIM(COALESCE(j.nama, '')) <> ''
+             AND NOT EXISTS (SELECT 1 FROM tim t WHERE LOWER(TRIM(t.nama)) = LOWER(TRIM(j.nama))) GROUP BY TRIM(j.nama)
+          UNION ALL
+          SELECT 'Kehadiran', TRIM(k.nama), COUNT(*)::int, MAX(s.tanggal)::text
+            FROM absensi_kehadiran k JOIN absensi_sesi s ON s.id = k.sesi_id
+            WHERE s.tanggal >= $1::date AND TRIM(COALESCE(k.nama, '')) <> ''
+             AND NOT EXISTS (SELECT 1 FROM tim t WHERE LOWER(TRIM(t.nama)) = LOWER(TRIM(k.nama))) GROUP BY TRIM(k.nama)
+          UNION ALL
+          SELECT 'Friday Win', TRIM(f.penerima), COUNT(*)::int, MAX(f.tanggal)::text
+            FROM friday_win f WHERE f.tanggal >= $1::date AND TRIM(COALESCE(f.penerima, '')) <> ''
+             AND NOT EXISTS (SELECT 1 FROM tim t WHERE LOWER(TRIM(t.nama)) = LOWER(TRIM(f.penerima))) GROUP BY TRIM(f.penerima)
+        ) x ORDER BY jumlah DESC, nama LIMIT 50`, [CONFIG.RPG_MULAI]);
+
+      res.json({ success: true, data: { mulai: CONFIG.RPG_MULAI, anggota, takDikenali: tak.rows } });
+    } catch (e) { console.error('[RPG] pantau anggota:', e.message); res.status(500).json({ error: 'Gagal memuat data anggota' }); }
+  });
+
+  router.get('/rpg/pantau/anggota/:timId', ...pantau, async (req, res) => {
+    try {
+      const timId = parseInt(req.params.timId, 10);
+      if (!Number.isInteger(timId)) return res.status(400).json({ error: 'ID anggota tidak valid' });
+      const t = (await q(`SELECT t.id, t.nama, t.divisi, t.entitas, t.skill, t.komunikasi, t.kriteria,
+                 EXISTS (SELECT 1 FROM hub_users u WHERE u.tim_id = t.id OR (u.tim_id IS NULL AND u.nama = t.nama)) AS punya_akun
+                 FROM tim t WHERE t.id = $1 AND t.aktif = TRUE`, [timId])).rows[0];
+      if (!t) return res.status(404).json({ error: 'Anggota tidak ditemukan' });
+      await syncXp();
+      const m = await metrik(t);
+      const [ach, quests, xpMinggu, lbMinggu, lbMusim, perSumber, terbaru] = await Promise.all([
+        evaluasiAchievement(t, m),
+        dataQuest(t),
+        xpTotal(t.id, new Date(Date.now() - 7 * 86400000)),
+        leaderboard({ period: 'weekly' }),
+        leaderboard({ period: 'season' }),
+        q('SELECT sumber, COUNT(*)::int AS jumlah, SUM(xp)::int AS xp FROM rpg_xp_event WHERE tim_id = $1 GROUP BY sumber ORDER BY SUM(xp) DESC', [t.id]),
+        q('SELECT sumber, keterangan, xp, terjadi_pada FROM rpg_xp_event WHERE tim_id = $1 ORDER BY terjadi_pada DESC, id DESC LIMIT 15', [t.id]),
+      ]);
+      const { _streak, ...dataQ } = quests;
+      res.json({ success: true, data: {
+        ...bentukKarakter(t, m, ach, xpMinggu),
+        achievements: [...ach].sort((a, b) => Number(a.locked) - Number(b.locked)),
+        quests: dataQ,
+        streak: m.streak,
+        xp: { total: m.xp, mulai: CONFIG.RPG_MULAI, perSumber: perSumber.rows, terbaru: terbaru.rows },
+        peringkat: {
+          mingguan: (lbMinggu.find(x => x._id === t.id) || {}).rank || null,
+          musim: (lbMusim.find(x => x._id === t.id) || {}).rank || null,
+          dari: lbMinggu.length,
+        },
+        punyaAkun: t.punya_akun,
+      } });
+    } catch (e) { console.error('[RPG] pantau detail:', e.message); res.status(500).json({ error: 'Gagal memuat detail anggota' }); }
   });
 
   // ══════════════════════ ANALYTICS (rpg-analytics) ══════════════════════

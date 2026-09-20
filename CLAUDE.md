@@ -92,6 +92,10 @@ idempoten), `rpg_quest`, `rpg_quest_assignment`, `rpg_achievement`, `rpg_achieve
   `requirePageAccess`; /rpg/character menyaring panel Quest/Guild/Pencapaian sesuai akses (`data.akses`).
   Migrasi di IIFE master hub.js: beri semua role akses dulu, baru lepas flag baseline (satu transaksi, tidak menimpa
   pencabutan admin saat restart).
+- **Pantau Anggota** (`/rpg/anggota`, kunci akses `rpg-pantau`, default hanya Super Admin, bisa didelegasikan lewat matriks):
+  hanya-baca. Daftar semua anggota aktif + detail per anggota (kartu karakter/stat/quest/pencapaian dibangun oleh fungsi
+  yang SAMA dengan milik anggota → identik) + asal XP per sumber + "aktivitas tak dikenali" (nama di laporan/jurnal/
+  absensi/Friday Win yang tak cocok dengan anggota mana pun → tak menghasilkan XP; biasanya salah ketik).
 - `tim.tipe`/`kepuasan` TIDAK pernah dikirim ke endpoint anggota (hanya `distribusi tipe` di analytics admin).
 - Akun tanpa tautan ke `tim` → endpoint anggota 404 → UI menampilkan "Belum terhubung".
 

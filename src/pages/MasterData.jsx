@@ -37,7 +37,7 @@ const ROLE_DESCRIPTIONS = {
 // urutan & pengelompokan konsisten dengan menu yang dilihat user sehari-hari.
 // "Lainnya" menampung halaman yang tidak punya entri menu di Sidebar sama sekali.
 const SECTION_GROUPS = [
-  { label: 'Guild', keys: ['rpg-character', 'rpg-quests', 'rpg-guild', 'rpg-achievements', 'rpg-admin', 'rpg-analytics'] },
+  { label: 'Guild', keys: ['rpg-character', 'rpg-quests', 'rpg-guild', 'rpg-achievements', 'rpg-pantau', 'rpg-admin', 'rpg-analytics'] },
   { label: 'Tim', keys: ['tim', 'master-data', 'absensi'] },
   { label: 'Aksi Cepat', keys: ['laporan-admin'] },
   { label: 'Program', keys: ['workshop', 'aktivitas-tim', 'reward', 'kader'] },

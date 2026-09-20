@@ -36,6 +36,7 @@ export const useQuests       = () => useRpgResource(api.rpgQuests);
 export const useAchievements = () => useRpgResource(api.rpgAchievements);
 export const useAnalytics    = () => useRpgResource(api.rpgAnalytics);
 export const useLeaderboard  = (period, divisi) => useRpgResource(() => api.rpgLeaderboard(period, divisi), [period, divisi]);
+export const usePantau       = () => useRpgResource(api.rpgPantauAnggota);
 export const useAdminQuests  = () => useRpgResource(api.rpgAdminQuests);
 export const useAdminReview  = () => useRpgResource(api.rpgAdminReview);
 export const useAdminAchievements = () => useRpgResource(api.rpgAdminAchievements);

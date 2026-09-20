@@ -818,6 +818,7 @@ router.patch('/skb/:id', authMiddleware, async (req, res) => {
       ['ai-assistant', 'AI Assistant', '/ai-assistant'],
       ['kalender', 'Kalender', '/kalender'],
       ['rpg-analytics', 'RPG Analytics', '/rpg/analytics'],
+      ['rpg-pantau', 'Pantau Anggota', '/rpg/anggota'],
       ['rpg-admin', 'Kelola RPG', '/rpg/kelola'],
       ['tim-kelola-legacy', 'Kelola Tim (legacy)', '/tim/kelola'],
     ];

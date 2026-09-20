@@ -96,7 +96,7 @@ function Modal({ title, onClose, children }) {
       alignItems: 'center', justifyContent: 'center', padding: '1rem',
     }}>
       <div role="dialog" aria-modal="true" aria-label={title} className="rpg-pixbox" style={{
-        ...pixbox, width: 'min(560px, 100%)', maxHeight: '90vh', overflowY: 'auto', padding: '1.3rem', color: 'var(--rpg-ink)',
+        ...pixbox, width: 'min(560px, 100%)', maxHeight: '90vh', overflowY: 'auto', overflowX: 'hidden', padding: '1.3rem', color: 'var(--rpg-ink)',
       }}>
         <h2 style={{ fontFamily: 'var(--rpg-font-display)', fontWeight: 400, fontSize: '.8rem', margin: '0 0 1rem', lineHeight: 1.6 }}>{title}</h2>
         {children}
