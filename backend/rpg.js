@@ -20,7 +20,7 @@ const CONFIG = {
   ],
   // Title dari achievement tertinggi yang terbuka (urutan prioritas). tim.tipe TIDAK dipakai.
   TITLE_PRIORITAS: [
-    ['maxlevel', 'Legenda'], ['topguild', 'Juara Guild'], ['goldcollab', 'Kolaborator Emas'],
+    ['maxlevel', 'Legenda'], ['bintang', 'Bintang Produksi'], ['topguild', 'Juara Guild'], ['goldcollab', 'Kolaborator Emas'],
     ['questmaster', 'Quest Master'], ['streak30', 'Konsisten'], ['firstquest', 'Petualang'],
   ],
   TITLE_DEFAULT: 'Pendatang Baru',
@@ -29,6 +29,14 @@ const CONFIG = {
   IKON_QUEST: ['sync', 'board', 'shield', 'badge', 'target'],
   // Urgensi quest 1–7 (7 = paling mendesak). Tidak memengaruhi XP; hanya pengurutan & tampilan.
   URGENSI_MIN: 1, URGENSI_MAX: 7, URGENSI_DEFAULT: 4,
+  // Target poin produksi (lihat rpg_target.js). Poin = XP quest yang disetujui; dievaluasi tiap periode.
+  TARGET: {
+    DIVISI: ['Illustrator', 'Rigger', '3D Modeler', 'Desainer'], // divisi produksi yang ikut
+    LEVEL: [{ key: 'magang', label: 'Magang / Probation' }, { key: 'junior', label: 'Junior' }, { key: 'senior', label: 'Senior' }],
+    TGL_TUTUP: 27,            // periode = tanggal 28 bulan lalu s/d tanggal ini (WIB)
+    KUNCI_OTOMATIS_HARI: 6,   // dikunci otomatis N hari setelah tanggal tutup (27 → 3) bila admin belum mengunci
+    TARGET_MAKS: 100000, RIWAYAT: 6, LOOKBACK_PERIODE: 4,
+  },
 };
 
 const ACHIEVEMENTS_SEED = [
@@ -40,6 +48,10 @@ const ACHIEVEMENTS_SEED = [
   ['goldcollab',  'Kolaborator Emas',        'Menerima 10 Friday Win dari rekan.',                  'friday_wins', 10, 6],
   ['topguild',    'Juara Guild Mingguan',    'Peringkat 1 XP mingguan pada minggu yang sudah lewat.', 'topguild',  1,  7],
   ['maxlevel',    'Level Maksimal',          'Mencapai level maksimal.',                            'level',       20, 8],
+  ['targethit',   'Target Tercapai',         'Mencapai target poin produksi pada satu periode.',    'target_hit',      1, 9],
+  ['target120',   'Melampaui Target',        'Mencapai 120% target poin dalam satu periode.',       'target_120',      1, 10],
+  ['targetstreak','Target 3 Periode Beruntun','Mencapai target poin 3 periode berturut-turut.',     'target_beruntun', 3, 11],
+  ['bintang',     'Bintang Produksi',        'Peringkat 1 pencapaian target pada satu periode.',    'bintang',         1, 12],
 ];
 
 const TZ = "'Asia/Jakarta'";
@@ -96,6 +108,7 @@ function labelSelesai(tanggalIso, hariIni) {
 
 module.exports = function registerRpg(router, { hubPool, authMiddleware, requirePageAccess, getPageAccessList }) {
   const q = (text, params) => hubPool.query(text, params);
+  const target = require('./rpg_target')({ q, hubPool, CONFIG, TZ, hariIniWib });
 
   // ── Migrasi (idempoten) ────────────────────────────────────────────────────
   const ready = (async () => {
@@ -133,6 +146,7 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
       // Urgensi quest: tambah kolom bila belum ada. Baris lama otomatis bernilai default (4 = Normal); CHECK 1–7 di level DB.
       await q(`ALTER TABLE rpg_quest ADD COLUMN IF NOT EXISTS urgensi SMALLINT NOT NULL DEFAULT ${CONFIG.URGENSI_DEFAULT}
                CHECK (urgensi BETWEEN ${CONFIG.URGENSI_MIN} AND ${CONFIG.URGENSI_MAX})`);
+      await target.migrasi();
       for (const [code, label, deskripsi, tipe, nilai, urutan] of ACHIEVEMENTS_SEED) {
         await q(`INSERT INTO rpg_achievement (code, label, deskripsi, syarat_tipe, syarat_nilai, urutan)
                  VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (code) DO NOTHING`, [code, label, deskripsi, tipe, nilai, urutan]);
@@ -245,7 +259,7 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
 
   // ── Achievement ────────────────────────────────────────────────────────────
   async function metrik(tim) {
-    const [xp, quest, wins, top, tanggal] = await Promise.all([
+    const [xp, quest, wins, top, tanggal, tgt] = await Promise.all([
       xpTotal(tim.id),
       q(`SELECT COUNT(*)::int AS n FROM rpg_quest_assignment WHERE tim_id = $1 AND status = 'disetujui'`, [tim.id]),
       q(`SELECT COUNT(*)::int AS n FROM rpg_xp_event WHERE tim_id = $1 AND sumber = 'friday_win'`, [tim.id]),
@@ -256,12 +270,14 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
            WHERE wk < date_trunc('week', now() AT TIME ZONE ${TZ}))
          SELECT COUNT(*)::int AS n FROM r WHERE tim_id = $1 AND rk = 1 AND xp > 0`, [tim.id]),
       tanggalLaporan(tim.nama),
+      target.metrikTarget(tim.id),
     ]);
     const level = levelDariXp(xp);
-    return { xp, level, quest: quest.rows[0].n, friday_wins: wins.rows[0].n, topguild: top.rows[0].n, streak: hitungStreak(tanggal, hariIniWib()), tanggal };
+    return { xp, level, quest: quest.rows[0].n, friday_wins: wins.rows[0].n, topguild: top.rows[0].n, streak: hitungStreak(tanggal, hariIniWib()), tanggal, ...tgt };
   }
 
-  const NILAI_METRIK = { quest_count: 'quest', streak: 'streak', level: 'level', friday_wins: 'friday_wins', topguild: 'topguild' };
+  const NILAI_METRIK = { quest_count: 'quest', streak: 'streak', level: 'level', friday_wins: 'friday_wins', topguild: 'topguild',
+    target_hit: 'target_hit', target_120: 'target_120', target_beruntun: 'target_beruntun', bintang: 'bintang' };
 
   // Evaluasi + simpan unlock baru; kembalikan daftar lengkap untuk UI.
   async function evaluasiAchievement(tim, m = null) {
@@ -663,7 +679,7 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
     try {
       await syncXp();
       const hariIni = hariIniWib();
-      const [timR, xpR, kartuR, selesaiR, belumR] = await Promise.all([
+      const [timR, xpR, kartuR, selesaiR, belumR, tgt] = await Promise.all([
         q('SELECT id, nama, divisi, entitas FROM tim WHERE aktif = TRUE ORDER BY nama'),
         q('SELECT tim_id, SUM(xp)::int AS xp FROM rpg_xp_event GROUP BY tim_id'),
         // Aturan tampil sama dengan Papan Quest anggota: quest nonaktif disembunyikan kecuali yang sudah disetujui.
@@ -677,12 +693,14 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
            ORDER BY qs.tenggat NULLS LAST, a.id`, [SELESAI_HARI]),
         q("SELECT tim_id, COUNT(*)::int AS n FROM rpg_quest_assignment WHERE status = 'disetujui' GROUP BY tim_id"),
         q('SELECT COUNT(*)::int AS n FROM rpg_quest qs WHERE qs.aktif = TRUE AND NOT EXISTS (SELECT 1 FROM rpg_quest_assignment a WHERE a.quest_id = qs.id)'),
+        target.ringkasSekarang(),
       ]);
       const xpPer = Object.fromEntries(xpR.rows.map(r => [r.tim_id, r.xp]));
       const selesaiPer = Object.fromEntries(selesaiR.rows.map(r => [r.tim_id, r.n]));
       const anggota = timR.rows.map(t => ({
         id: t.id, nama: t.nama, divisi: t.divisi, entitas: t.entitas,
         level: levelDariXp(xpPer[t.id] || 0), selesaiTotal: selesaiPer[t.id] || 0,
+        target: tgt.peta.get(t.id) || null, // null = bukan divisi produksi
       }));
       const kartu = kartuR.rows.map(a => ({
         id: a.id, timId: a.tim_id, questId: a.quest_id, judul: a.judul, deskripsi: a.deskripsi, tipe: a.tipe, xp: a.xp, ikon: a.ikon, urgensi: a.urgensi,
@@ -690,7 +708,7 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
         status: a.status, progressPct: a.progress_pct, catatanAnggota: a.catatan_anggota, catatanReview: a.catatan_review,
         diajukanPada: a.diajukan_pada, ditinjauPada: a.ditinjau_pada,
       }));
-      res.json({ success: true, data: { selesaiHari: SELESAI_HARI, anggota, kartu, belumDitugaskan: belumR.rows[0].n } });
+      res.json({ success: true, data: { selesaiHari: SELESAI_HARI, anggota, kartu, belumDitugaskan: belumR.rows[0].n, periodeTarget: tgt.periode } });
     } catch (e) { console.error('[RPG] papan admin:', e.message); res.status(500).json({ error: 'Gagal memuat papan quest' }); }
   });
 
@@ -779,7 +797,7 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
       if (!t) return res.status(404).json({ error: 'Anggota tidak ditemukan' });
       await syncXp();
       const m = await metrik(t);
-      const [ach, quests, xpMinggu, lbMinggu, lbMusim, perSumber, terbaru] = await Promise.all([
+      const [ach, quests, xpMinggu, lbMinggu, lbMusim, perSumber, terbaru, targetData] = await Promise.all([
         evaluasiAchievement(t, m),
         dataQuest(t),
         xpTotal(t.id, new Date(Date.now() - 7 * 86400000)),
@@ -787,12 +805,14 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
         leaderboard({ period: 'season' }),
         q('SELECT sumber, COUNT(*)::int AS jumlah, SUM(xp)::int AS xp FROM rpg_xp_event WHERE tim_id = $1 GROUP BY sumber ORDER BY SUM(xp) DESC', [t.id]),
         q('SELECT sumber, keterangan, xp, terjadi_pada FROM rpg_xp_event WHERE tim_id = $1 ORDER BY terjadi_pada DESC, id DESC LIMIT 15', [t.id]),
+        target.dataTargetAnggota(t),
       ]);
       const { _streak, ...dataQ } = quests;
       res.json({ success: true, data: {
         ...bentukKarakter(t, m, ach, xpMinggu),
         achievements: [...ach].sort((a, b) => Number(a.locked) - Number(b.locked)),
         quests: dataQ,
+        target: targetData, // fungsi yang sama dengan halaman anggota → identik
         streak: m.streak,
         xp: { total: m.xp, mulai: CONFIG.RPG_MULAI, perSumber: perSumber.rows, terbaru: terbaru.rows },
         peringkat: {
@@ -851,6 +871,8 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
       } });
     } catch (e) { console.error('[RPG] analytics:', e.message); res.status(500).json({ error: 'Gagal memuat analytics' }); }
   });
+
+  target.registerRoutes(router, { authMiddleware, requirePageAccess, salahSatuAkses, timUntukUser, evaluasiAchievement });
 
   return { syncXp, CONFIG };
 };

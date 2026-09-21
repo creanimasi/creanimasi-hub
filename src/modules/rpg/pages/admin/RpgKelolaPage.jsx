@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import '../../styles/rpg-components.css';
 import { rpgGuard } from '../../components/RpgState';
 import { useAdminQuests, useAdminReview, useAdminAchievements } from '../../hooks/useRpg';
@@ -7,37 +8,12 @@ import { useToast } from '../../../../hooks/useToast';
 import UrgensiChip from '../../components/UrgensiChip';
 import UrgensiPicker from '../../components/UrgensiPicker';
 import { URGENSI_DEFAULT } from '../../utils/urgensi';
+import TargetTab from './TargetAdmin';
+import { pixbox, hud, pesanError, Btn, inputStyle, cbStyle, Field, Modal } from '../../components/AdminUi';
 
-const pixbox = {
-  background: 'var(--rpg-bg-2)', border: '2px solid var(--rpg-line)',
-  boxShadow: 'inset 2px 2px 0 rgba(159,227,255,.35), inset -2px -2px 0 rgba(0,0,0,.4), 3px 3px 0 var(--rpg-bg-3)',
-};
-const hud = { fontFamily: 'var(--rpg-font-hud)' };
 const IKON = [['target', 'Target'], ['shield', 'Perisai'], ['board', 'Papan'], ['badge', 'Lencana'], ['sync', 'Ulang']];
 const TIPE_LABEL = { proyek: 'Proyek', sekali: 'Sekali' };
-const pesanError = (e) => (e?.message || 'Terjadi kesalahan').replace(/^\d{3}: /, '');
 
-function Btn({ children, onClick, kind = 'ghost', disabled, type = 'button', small }) {
-  const warna = {
-    gold:  { background: 'var(--rpg-gold)', color: '#1a1206', border: '2px solid var(--rpg-gold)' },
-    ghost: { background: 'var(--rpg-bg-3)', color: 'var(--rpg-ink-dim)', border: '2px solid var(--rpg-line-dim)' },
-    ok:    { background: 'var(--rpg-success)', color: '#08240f', border: '2px solid var(--rpg-success)' },
-    warn:  { background: 'transparent', color: 'var(--rpg-warn)', border: '2px solid var(--rpg-warn)' },
-  }[kind];
-  return (
-    <button type={type} onClick={onClick} disabled={disabled} style={{
-      ...hud, fontSize: small ? '.95rem' : '1.05rem', cursor: disabled ? 'not-allowed' : 'pointer',
-      padding: small ? '.2rem .7rem' : '.4rem 1rem', opacity: disabled ? .55 : 1, ...warna,
-    }}>{children}</button>
-  );
-}
-
-const inputStyle = {
-  ...hud, fontSize: '1.05rem', width: '100%', boxSizing: 'border-box', color: 'var(--rpg-ink)',
-  background: 'var(--rpg-bg)', border: '2px solid var(--rpg-line-dim)', padding: '.4rem .6rem',
-};
-// CSS global "input" melebarkan semua input; checkbox harus tetap selebar kotaknya.
-const cbStyle = { width: 'auto', flex: 'none', margin: 0, cursor: 'pointer' };
 // Tanggal lokal → 'YYYY-MM-DD' (toISOString memakai UTC dan bisa mundur sehari di WIB)
 const isoLokal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const tambahHari = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return isoLokal(d); };
@@ -72,37 +48,6 @@ function TenggatField({ value, onChange }) {
       </div>
       <div style={{ ...hud, fontSize: '.9rem', color: 'var(--rpg-ink-faint)', marginTop: '.3rem' }}>
         {value ? labelTanggal(value) : 'Tanpa tenggat'}
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, hint, children }) {
-  return (
-    <label style={{ display: 'block' }}>
-      <span style={{ ...hud, fontSize: '1rem', color: 'var(--rpg-ink-dim)', display: 'block', marginBottom: '.25rem' }}>{label}</span>
-      {children}
-      {hint && <span style={{ ...hud, fontSize: '.9rem', color: 'var(--rpg-ink-faint)', display: 'block', marginTop: '.2rem' }}>{hint}</span>}
-    </label>
-  );
-}
-
-function Modal({ title, onClose, children }) {
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-  return (
-    <div onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
-      position: 'fixed', inset: 0, background: 'rgba(5,6,16,.72)', zIndex: 1000, display: 'flex',
-      alignItems: 'center', justifyContent: 'center', padding: '1rem',
-    }}>
-      <div role="dialog" aria-modal="true" aria-label={title} className="rpg-pixbox" style={{
-        ...pixbox, width: 'min(560px, 100%)', maxHeight: '90vh', overflowY: 'auto', overflowX: 'hidden', padding: '1.3rem', color: 'var(--rpg-ink)',
-      }}>
-        <h2 style={{ fontFamily: 'var(--rpg-font-display)', fontWeight: 400, fontSize: '.8rem', margin: '0 0 1rem', lineHeight: 1.6 }}>{title}</h2>
-        {children}
       </div>
     </div>
   );
@@ -363,6 +308,10 @@ const SYARAT = {
   level: (n) => `Otomatis: mencapai Level ${n}`,
   friday_wins: (n) => `Otomatis: menerima ${n} Friday Win`,
   topguild: () => 'Otomatis: peringkat 1 XP mingguan (minggu yang sudah lewat)',
+  target_hit: () => 'Otomatis: mencapai target poin produksi pada satu periode (setelah dikunci)',
+  target_120: () => 'Otomatis: mencapai 120% target poin dalam satu periode',
+  target_beruntun: (n) => `Otomatis: mencapai target ${n} periode berturut-turut`,
+  bintang: () => 'Otomatis: peringkat 1 pencapaian target pada satu periode',
 };
 
 function AchievementTab({ anggota }) {
@@ -411,7 +360,9 @@ function AchievementTab({ anggota }) {
 
 // Halaman admin RPG: kelola quest, setujui pengajuan, beri achievement manual (hak akses rpg-admin).
 export default function RpgKelolaPage() {
-  const [tab, setTab] = useState('quest');
+  const [sp, setSp] = useSearchParams();
+  const tab = ['quest', 'review', 'achievement', 'target'].includes(sp.get('tab')) ? sp.get('tab') : 'quest';
+  const setTab = (k) => setSp(k === 'quest' ? {} : { tab: k }, { replace: true });
   const anggota = useAnggota();
   const review = useAdminReview();
   const menunggu = review.data?.length || 0;
@@ -425,7 +376,7 @@ export default function RpgKelolaPage() {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const tabs = [['quest', 'Quest'], ['review', `Persetujuan${menunggu ? ` (${menunggu})` : ''}`], ['achievement', 'Achievement']];
+  const tabs = [['quest', 'Quest'], ['review', `Persetujuan${menunggu ? ` (${menunggu})` : ''}`], ['achievement', 'Achievement'], ['target', 'Target']];
 
   return (
     <div className="rpg-page" style={{ fontFamily: 'var(--rpg-font-body)', color: 'var(--rpg-ink)' }}>
@@ -433,7 +384,7 @@ export default function RpgKelolaPage() {
         <div>
           <h1 style={{ fontFamily: 'var(--rpg-font-display)', fontWeight: 400, fontSize: 'clamp(1rem, 2.4vw, 1.4rem)', margin: '0 0 .6rem' }}>KELOLA RPG</h1>
           <p style={{ ...hud, fontSize: '1.1rem', color: 'var(--rpg-ink-dim)', margin: 0, maxWidth: '62ch' }}>
-            Buat dan tugaskan quest, setujui pengajuan anggota (XP baru masuk setelah disetujui), dan beri achievement manual.
+            Buat dan tugaskan quest, setujui pengajuan anggota (XP baru masuk setelah disetujui), beri achievement manual, dan atur target poin tim produksi.
           </p>
         </div>
         <div role="tablist" style={{ display: 'flex', gap: '.6rem', flexWrap: 'wrap' }}>
@@ -449,6 +400,7 @@ export default function RpgKelolaPage() {
         {tab === 'quest' && <QuestTab anggota={anggota} onChanged={review.reload} />}
         {tab === 'review' && <ReviewTab res={review} onChanged={() => {}} />}
         {tab === 'achievement' && <AchievementTab anggota={anggota} />}
+        {tab === 'target' && <TargetTab />}
       </div>
     </div>
   );

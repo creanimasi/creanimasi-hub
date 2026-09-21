@@ -2,7 +2,8 @@ import { useState, useMemo } from 'react';
 import '../styles/rpg-components.css';
 import QuestCard from '../components/QuestCard';
 import { rpgGuard } from '../components/RpgState';
-import { useQuests } from '../hooks/useRpg';
+import { useQuests, useTarget } from '../hooks/useRpg';
+import TargetCard from '../components/TargetCard';
 import { api } from '../../../services/api';
 import { useToast } from '../../../hooks/useToast';
 import { useAuth } from '../../../hooks/useAuth';
@@ -33,6 +34,7 @@ function PapanSaya({ atas, opsiGuard }) {
   const { showToast } = useToast();
   const res = useQuests();
   const data = res.data;
+  const target = useTarget(); // hanya untuk anggota divisi produksi; galatnya tidak boleh memblokir papan
 
   const visibleGroups = useMemo(() => {
     if (!data || tab === 'Selesai') return [];
@@ -44,8 +46,8 @@ function PapanSaya({ atas, opsiGuard }) {
 
   const aksi = async (id, fn, pesan) => {
     setBusyId(id);
-    try { await fn(); if (pesan) showToast(pesan); res.reload(); }
-    catch (e) { showToast((e.message || 'Gagal').replace(/^\d{3}: /, ''), 'error'); res.reload(); }
+    try { await fn(); if (pesan) showToast(pesan); res.reload(); target.reload(); }
+    catch (e) { showToast((e.message || 'Gagal').replace(/^\d{3}: /, ''), 'error'); res.reload(); target.reload(); }
     finally { setBusyId(null); }
   };
 
@@ -82,6 +84,8 @@ function PapanSaya({ atas, opsiGuard }) {
               </div>
             ))}
           </div>
+
+          {target.data?.ikut && <TargetCard data={target.data} />}
 
           <div style={{ display: 'flex', gap: '.6rem', flexWrap: 'wrap' }}>
             {QUEST_TABS.map(t => (

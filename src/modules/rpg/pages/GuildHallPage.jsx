@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import '../styles/rpg-components.css';
 import LeaderboardRow from '../components/LeaderboardRow';
 import { rpgGuard } from '../components/RpgState';
 import { useLeaderboard } from '../hooks/useRpg';
+import TargetPapan from '../components/TargetPapan';
 
 const DIVISI_TABS = ['Semua', 'Admin', 'PM', 'Illustrator', 'Rigger', '3D Modeler', 'Desainer'];
 const PERIODE_TABS = [['weekly', 'Minggu Ini'], ['season', 'Musim Ini'], ['all', 'Sepanjang Waktu']];
@@ -12,6 +14,10 @@ const PERIODE_TABS = [['weekly', 'Minggu Ini'], ['season', 'Musim Ini'], ['all',
 export default function GuildHallPage() {
   const [divisi, setDivisi] = useState('Semua');
   const [periode, setPeriode] = useState('weekly');
+  // Jenis papan disimpan di URL (?tab=target) — bisa dibagikan/di-bookmark dan tautan dari halaman ini sendiri tetap bereaksi.
+  const [sp, setSp] = useSearchParams();
+  const mode = sp.get('tab') === 'target' ? 'target' : 'xp';
+  const setMode = (k) => setSp(k === 'target' ? { tab: 'target' } : {}, { replace: true });
   const res = useLeaderboard(periode, divisi);
   const rows = res.data?.rows || [];
   const musim = res.data?.musim;
@@ -26,10 +32,27 @@ export default function GuildHallPage() {
             GUILD HALL
           </h1>
           <p style={{ fontFamily: 'var(--rpg-font-hud)', fontSize: '1.1rem', color: 'var(--rpg-ink-dim)', margin: 0, maxWidth: '60ch' }}>
-            Papan peringkat XP seluruh tim{musim ? ` — ${musim}` : ''}. XP datang dari laporan harian, jurnal, kehadiran, Friday Win, dan quest yang disetujui.
+            {mode === 'target'
+              ? 'Target poin bulanan tim produksi — siapa yang sudah mencapai target dan seberapa jauh tim melangkah.'
+              : <>Papan peringkat XP seluruh tim{musim ? ` — ${musim}` : ''}. XP datang dari laporan harian, jurnal, kehadiran, Friday Win, dan quest yang disetujui.</>}
           </p>
         </div>
 
+        <div role="tablist" aria-label="Jenis papan" style={{ display: 'flex', gap: '.6rem', flexWrap: 'wrap' }}>
+          {[['xp', 'Peringkat XP'], ['target', 'Target Produksi']].map(([k, t]) => (
+            <button key={k} role="tab" aria-selected={mode === k} onClick={() => setMode(k)} style={{
+              fontFamily: 'var(--rpg-font-hud)', fontSize: '1.15rem', cursor: 'pointer',
+              color: mode === k ? '#1a1206' : 'var(--rpg-ink-dim)',
+              background: mode === k ? 'var(--rpg-gold)' : 'var(--rpg-bg-2)',
+              border: `2px solid ${mode === k ? 'var(--rpg-gold)' : 'var(--rpg-line-dim)'}`,
+              padding: '.45rem 1.1rem',
+            }}>{t}</button>
+          ))}
+        </div>
+
+        {mode === 'target' && <TargetPapan />}
+
+        {mode === 'xp' && <>
         <div style={{ display: 'flex', gap: '.6rem', flexWrap: 'wrap' }}>
           {PERIODE_TABS.map(([k, t]) => (
             <button key={k} onClick={() => setPeriode(k)} aria-pressed={periode === k} style={{
@@ -69,6 +92,7 @@ export default function GuildHallPage() {
                 <LeaderboardRow key={r.nama} rank={r.rank} nama={r.nama} unit={r.unit} xp={r.xp} isYou={r.isYou} />
               )))}
         </div>
+        </>}
 
       </div>
     </div>

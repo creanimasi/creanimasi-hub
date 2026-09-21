@@ -193,6 +193,15 @@ export const api = {
   rpgAdminPutuskan: (id, status, catatan_review) => request('PATCH', `/rpg/admin/assignments/${id}`, { status, catatan_review }),
   rpgAdminAchievements: ()             => request('GET', '/rpg/admin/achievements'),
   rpgAdminGrant:    (code, tim_id)     => request('POST', `/rpg/admin/achievements/${code}/grant`, { tim_id }),
+  // Target poin produksi
+  rpgTarget:        ()                 => request('GET', '/rpg/target'),
+  rpgTargetPapan:   (periode)          => request('GET', `/rpg/target/papan?periode=${encodeURIComponent(periode || 'sekarang')}`),
+  rpgAdminTarget:   ()                 => request('GET', '/rpg/admin/target'),
+  rpgAdminSetTarget:(divisi, level, target) => request('PUT', '/rpg/admin/target', { divisi, level, target }),
+  rpgTargetRekap:   (periode)          => request('GET', `/rpg/admin/target/rekap?periode=${encodeURIComponent(periode || 'sekarang')}`),
+  rpgAdminOverride: (data)             => request('PUT', '/rpg/admin/target/override', data),
+  rpgAdminKunciPeriode: (kode)         => request('POST', `/rpg/admin/target/periode/${kode}/kunci`),
+  rpgAdminBukaPeriode:  (kode)         => request('POST', `/rpg/admin/target/periode/${kode}/buka`),
 
   // AI
   getAiInsightAds: (bulan, brandId) => request('POST', '/ai/insight-ads', { bulan, ...(brandId ? { brand_id: brandId } : {}) }),

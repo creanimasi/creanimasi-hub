@@ -10,6 +10,7 @@ import StatMeter from '../../components/StatMeter';
 import AchievementBadge from '../../components/AchievementBadge';
 import QuestCard from '../../components/QuestCard';
 import { lalu, tglPendek } from '../../utils/waktu';
+import TargetCard from '../../components/TargetCard';
 
 const pixbox = {
   background: 'var(--rpg-bg-2)', border: '2px solid var(--rpg-line)',
@@ -78,6 +79,8 @@ function DetailAnggota({ id, nama, onClose }) {
             <Metrik label="Peringkat musim" nilai={d.peringkat.musim ? `#${d.peringkat.musim}` : '—'} warna="var(--rpg-gold)" />
             <Metrik label="Streak lapor" nilai={`${d.streak} hari`} />
           </div>
+
+          {d.target?.ikut && <TargetCard data={d.target} />}
 
           <Kotak>
             <Judul>STATISTIK <em style={{ color: 'var(--rpg-gold)', fontStyle: 'normal' }}>PILAR</em></Judul>

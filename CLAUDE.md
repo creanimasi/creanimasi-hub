@@ -109,6 +109,25 @@ idempoten), `rpg_quest`, `rpg_quest_assignment`, `rpg_achievement`, `rpg_achieve
   (`?urg=`). Warna = saluran terpisah dari warna status; angka + batang sinyal (`UrgensiChip`) adalah isyarat utama karena
   beberapa pasangan warna berdekatan bagi penderita buta warna. Jangan beri `opacity` pada baris yang berisi teks (menurunkan
   kontras di bawah 4,5:1).
+- **Target poin produksi** (`backend/rpg_target.js`, angka di `CONFIG.TARGET` rpg.js): tim produksi (Illustrator, Rigger,
+  3D Modeler, Desainer) punya target poin per PERIODE = tanggal 28 bulan lalu s/d 27 bulan ini (WIB; kode periode = bulan
+  tanggal 27, mis. `2026-09` = 28 Agu–27 Sep). Poin = XP quest yang DISETUJUI (dari ledger `rpg_xp_event`, jadi edit XP quest
+  belakangan tak mengubah hasil lama), dihitung menurut tanggal DIAJUKAN (admin telat meninjau tak merugikan anggota); BUKAN XP
+  otomatis dari laporan/jurnal/absensi. Target diatur admin per divisi × level (`rpg_target_poin`; level `*` = semua level;
+  level dipetakan dari teks `tim.level` lewat `levelKey`, tahan ejaan "Magang/Probation" vs "Magang / Probation"); tanpa angka
+  = "tanpa target" (poin tetap dicatat). Penyesuaian per orang per periode: `rpg_target_override` (target khusus atau
+  dikecualikan). Status: tercapai (poin ≥ target) / belum / tanpa_target / dikecualikan; selama berjalan "belum" dipecah
+  sesuai jalur / tertinggal (bandingkan persen dengan hari berjalan). Setelah tanggal 27 periode "menunggu kunci" (hasil
+  sementara, masih dihitung langsung); admin menekan Kunci, atau otomatis 6 hari setelah tutup (tgl 3) lewat cron 00:10 WIB +
+  pemicu malas saat endpoint dibaca. Kunci = potret ke `rpg_periode_hasil` (target saat itu dibekukan; transaksi + FOR UPDATE →
+  tak ganda). "Buka kembali" menghapus potret, menahan kunci otomatis, dan mencabut lencana target (dievaluasi ulang dari periode
+  lain). Periode sebelum `RPG_MULAI` tak pernah dihitung/dikunci. Endpoint: anggota `GET /rpg/target` (rpg-quests) & papan
+  terbuka penuh `GET /rpg/target/papan` (rpg-guild, urut PERSEN target, bukan poin mentah); admin `/rpg/admin/target[...]`
+  (rpg-admin; rekap juga untuk rpg-pantau, hanya-baca). `?periode=sebelumnya` yang belum ada → 200 `data:null`. Lencana:
+  `targethit`, `target120`, `targetstreak` (3 periode beruntun), `bintang` (peringkat 1) — terbuka hanya dari periode TERKUNCI.
+  UI: kartu di Papan Quest anggota (`TargetCard`, komponen sama dipakai Pantau), tab "Target Produksi" di Guild Hall (`?tab=target`),
+  tab "Target" di Kelola RPG (`?tab=target`), mini progress di header kolom Kanban, notifikasi (pengingat sisa ≤7/≤3 hari,
+  tercapai, hasil periode lalu di 10 hari pertama, admin: periode menunggu kunci). Status selalu berteks (bukan hanya warna).
 - `tim.tipe`/`kepuasan` TIDAK pernah dikirim ke endpoint anggota (hanya `distribusi tipe` di analytics admin).
 - Akun tanpa tautan ke `tim` → endpoint anggota 404 → UI menampilkan "Belum terhubung".
 

@@ -10,6 +10,8 @@ import RpgModal from '../../components/RpgModal';
 import { lalu } from '../../utils/waktu';
 import UrgensiChip from '../../components/UrgensiChip';
 import { URGENSI } from '../../utils/urgensi';
+import TargetBar from '../../components/TargetBar';
+import { angka, kunciStatus, STATUS_TARGET } from '../../utils/target';
 
 const hud = { fontFamily: 'var(--rpg-font-hud)' };
 const STATUS = {
@@ -170,7 +172,29 @@ function Kartu({ k, bisaAksi, onSetujui, onTolak }) {
   );
 }
 
-function Kolom({ k, mobile, bisaAksi, bisaDetail, selesaiTerbuka, onToggleSelesai, onSetujui, onTolak, onDetail }) {
+// Ringkas target poin periode berjalan di header kolom (hanya anggota divisi produksi). Status selalu berteks.
+function TargetMini({ t, periode }) {
+  const status = kunciStatus(t, 'berjalan');
+  const teks = STATUS_TARGET[status].teks;
+  const jalurPct = periode && periode.hariTotal ? (100 * periode.hariBerjalan) / periode.hariTotal : null;
+  return (
+    <div style={{ marginTop: '.5rem' }}>
+      {t.target
+        ? <>
+            <div style={{ ...hud, fontSize: '.92rem', color: 'var(--rpg-ink-dim)', display: 'flex', justifyContent: 'space-between', gap: '.5rem', marginBottom: '.25rem' }}>
+              <span>Target {angka(t.poin)}/{angka(t.target)} poin · {t.persen}%</span>
+              <span style={{ color: STATUS_TARGET[status].warna }}>{teks}</span>
+            </div>
+            <TargetBar poin={t.poin} target={t.target} status={status} jalurPct={jalurPct} tinggi={8} label="Poin terhadap target periode" />
+          </>
+        : <div style={{ ...hud, fontSize: '.92rem', color: 'var(--rpg-ink-faint)' }}>
+            {t.status === 'dikecualikan' ? 'Dikecualikan dari target periode ini' : 'Target belum ditetapkan'} · {angka(t.poin)} poin
+          </div>}
+    </div>
+  );
+}
+
+function Kolom({ k, mobile, bisaAksi, bisaDetail, selesaiTerbuka, onToggleSelesai, onSetujui, onTolak, onDetail, periodeTarget }) {
   const aktif = k.kartu.filter(c => c.status !== 'disetujui');
   const selesai = k.kartu.filter(c => c.status === 'disetujui');
   const hitung = (s) => k.kartu.filter(c => c.status === s).length;
@@ -196,6 +220,7 @@ function Kolom({ k, mobile, bisaAksi, bisaDetail, selesaiTerbuka, onToggleSelesa
           {cnt.length === 0 && <span style={{ color: 'var(--rpg-ink-faint)' }}>Tidak ada quest aktif</span>}
           {cnt.map(([s, n]) => <span key={s} style={{ color: STATUS[s].warna }}>{n} {STATUS[s].filter.toLowerCase()}</span>)}
         </div>
+        {k.a.target && <TargetMini t={k.a.target} periode={periodeTarget} />}
       </header>
       <div style={{ padding: '.7rem', display: 'flex', flexDirection: 'column', gap: '.6rem' }}>
         {aktif.map(c => <Kartu key={c.id} k={c} bisaAksi={bisaAksi} onSetujui={() => onSetujui(c, k.a)} onTolak={() => onTolak(c, k.a)} />)}
@@ -413,7 +438,7 @@ export default function PapanQuestAdmin({ atas }) {
             <Kolom k={mobPilih} mobile bisaAksi={bisaAksi} bisaDetail={bisaDetail} selesaiTerbuka={selesaiAuto || terbuka.has(mobPilih.a.id)}
               onToggleSelesai={() => setTerbuka(s => { const n = new Set(s); n.has(mobPilih.a.id) ? n.delete(mobPilih.a.id) : n.add(mobPilih.a.id); return n; })}
               onSetujui={(c, a) => setAksi({ jenis: 'setujui', kartu: c, anggota: a })} onTolak={(c, a) => { setAlasan(''); setAksi({ jenis: 'tolak', kartu: c, anggota: a }); }}
-              onDetail={() => navigate(`/rpg/anggota?id=${mobPilih.a.id}`)} />
+              onDetail={() => navigate(`/rpg/anggota?id=${mobPilih.a.id}`)} periodeTarget={d?.periodeTarget} />
           ) : (
             <div data-testid="papan-scroll" style={{ overflowX: 'auto', paddingBottom: '.6rem' }}>
               <div style={{ display: 'flex', gap: '1.6rem', alignItems: 'flex-start', width: 'max-content', maxWidth: 'none' }}>
@@ -427,7 +452,7 @@ export default function PapanQuestAdmin({ atas }) {
                         <Kolom key={k.a.id} k={k} bisaAksi={bisaAksi} bisaDetail={bisaDetail} selesaiTerbuka={selesaiAuto || terbuka.has(k.a.id)}
                           onToggleSelesai={() => setTerbuka(s => { const n = new Set(s); n.has(k.a.id) ? n.delete(k.a.id) : n.add(k.a.id); return n; })}
                           onSetujui={(c, a) => setAksi({ jenis: 'setujui', kartu: c, anggota: a })} onTolak={(c, a) => { setAlasan(''); setAksi({ jenis: 'tolak', kartu: c, anggota: a }); }}
-                          onDetail={() => navigate(`/rpg/anggota?id=${k.a.id}`)} />
+                          onDetail={() => navigate(`/rpg/anggota?id=${k.a.id}`)} periodeTarget={d?.periodeTarget} />
                       ))}
                     </div>
                   </div>

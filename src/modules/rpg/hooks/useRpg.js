@@ -41,3 +41,7 @@ export const usePantau       = () => useRpgResource(api.rpgPantauAnggota);
 export const useAdminQuests  = () => useRpgResource(api.rpgAdminQuests);
 export const useAdminReview  = () => useRpgResource(api.rpgAdminReview);
 export const useAdminAchievements = () => useRpgResource(api.rpgAdminAchievements);
+export const useTarget      = () => useRpgResource(api.rpgTarget);
+export const useTargetPapan  = (periode) => useRpgResource(() => api.rpgTargetPapan(periode), [periode]);
+export const useTargetConfig = () => useRpgResource(api.rpgAdminTarget);
+export const useTargetRekap  = (periode) => useRpgResource(() => api.rpgTargetRekap(periode), [periode]);

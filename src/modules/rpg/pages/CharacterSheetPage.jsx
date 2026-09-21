@@ -104,7 +104,7 @@ export default function CharacterSheetPage() {
             </h2>
             <div style={{ height: 2, background: 'var(--rpg-line-dim)', margin: '0 0 1.1rem' }} />
             {leaderboard.map(l => (
-              <LeaderboardRow key={l.rank} rank={l.rank} nama={l.nama} unit={l.unit} xp={l.xp} isYou={l.isYou} />
+              <LeaderboardRow key={`${l.rank}-${l.nama}`} rank={l.rank} nama={l.nama} unit={l.unit} xp={l.xp} isYou={l.isYou} />
             ))}
           </div>
           )}
