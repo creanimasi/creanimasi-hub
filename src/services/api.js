@@ -51,6 +51,20 @@ async function rawRequest(method, path, { body, contentType, blob } = {}) {
   return blob ? res.blob() : res.json();
 }
 
+// Ulangi panggilan yang gagal karena jaringan/5xx (maks 3 kali, jeda bertahap). Galat 4xx (validasi/akses) tidak diulang.
+async function denganUlang(fn, kali = 3) {
+  let galat;
+  for (let i = 0; i < kali; i++) {
+    try { return await fn(); }
+    catch (e) {
+      galat = e;
+      if (/^4\d\d:/.test(e.message || '')) throw e;
+      await new Promise(r => setTimeout(r, 400 * (i + 1)));
+    }
+  }
+  throw galat;
+}
+
 export const api = {
   // Jurnal
   simpanJurnal:   (data)         => request('POST', '/jurnal', data),
@@ -195,8 +209,17 @@ export const api = {
   // Riwayat (arsip) PDF Laporan Ads
   getArsipLaporanAds:     (brandId, bulan)        => request('GET', `/meta-ads/laporan-ads/arsip?brand_id=${brandId}${bulan ? `&bulan=${bulan}` : ''}`),
   getLogArsipLaporanAds:  (id)                    => request('GET', `/meta-ads/laporan-ads/arsip/${id}/log`),
-  unggahArsipLaporanAds:  (brandId, bulan, minggu, slide, blob) =>
-    rawRequest('POST', `/meta-ads/laporan-ads/arsip?brand_id=${brandId}&bulan=${bulan}&minggu=${minggu}&slide=${slide}`, { body: blob, contentType: 'application/pdf' }),
+  // Diunggah PER POTONGAN (≤ ~700 KB): proxy di depan backend membatasi body request (nginx default 1 MB → 413), jadi PDF
+  // berisi foto tidak bisa dikirim sekaligus. Server menyusun potongan lalu menyimpan seperti biasa.
+  unggahArsipLaporanAds:  async (brandId, bulan, minggu, slide, blob) => {
+    const mulai = await request('POST', '/meta-ads/laporan-ads/arsip/unggahan', { brand_id: brandId, bulan, minggu, slide, ukuran: blob.size });
+    const { id, ukuran_bagian: ukuran, jumlah_bagian: jumlah } = mulai.data;
+    for (let i = 0; i < jumlah; i++) {
+      const bagian = blob.slice(i * ukuran, (i + 1) * ukuran);
+      await denganUlang(() => rawRequest('PUT', `/meta-ads/laporan-ads/arsip/unggahan/${id}/bagian/${i}`, { body: bagian, contentType: 'application/octet-stream' }));
+    }
+    return denganUlang(() => request('POST', `/meta-ads/laporan-ads/arsip/unggahan/${id}/selesai`));
+  },
   unduhArsipLaporanAds:   (id)                    => rawRequest('GET', `/meta-ads/laporan-ads/arsip/${id}/pdf`, { blob: true }),
   hapusArsipLaporanAds:   (id)                    => request('DELETE', `/meta-ads/laporan-ads/arsip/${id}`),
   getMetaLaporan:     (bulan, brandId)            => request('GET', `/meta-ads/laporan?bulan=${bulan}${brandId ? `&brand_id=${brandId}` : ''}`),

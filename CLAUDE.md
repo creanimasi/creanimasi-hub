@@ -92,8 +92,11 @@ Catatan soal migrasi yang tidak lengkap:
 - **Riwayat PDF** (`laporan_ads_arsip`/`_file`/`_log`): tiap Download PDF mengunggah PDF mentah (`application/pdf`, maks 15 MB) ke
   `POST /meta-ads/laporan-ads/arsip`; server membekukan angka dari DB (bukan dari klien). Maks 3 versi terbaru per brand+bulan+minggu
   (sisanya soft delete otomatis). Hapus manual hanya admin (`req.user.role === 'admin'`). Unduhan tercatat di log.
-- **Batas upload**: nginx frontend meneruskan `/api/hub` dan default-nya membatasi body 1 MB — `client_max_body_size 25m` di
-  `nginx.conf` WAJIB ada (PDF berisi foto beberapa MB). Kalau unggah Riwayat 413, cek ini dulu (butuh deploy frontend).
+- **Batas upload (PENTING)**: proxy nginx di depan backend membatasi body request **1 MB** (terbukti di production: ≤ 900 KB lolos,
+  ≥ 1,1 MB → 413 HTML nginx). `client_max_body_size` di `nginx.conf` repo TIDAK berlaku di production (Coolify tidak memakai file itu;
+  konfigurasi nginx production ada di pengaturan Coolify). Karena itu **PDF Riwayat diunggah per potongan ≤ 700 KB**
+  (`POST .../arsip/unggahan` → `PUT .../bagian/:n` → `POST .../selesai`, tabel sementara `laporan_ads_unggahan*`) dan gambar laporan
+  dikompres ≤ ~900 KB — JANGAN membuat request tunggal > 1 MB. `POST .../arsip` (sekali-kirim) tetap ada tapi tidak dipakai frontend.
 - Ekspor PDF di browser (`html2canvas` + `jsPDF`): html2canvas mengabaikan `object-fit` dan `repeating-linear-gradient` — di `SlideDeck.jsx`
   maskot memakai `background-image` dan grid latar memakai pola SVG karena itu.
 
