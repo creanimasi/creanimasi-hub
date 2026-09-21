@@ -22,6 +22,19 @@ export function namaBulan(bulan) {
   return BULAN_EN[m - 1] || '';
 }
 
+const BULAN_ID_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+const BULAN_EN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// '2026-09-03','2026-09-09' → "3–9 Sep"; lintas bulan → "24 Agu–2 Sep". en=true untuk PDF (nama bulan Inggris).
+export function labelRentang(dari, sampai, en = false) {
+  if (!dari || !sampai) return '';
+  const nm = en ? BULAN_EN_PENDEK : BULAN_ID_PENDEK;
+  const [, m1, d1] = dari.split('-').map(Number);
+  const [, m2, d2] = sampai.split('-').map(Number);
+  if (dari.slice(0, 7) === sampai.slice(0, 7)) return d1 === d2 ? `${d1} ${nm[m1 - 1]}` : `${d1}–${d2} ${nm[m1 - 1]}`;
+  return `${d1} ${nm[m1 - 1]}–${d2} ${nm[m2 - 1]}`;
+}
+
 function Slide({ children, scale, index }) {
   const kecil = scale !== 1;
   return (
@@ -215,7 +228,12 @@ function Performance({ d }) {
           <div style={{ background: '#161616', color: '#fff', borderRadius: 12, padding: '8px 22px', fontSize: 40, fontWeight: 900, display: 'flex', justifyContent: 'space-between', gridColumn: '1 / 3' }}>
             <span>DATA</span><span>KPI</span>
           </div>
-          {minggus.map(w => <div key={w} style={{ ...sel, fontSize: 42, fontWeight: 900, color: C.judul }}>Minggu {w}</div>)}
+          {minggus.map(w => (
+            <div key={w} style={{ ...sel, flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center', lineHeight: 1.05 }}>
+              <span style={{ fontSize: 42, fontWeight: 900, color: C.judul }}>Minggu {w}</span>
+              {d.rentang?.[w - 1] && <span style={{ fontSize: 24, fontWeight: 700, color: '#A5694A' }}>{labelRentang(d.rentang[w - 1].dari, d.rentang[w - 1].sampai, true)}</span>}
+            </div>
+          ))}
         </div>
         {baris.map(b => (
           <div key={b.label} style={{ display: 'grid', gridTemplateColumns: kolom, height: tinggiBaris, alignItems: 'center' }}>

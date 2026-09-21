@@ -29,6 +29,28 @@ async function request(method, path, body) {
   return data;
 }
 
+// Unggah/unduh biner (PDF). request() di atas khusus JSON.
+//   body + contentType → kirim berkas mentah, balasan JSON; blob:true → balasan berupa Blob.
+async function rawRequest(method, path, { body, contentType, blob } = {}) {
+  const token = getToken();
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    headers: {
+      ...(contentType ? { 'Content-Type': contentType } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body,
+  });
+  if (!res.ok) {
+    let data = {};
+    try { data = JSON.parse(await res.text()); } catch { /* balasan bukan JSON (mis. halaman error nginx) */ }
+    if (res.status === 401 && token) window.dispatchEvent(new Event('hub-unauthorized'));
+    const pesan = data.error || (res.status === 413 ? 'Berkas terlalu besar untuk server' : 'Request gagal');
+    throw new Error(`${res.status}: ${pesan}`);
+  }
+  return blob ? res.blob() : res.json();
+}
+
 export const api = {
   // Jurnal
   simpanJurnal:   (data)         => request('POST', '/jurnal', data),
@@ -167,8 +189,16 @@ export const api = {
   saveMetaReport:     (data)                      => request('POST', '/meta-ads/report', data),
   getLaporanAds:      (brandId, bulan)            => request('GET', `/meta-ads/laporan-ads?brand_id=${brandId}&bulan=${bulan}`),
   saveLaporanAds:     (data)                      => request('PUT', '/meta-ads/laporan-ads', data),
+  hitungAngkaLaporanAds: (brandId, bulan, rentang) => request('POST', '/meta-ads/laporan-ads/hitung', { brand_id: brandId, bulan, rentang }),
   uploadGambarLaporanAds: (data)                  => request('POST', '/meta-ads/laporan-ads/gambar', data),
   hapusGambarLaporanAds:  (id)                    => request('DELETE', `/meta-ads/laporan-ads/gambar/${id}`),
+  // Riwayat (arsip) PDF Laporan Ads
+  getArsipLaporanAds:     (brandId, bulan)        => request('GET', `/meta-ads/laporan-ads/arsip?brand_id=${brandId}${bulan ? `&bulan=${bulan}` : ''}`),
+  getLogArsipLaporanAds:  (id)                    => request('GET', `/meta-ads/laporan-ads/arsip/${id}/log`),
+  unggahArsipLaporanAds:  (brandId, bulan, minggu, slide, blob) =>
+    rawRequest('POST', `/meta-ads/laporan-ads/arsip?brand_id=${brandId}&bulan=${bulan}&minggu=${minggu}&slide=${slide}`, { body: blob, contentType: 'application/pdf' }),
+  unduhArsipLaporanAds:   (id)                    => rawRequest('GET', `/meta-ads/laporan-ads/arsip/${id}/pdf`, { blob: true }),
+  hapusArsipLaporanAds:   (id)                    => request('DELETE', `/meta-ads/laporan-ads/arsip/${id}`),
   getMetaLaporan:     (bulan, brandId)            => request('GET', `/meta-ads/laporan?bulan=${bulan}${brandId ? `&brand_id=${brandId}` : ''}`),
   syncMetaBrand:      (brandId, tanggal)          => request('POST', `/meta-ads/sync/${brandId}`, tanggal ? { tanggal } : {}),
   syncMetaRange:      (brandId, dari, sampai)     => request('POST', `/meta-ads/sync-range/${brandId}`, { dari, sampai }),

@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { api } from '../services/api';
 import { useToast } from '../hooks/useToast';
+import { useAuth } from '../hooks/useAuth';
 import { compressImage } from '../utils/imageCompress';
-import SlideDeck, { SLIDE_W, SLIDE_H, namaBulan } from '../components/laporanAds/SlideDeck';
-
-const RENTANG_MINGGU = ['Tgl 1–7', 'Tgl 8–14', 'Tgl 15–21', 'Tgl 22–akhir bulan'];
+import { simpanBlob } from '../utils/simpanBlob';
+import SlideDeck, { SLIDE_W, SLIDE_H, namaBulan, labelRentang } from '../components/laporanAds/SlideDeck';
+import RiwayatArsip from '../components/laporanAds/RiwayatArsip';
+import { rentangBawaan, bangunDariMulai, rentangSama, validasiRentang, celahRentang, hariIni, selisihHari, tambahHari, tglValid } from '../utils/periodeMinggu';
 
 const mingguKosong = () => ({ profile_visit: 0, chat_masuk: 0, todo: [], kendala: [], order_queue: { in_progress: 0, revisi: 0, ready: 0 }, flow_new: 0, flow_complete: 0 });
 const normMinggu = (m) => ({ ...mingguKosong(), ...(m || {}), order_queue: { ...mingguKosong().order_queue, ...(m?.order_queue || {}) } });
@@ -110,7 +112,18 @@ export default function LaporanAdsMingguan() {
   const [kotor, setKotor] = useState(false);
   const [menyimpan, setMenyimpan] = useState(false);
   const [sibuk, setSibuk] = useState('');       // jenis unggahan yang sedang berjalan
-  const [ekspor, setEkspor] = useState(null);   // { i, n } saat membuat PDF
+  const [ekspor, setEkspor] = useState(null);   // { i, n, tahap } saat membuat PDF
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const [arsip, setArsip] = useState([]);       // PDF tersimpan di Riwayat untuk brand+bulan terpilih (penanda ✓)
+  const [rentangDihitung, setRentangDihitung] = useState('');   // kunci JSON periode yang cocok dengan data.auto saat ini
+  const [rentangTersimpan, setRentangTersimpan] = useState(null); // periode terakhir dimuat/disimpan (untuk peringatan "PDF sudah ada")
+  const [w4AkhirBulan, setW4AkhirBulan] = useState(true);
+  const mingguManualRef = useRef(false);        // true bila minggu dipilih pengguna → jangan ditimpa deteksi "minggu sekarang"
+  const permintaanHitung = useRef(0);
+  const permintaanMuat = useRef(0);             // nomor pemuatan terbaru — balasan yang basi (ganti brand/bulan cepat) diabaikan
+  const permintaanArsip = useRef(0);
+  const kunciAktif = useRef('');                // "brand|bulan" yang sedang tampil, untuk menolak hasil unggahan yang basi
 
   const previewRef = useRef();
   const deckRef = useRef();
@@ -136,10 +149,16 @@ export default function LaporanAdsMingguan() {
 
   const muatData = useCallback(async () => {
     if (!brandId) return;
-    setMuat(true);
+    const id = ++permintaanMuat.current;
+    // Kosongkan dulu: selama memuat, form/data milik brand/bulan SEBELUMNYA tidak boleh tersisa — Simpan & Download
+    // memakai brandId yang baru, jadi data lama akan tertulis/terpublikasi ke brand yang salah.
+    setMuat(true); setForm(null); setData(null); setKotor(false);
     try {
       const r = await api.getLaporanAds(brandId, bulan);
+      if (id !== permintaanMuat.current) return; // sudah ada pemuatan yang lebih baru — hasil basi diabaikan
       const d = r.data;
+      // Backend yang belum versi terbaru (mis. deploy frontend selesai lebih dulu) tidak mengirim periode → pakai bawaan
+      if (!Array.isArray(d.rentang) || d.rentang.length !== 4) d.rentang = rentangBawaan(bulan);
       setData(d);
       setForm({
         judul: d.profil.judul || d.brand.nama,
@@ -147,16 +166,55 @@ export default function LaporanAdsMingguan() {
         kpi: { impresi: 0, ctr: 0, profile_visit: 0, chat_masuk: 0, order: 0, ...(d.kpi || {}) },
         mingguan: [0, 1, 2, 3].map(i => normMinggu(d.mingguan?.[i])),
         kreatif: (d.kreatif || []).map(normKreatif),
+        rentang: d.rentang,
       });
+      setRentangDihitung(JSON.stringify(d.rentang));
+      setRentangTersimpan(d.rentang);
       setGambar(d.gambar || []);
       setKotor(false);
+      // "minggu sekarang" = periode yang memuat hari ini (bukan rumus tanggal), kecuali pengguna sudah memilih sendiri
+      if (!mingguManualRef.current && bulan === bulanSekarang()) {
+        const hari = hariIni();
+        const idx = d.rentang.findIndex(x => hari >= x.dari && hari <= x.sampai);
+        if (idx >= 0) setMinggu(idx + 1);
+      }
     } catch (e) {
+      if (id !== permintaanMuat.current) return;
       showToast('Gagal memuat laporan: ' + e.message, 'error');
       setData(null); setForm(null);
-    } finally { setMuat(false); }
+    } finally { if (id === permintaanMuat.current) setMuat(false); }
   }, [brandId, bulan, showToast]);
 
   useEffect(() => { muatData(); }, [muatData]);
+
+  const muatArsip = useCallback(async () => {
+    if (!brandId) return;
+    const id = ++permintaanArsip.current;
+    try {
+      const r = await api.getArsipLaporanAds(brandId, bulan);
+      if (id === permintaanArsip.current) setArsip(r.data || []);
+    } catch { if (id === permintaanArsip.current) setArsip([]); } // hanya untuk penanda; kegagalan tidak perlu mengganggu halaman
+  }, [brandId, bulan]);
+
+  useEffect(() => { muatArsip(); }, [muatArsip]);
+  useEffect(() => { kunciAktif.current = `${brandId}|${bulan}`; }, [brandId, bulan]);
+
+  // Periode diedit → hitung ulang angka otomatis (tanpa menyimpan) setelah jeda singkat, supaya tabel & preview ikut berubah
+  const kunciRentang = form ? JSON.stringify(form.rentang) : '';
+  useEffect(() => {
+    if (!form || !data || kunciRentang === rentangDihitung) return undefined;
+    if (validasiRentang(form.rentang, bulan).ada) return undefined; // tunggu sampai valid
+    const id = ++permintaanHitung.current;
+    const t = setTimeout(async () => {
+      try {
+        const r = await api.hitungAngkaLaporanAds(brandId, bulan, form.rentang);
+        if (id !== permintaanHitung.current) return; // sudah ada permintaan yang lebih baru
+        setData(prev => (prev ? { ...prev, auto: r.data.auto, peringatan: r.data.peringatan } : prev));
+        setRentangDihitung(kunciRentang);
+      } catch (e) { if (id === permintaanHitung.current) showToast('Gagal menghitung ulang angka: ' + e.message, 'error'); }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [form, data, kunciRentang, rentangDihitung, brandId, bulan, showToast]);
 
   // Skala preview mengikuti lebar kontainer
   useEffect(() => {
@@ -169,22 +227,32 @@ export default function LaporanAdsMingguan() {
   }, [tab, form]);
 
   const konfirmasiKotor = () => !kotor || window.confirm('Ada perubahan yang belum disimpan. Lanjut dan buang perubahan?');
-  const gantiBrand = (v) => { if (konfirmasiKotor()) setBrandId(v); };
-  const gantiBulan = (v) => { if (konfirmasiKotor()) { setBulan(v); setMinggu(mingguSekarang(v)); } };
+  const gantiBrand = (v) => { if (konfirmasiKotor()) { mingguManualRef.current = false; setBrandId(v); } };
+  const gantiBulan = (v) => { if (konfirmasiKotor()) { mingguManualRef.current = false; setBulan(v); setMinggu(mingguSekarang(v)); } };
 
   const ubah = (fn) => { setForm(f => fn(f)); setKotor(true); };
+  const ubahRentang = (r) => ubah(f => ({ ...f, rentang: r }));
+  const ubahRentangSatu = (i, patch) => ubah(f => ({ ...f, rentang: f.rentang.map((x, idx) => (idx === i ? { ...x, ...patch } : x)) }));
+  const terapkanMulai = (mulai) => ubahRentang(bangunDariMulai(mulai, bulan, w4AkhirBulan));
   const ubahMinggu = (i, patch) => ubah(f => ({ ...f, mingguan: f.mingguan.map((m, idx) => (idx === i ? { ...m, ...patch } : m)) }));
   const ubahKreatif = (i, patch) => ubah(f => ({ ...f, kreatif: f.kreatif.map((k, idx) => (idx === i ? { ...k, ...patch } : k)) }));
 
   const simpan = async (formSimpan = form, { diam = false } = {}) => {
+    if (validasiRentang(formSimpan.rentang, bulan).ada) {
+      showToast('Periode minggu belum valid — perbaiki dulu di panel "Periode minggu"', 'warning');
+      return false;
+    }
     setMenyimpan(true);
     try {
-      await api.saveLaporanAds({
+      const r = await api.saveLaporanAds({
         brand_id: brandId, bulan,
         profil: { judul: formSimpan.judul, ig_handle: formSimpan.ig_handle },
         kpi: formSimpan.kpi, mingguan: formSimpan.mingguan, kreatif: formSimpan.kreatif,
+        rentang: rentangSama(formSimpan.rentang, rentangBawaan(bulan)) ? null : formSimpan.rentang, // null = kembali ke bawaan
       });
       setKotor(false);
+      setRentangTersimpan(formSimpan.rentang);
+      if (r?.peringatan) setData(prev => (prev ? { ...prev, peringatan: r.peringatan } : prev));
       if (!diam) showToast('Laporan tersimpan');
       return true;
     } catch (e) { showToast('Gagal menyimpan: ' + e.message, 'error'); return false; }
@@ -193,10 +261,12 @@ export default function LaporanAdsMingguan() {
 
   const unggah = async (jenis, file, mg) => {
     setSibuk(jenis);
+    const kunci = `${brandId}|${bulan}`;
     try {
       const dataUrl = await compressImage(file, jenis === 'maskot' ? { sisiMaks: 1100, keepAlpha: true } : { sisiMaks: 1400 });
       const r = await api.uploadGambarLaporanAds({ brand_id: brandId, bulan, minggu: mg, jenis, data: dataUrl });
       const baru = { id: r.data.id, jenis, minggu: mg ?? null, data: dataUrl };
+      if (kunciAktif.current !== kunci) return null; // brand/bulan sudah berganti selama unggah — gambar sudah masuk ke brand yang benar di server
       setGambar(prev => [...(jenis === 'maskot' ? prev.filter(g => g.jenis !== 'maskot') : prev), baru]);
       return baru;
     } catch (e) { showToast('Gagal unggah gambar: ' + e.message, 'error'); return null; }
@@ -233,15 +303,26 @@ export default function LaporanAdsMingguan() {
     if (!form || !data) return null;
     return {
       judul: form.judul || data.brand.nama, igHandle: form.ig_handle, maskot, bulan, minggu,
-      kpi: form.kpi, auto: data.auto, mingguan: form.mingguan,
+      kpi: form.kpi, auto: data.auto, mingguan: form.mingguan, rentang: form.rentang,
       kreatif: form.kreatif.map(k => ({ nama: k.nama, gambar: gambar.find(g => g.id === k.gambar_id)?.data || null, mingguan: k.mingguan })),
       proyek: gambar.filter(g => g.jenis === 'proyek' && g.minggu === minggu).map(g => g.data),
       portofolio: gambar.filter(g => g.jenis === 'portofolio' && g.minggu === minggu).map(g => g.data),
     };
   }, [form, data, gambar, maskot, bulan, minggu]);
 
+  // Buka bulan+minggu dari Riwayat di tab Isi Data (data terkini, bukan potret PDF)
+  const bukaMinggu = (b, mg) => {
+    if (!konfirmasiKotor()) return;
+    mingguManualRef.current = true;
+    const samaBulan = b === bulan;
+    setBulan(b); setMinggu(mg); setTab('isi');
+    if (samaBulan && kotor) muatData(); // bulan sama → tidak ada muat ulang otomatis; buang perubahan yang belum disimpan
+  };
+
   const unduhPdf = async () => {
     if (!deckData) return;
+    // Angka beku di Riwayat dihitung server dari data TERSIMPAN — pastikan isi PDF = yang tersimpan
+    if (kotor && !(await simpan(form, { diam: true }))) return;
     setEkspor({ i: 0, n: 0 });
     try {
       const [{ default: html2canvas }, { default: JsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
@@ -262,7 +343,14 @@ export default function LaporanAdsMingguan() {
         pdf.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, SLIDE_W, SLIDE_H);
       }
       const nama = String(deckData.judul).replace(/[\\/:*?"<>|]+/g, ' ').trim();
-      pdf.save(`Weekly Report - ${nama} ${namaBulan(bulan)} ${minggu}.pdf`);
+      const blob = pdf.output('blob');
+      simpanBlob(blob, `Weekly Report - ${nama} ${namaBulan(bulan)} ${minggu}.pdf`); // unduh dulu — tetap jalan walau Riwayat gagal
+      setEkspor({ i: slide.length, n: slide.length, tahap: 'simpan' });
+      try {
+        const r = await api.unggahArsipLaporanAds(brandId, bulan, minggu, slide.length, blob);
+        showToast(`PDF tersimpan di Riwayat (v${r.data.versi})`);
+        muatArsip();
+      } catch (e) { showToast('PDF terunduh, tetapi gagal masuk Riwayat: ' + e.message, 'warning'); }
     } catch (e) { showToast('Gagal membuat PDF: ' + e.message, 'error'); }
     finally { setEkspor(null); }
   };
@@ -284,6 +372,18 @@ export default function LaporanAdsMingguan() {
   const m = form?.mingguan[minggu - 1];
   const totalOrder = m ? m.order_queue.in_progress + m.order_queue.revisi + m.order_queue.ready : 0;
   const scale = Math.min(1, (lebar || SLIDE_W) / SLIDE_W);
+  const mingguAdaPdf = new Set(arsip.map(a => a.minggu));
+  const pdfTerakhir = arsip.find(a => a.minggu === minggu); // daftar urut versi ↓ → yang pertama = terbaru
+  // bulan yang dibuka dari Riwayat bisa di luar 12 bulan terakhir — tetap tampil di pilihan
+  const bulanOptsTampil = bulanOpts.some(o => o.val === bulan) ? bulanOpts : [...bulanOpts, { val: bulan, label: `${namaBulan(bulan)} ${bulan.slice(0, 4)}` }];
+  const rentangTampil = form?.rentang || rentangBawaan(bulan);
+  const labelMinggu = (w) => labelRentang(rentangTampil[w - 1].dari, rentangTampil[w - 1].sampai);
+  const cekPeriode = form ? validasiRentang(form.rentang, bulan) : { galat: [null, null, null, null], ada: false };
+  // minggu yang periodenya sedang diubah padahal PDF-nya sudah pernah dibuat
+  const pdfTerdampak = form && rentangTersimpan
+    ? [0, 1, 2, 3].filter(i => mingguAdaPdf.has(i + 1) && (form.rentang[i].dari !== rentangTersimpan[i].dari || form.rentang[i].sampai !== rentangTersimpan[i].sampai))
+    : [];
+  const fmtTgl = (s) => labelRentang(s, s);
 
   return (
     <div style={{ padding: '24px 20px', maxWidth: 1100, margin: '0 auto' }}>
@@ -298,24 +398,33 @@ export default function LaporanAdsMingguan() {
           {brands.map(b => <option key={b.id} value={b.id}>{b.nama}</option>)}
         </select>
         <select value={bulan} onChange={e => gantiBulan(e.target.value)} style={S.select}>
-          {bulanOpts.map(o => <option key={o.val} value={o.val}>{o.label}</option>)}
+          {bulanOptsTampil.map(o => <option key={o.val} value={o.val}>{o.label}</option>)}
         </select>
-        <select value={minggu} onChange={e => setMinggu(Number(e.target.value))} style={S.select} title={RENTANG_MINGGU[minggu - 1]}>
-          {[1, 2, 3, 4].map(w => <option key={w} value={w}>Minggu {w} ({RENTANG_MINGGU[w - 1]})</option>)}
+        <select value={minggu} onChange={e => { mingguManualRef.current = true; setMinggu(Number(e.target.value)); }} style={S.select} title={labelMinggu(minggu)}>
+          {[1, 2, 3, 4].map(w => <option key={w} value={w}>Minggu {w} ({labelMinggu(w)}){mingguAdaPdf.has(w) ? ' ✓ PDF' : ''}</option>)}
         </select>
         <div style={{ flex: 1 }} />
         {kotor && <span style={{ fontSize: 11, color: '#FFB84B' }}>● Belum disimpan</span>}
         <button onClick={() => simpan()} disabled={menyimpan || !form} style={{ ...S.btnHijau, cursor: menyimpan ? 'not-allowed' : 'pointer' }}>{menyimpan ? 'Menyimpan…' : '💾 Simpan'}</button>
-        <button onClick={unduhPdf} disabled={!deckData || !!ekspor} style={{ ...S.btn, cursor: ekspor ? 'wait' : 'pointer' }}>⬇️ Download PDF</button>
+        <button onClick={unduhPdf} disabled={!deckData || !!ekspor || cekPeriode.ada} title={cekPeriode.ada ? 'Perbaiki dulu periode minggu yang belum valid' : undefined} style={{ ...S.btn, cursor: ekspor ? 'wait' : cekPeriode.ada ? 'not-allowed' : 'pointer' }}>⬇️ Download PDF</button>
       </div>
 
+      {pdfTerakhir && (
+        <div style={{ fontSize: 11, color: 'var(--text-3)', margin: '-6px 0 12px' }}>
+          ✓ PDF Minggu {minggu} terakhir dibuat: <b>v{pdfTerakhir.versi}</b> oleh {pdfTerakhir.dibuat_oleh || '—'} · {new Date(pdfTerakhir.dibuat_pada).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+          {' '}<button onClick={() => setTab('riwayat')} style={{ background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', fontSize: 11, padding: 0 }}>lihat riwayat</button>
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 6, borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
-        {[['isi', '✏️ Isi Data'], ['preview', '👁️ Preview Slide']].map(([id, label]) => (
+        {[['isi', '✏️ Isi Data'], ['preview', '👁️ Preview Slide'], ['riwayat', '📚 Riwayat']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} style={{ padding: '8px 14px', fontSize: 13, fontWeight: tab === id ? 700 : 500, background: 'none', border: 'none', borderBottom: `2px solid ${tab === id ? 'var(--green)' : 'transparent'}`, color: tab === id ? 'var(--text-1)' : 'var(--text-3)', cursor: 'pointer' }}>{label}</button>
         ))}
       </div>
 
-      {muat || !form ? (
+      {tab === 'riwayat' ? (
+        <RiwayatArsip brandId={brandId} opsiBulan={bulanOptsTampil} isAdmin={isAdmin} showToast={showToast} onBuka={bukaMinggu} />
+      ) : muat || !form ? (
         <div style={{ color: 'var(--text-3)', fontSize: 13, padding: 24 }}>Memuat…</div>
       ) : tab === 'preview' ? (
         <div ref={previewRef}>
@@ -323,6 +432,43 @@ export default function LaporanAdsMingguan() {
         </div>
       ) : (
         <>
+          <Card judul="Periode minggu" catatan={`Atur tanggal mulai & akhir tiap minggu — Impresi, Iklan, Omzet, Profit, dan Order dihitung dari periode ini. Bawaan: 1–7, 8–14, 15–21, 22–akhir bulan. Tersimpan per bulan.`}>
+            {data.saran_lanjut && form.rentang[0].dari !== data.saran_lanjut.dari && (
+              <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderLeft: '3px solid var(--green)', borderRadius: 8, padding: '9px 12px', fontSize: 12, color: 'var(--text-2)', marginBottom: 12, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ flex: 1, minWidth: 220 }}>
+                  Minggu 4 bulan lalu berakhir <b>{fmtTgl(tambahHari(data.saran_lanjut.dari, -1))}</b>. Mulai Minggu 1 dari <b>{fmtTgl(data.saran_lanjut.dari)}</b> supaya tidak ada hari yang hilang atau terhitung dua kali?
+                </span>
+                <button onClick={() => terapkanMulai(data.saran_lanjut.dari)} style={S.btnHijau}>Lanjutkan dari bulan lalu</button>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 12 }}>
+              <Field label="Mulai Minggu 1 dari">
+                <input type="date" aria-label="Mulai Minggu 1 dari" value={form.rentang[0].dari} onChange={e => { if (tglValid(e.target.value)) terapkanMulai(e.target.value); }} style={{ ...S.input, width: 170 }} />
+              </Field>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-2)', cursor: 'pointer', paddingBottom: 8 }}>
+                <input type="checkbox" checked={w4AkhirBulan} onChange={e => setW4AkhirBulan(e.target.checked)} />
+                Minggu 4 sampai akhir bulan
+              </label>
+              <button onClick={() => ubahRentang(rentangBawaan(bulan))} style={S.btn} title="1–7, 8–14, 15–21, 22–akhir bulan">↺ Kembali ke bawaan</button>
+            </div>
+            <div style={{ display: 'grid', gap: 8 }}>
+              {form.rentang.map((r, i) => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '80px minmax(0,1fr) minmax(0,1fr) 64px', gap: 8, alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, fontWeight: 700 }}>Minggu {i + 1}</span>
+                  <input type="date" aria-label={`Minggu ${i + 1} dari`} value={r.dari} onChange={e => ubahRentangSatu(i, { dari: e.target.value })} style={{ ...S.input, borderColor: cekPeriode.galat[i] ? '#FF6B6B' : undefined }} />
+                  <input type="date" aria-label={`Minggu ${i + 1} sampai`} value={r.sampai} onChange={e => ubahRentangSatu(i, { sampai: e.target.value })} style={{ ...S.input, borderColor: cekPeriode.galat[i] ? '#FF6B6B' : undefined }} />
+                  <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{tglValid(r.dari) && tglValid(r.sampai) && r.sampai >= r.dari ? `${selisihHari(r.dari, r.sampai) + 1} hari` : ''}</span>
+                  {cekPeriode.galat[i] && <div style={{ gridColumn: '1 / -1', color: '#FF6B6B', fontSize: 11 }}>⛔ Minggu {i + 1}: {cekPeriode.galat[i]}</div>}
+                </div>
+              ))}
+            </div>
+            {!cekPeriode.ada && (data.peringatan || []).map((t, i) => <div key={`p${i}`} style={{ fontSize: 12, color: '#FFB84B', marginTop: 8 }}>⚠️ {t}</div>)}
+            {!cekPeriode.ada && celahRentang(form.rentang).map((t, i) => <div key={`c${i}`} style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>ℹ️ {t}</div>)}
+            {pdfTerdampak.map(i => (
+              <div key={`d${i}`} style={{ fontSize: 12, color: '#FFB84B', marginTop: 8 }}>⚠️ Minggu {i + 1} sudah punya PDF — mengubah periodenya mengubah angka pada PDF berikutnya (PDF lama tetap utuh di Riwayat).</div>
+            ))}
+          </Card>
+
           <Card judul="Angka otomatis dari Ads Performance" catatan={`Dihitung dari data sync & Input Harian brand ini. Profit = Omzet − HPP (${data.brand.hpp_default}%) − Iklan. Spend ${data.brand.mata_uang === 'USD' ? 'dari akun USD dikonversi ke Rupiah dengan kurs brand' : 'dalam Rupiah'}. Atur HPP & kurs di ⚙️ Setting pada Ads Performance.`}>
             <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -330,7 +476,7 @@ export default function LaporanAdsMingguan() {
                 <tbody>
                   {data.auto.map(a => (
                     <tr key={a.minggu} style={{ opacity: a.minggu <= minggu ? 1 : 0.45 }}>
-                      <td style={{ ...S.td, textAlign: 'left' }}>Minggu {a.minggu} <span style={{ color: 'var(--text-3)', fontSize: 11 }}>({RENTANG_MINGGU[a.minggu - 1]})</span></td>
+                      <td style={{ ...S.td, textAlign: 'left' }}>Minggu {a.minggu} <span style={{ color: 'var(--text-3)', fontSize: 11 }}>({labelMinggu(a.minggu)})</span></td>
                       <td style={S.td}>{fmtInt(a.impresi)}</td>
                       <td style={S.td}>{a.ctr === null ? '—' : a.ctr.toFixed(2) + '%'}</td>
                       <td style={S.td}>{fmtRp(a.spend)}</td>
@@ -463,7 +609,7 @@ export default function LaporanAdsMingguan() {
           <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'var(--bg, #0b0f1a)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10 }}>
             <div style={{ fontSize: 40 }}>📄</div>
             <div style={{ fontWeight: 700 }}>Membuat PDF…</div>
-            <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{ekspor.n ? `Slide ${ekspor.i} dari ${ekspor.n}` : 'Menyiapkan slide'}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{ekspor.tahap === 'simpan' ? 'Menyimpan ke Riwayat…' : ekspor.n ? `Slide ${ekspor.i} dari ${ekspor.n}` : 'Menyiapkan slide'}</div>
           </div>
         </>
       )}

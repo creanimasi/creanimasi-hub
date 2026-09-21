@@ -402,7 +402,7 @@ function BrandModal({ brand, onSave, onClose, onDeleted }) {
             ) : (
               <div style={{ display: 'grid', gap: 8 }}>
                 <div style={{ fontSize: 12, color: '#FF6B6B', lineHeight: 1.5 }}>
-                  Menghapus brand juga menghapus <b>semua data insights, report harian, dan threshold</b> brand ini secara permanen. Untuk berhenti sync tanpa kehilangan data, cukup hilangkan centang "Brand aktif".
+                  Menghapus brand juga menghapus <b>semua data insights, report harian, threshold, laporan mingguan, dan riwayat PDF</b> brand ini secara permanen. Untuk berhenti sync tanpa kehilangan data, cukup hilangkan centang "Brand aktif".
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Ketik <b>{brand.nama}</b> untuk konfirmasi:</div>
                 <input value={delText} onChange={e => setDelText(e.target.value)} style={inputStyle} placeholder={brand.nama} />

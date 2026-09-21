@@ -2533,6 +2533,50 @@ router.delete('/laporan-admin/:id', authMiddleware, requirePageAccessOrAdminDivi
       )
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_laporan_ads_gambar_brand ON laporan_ads_gambar (brand_id, bulan)`);
+    // Periode 4 minggu yang bisa diatur per bulan: [{dari:'YYYY-MM-DD', sampai:'YYYY-MM-DD'} × 4]. NULL = skema bawaan (1–7, 8–14, 15–21, 22–akhir bulan).
+    await pool.query(`ALTER TABLE laporan_ads_bulan ADD COLUMN IF NOT EXISTS rentang JSONB`);
+
+    // Riwayat (arsip) PDF Laporan Ads Mingguan. File dipisah dari metadata supaya query daftar tidak menarik BYTEA.
+    // Hapus = soft delete (file dibuang, jejak tetap). Angka beku (ringkasan/snapshot) dihitung server saat PDF diunggah.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS laporan_ads_arsip (
+        id                     SERIAL PRIMARY KEY,
+        brand_id               INTEGER NOT NULL REFERENCES meta_ads_brands(id) ON DELETE CASCADE,
+        bulan                  CHAR(7) NOT NULL,
+        minggu                 SMALLINT NOT NULL,
+        versi                  INTEGER NOT NULL,
+        judul                  VARCHAR(100),
+        ukuran                 INTEGER NOT NULL,
+        jumlah_slide           SMALLINT,
+        dibuat_oleh            VARCHAR(100),
+        dibuat_pada            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        ringkasan              JSONB NOT NULL DEFAULT '{}',
+        snapshot               JSONB NOT NULL DEFAULT '{}',
+        jumlah_unduh           INTEGER NOT NULL DEFAULT 0,
+        terakhir_diunduh_oleh  VARCHAR(100),
+        terakhir_diunduh_pada  TIMESTAMPTZ,
+        dihapus_pada           TIMESTAMPTZ,
+        dihapus_oleh           VARCHAR(100),
+        UNIQUE (brand_id, bulan, minggu, versi)
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS laporan_ads_arsip_file (
+        arsip_id  INTEGER PRIMARY KEY REFERENCES laporan_ads_arsip(id) ON DELETE CASCADE,
+        pdf       BYTEA NOT NULL
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS laporan_ads_arsip_log (
+        id        SERIAL PRIMARY KEY,
+        arsip_id  INTEGER NOT NULL REFERENCES laporan_ads_arsip(id) ON DELETE CASCADE,
+        aksi      VARCHAR(10) NOT NULL,
+        oleh      VARCHAR(100),
+        waktu     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_laporan_ads_arsip_minggu ON laporan_ads_arsip (brand_id, bulan, minggu)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_laporan_ads_arsip_log ON laporan_ads_arsip_log (arsip_id)`);
     // Hapus hpp_persen dari meta_ads_reports (tidak lagi dipakai per-hari)
     // Tidak drop kolom agar data lama aman — cukup abaikan di logic baru
   } catch (e) { console.error('Meta Ads migration:', e.message); }
@@ -2857,6 +2901,141 @@ function bersihkanLaporanAds({ kpi, mingguan, kreatif }) {
   };
 }
 
+// ── Periode 4 minggu (rentang tanggal) ────────────────────────────────────────
+// Bawaan = 1–7, 8–14, 15–21, 22–akhir bulan. Per bulan bisa diatur bebas (mis. mulai tgl 3, atau melewati akhir bulan)
+// selama 4 rentang berurutan & tidak tumpang tindih. Semua tanggal berupa string ISO 'YYYY-MM-DD' (dibandingkan
+// leksikografis) supaya bebas masalah zona waktu.
+const RE_TGL = /^\d{4}-\d{2}-\d{2}$/;
+const BULAN_ID_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+const tglValid = (s) => {
+  if (!RE_TGL.test(s)) return false;
+  const d = new Date(s + 'T00:00:00Z');
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s; // menolak 2026-02-30
+};
+const tglTambah = (s, n) => { const d = new Date(s + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const selisihHari = (a, b) => Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 86400000);
+const akhirBulan = (bulan) => { const [y, m] = bulan.split('-').map(Number); return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10); };
+const geserBulan = (bulan, k) => { const [y, m] = bulan.split('-').map(Number); return new Date(Date.UTC(y, m - 1 + k, 1)).toISOString().slice(0, 7); };
+const fmtTglId = (s) => `${Number(s.slice(8, 10))} ${BULAN_ID_PENDEK[Number(s.slice(5, 7)) - 1]}`;
+
+function rentangBawaan(bulan) {
+  return [
+    { dari: bulan + '-01', sampai: bulan + '-07' },
+    { dari: bulan + '-08', sampai: bulan + '-14' },
+    { dari: bulan + '-15', sampai: bulan + '-21' },
+    { dari: bulan + '-22', sampai: akhirBulan(bulan) },
+  ];
+}
+const rentangEfektif = (rec, bulan) => (Array.isArray(rec?.rentang) && rec.rentang.length === 4 ? rec.rentang : rentangBawaan(bulan));
+
+// Validasi periode dari klien → { rentang } bersih atau { error }
+function cekRentang(input, bulan) {
+  if (!Array.isArray(input) || input.length !== 4) return { error: 'Periode harus berisi tepat 4 minggu' };
+  const r = [];
+  for (let i = 0; i < 4; i++) {
+    const dari = String(input[i]?.dari ?? ''), sampai = String(input[i]?.sampai ?? '');
+    if (!tglValid(dari) || !tglValid(sampai)) return { error: `Minggu ${i + 1}: tanggal tidak valid` };
+    if (dari > sampai) return { error: `Minggu ${i + 1}: tanggal "dari" harus sebelum atau sama dengan "sampai"` };
+    if (selisihHari(dari, sampai) > 30) return { error: `Minggu ${i + 1}: rentang maksimal 31 hari` };
+    if (i > 0 && dari <= r[i - 1].sampai) return { error: `Minggu ${i + 1} harus dimulai setelah Minggu ${i} berakhir (tidak boleh tumpang tindih)` };
+    r.push({ dari, sampai });
+  }
+  // pengaman salah ketik (mis. tahun keliru): Minggu 1 harus dekat dengan bulan laporan
+  const batasAwal = tglTambah(bulan + '-01', -7), batasAkhir = akhirBulan(bulan);
+  if (r[0].dari < batasAwal || r[0].dari > batasAkhir) return { error: `Minggu 1 harus dimulai antara ${batasAwal} dan ${batasAkhir} (sekitar bulan laporan)` };
+  return { rentang: r };
+}
+
+// Peringatan (tidak memblokir): periode bulan ini menghitung tanggal yang juga dihitung di laporan bulan tetangga
+async function peringatanRentang(brandId, bulan, rentang) {
+  const r = await pool.query(
+    'SELECT bulan, rentang FROM laporan_ads_bulan WHERE brand_id=$1 AND bulan = ANY($2::text[])',
+    [brandId, [geserBulan(bulan, -1), geserBulan(bulan, 1)]]
+  );
+  const pesan = [];
+  for (const rec of r.rows) {
+    const lain = rentangEfektif(rec, rec.bulan);
+    rentang.forEach((a, i) => lain.forEach((b, j) => {
+      if (a.dari <= b.sampai && b.dari <= a.sampai) {
+        const dari = a.dari > b.dari ? a.dari : b.dari, sampai = a.sampai < b.sampai ? a.sampai : b.sampai;
+        pesan.push(`Minggu ${i + 1} bulan ini dan Minggu ${j + 1} laporan ${rec.bulan} sama-sama menghitung ${dari === sampai ? fmtTglId(dari) : `${fmtTglId(dari)}–${fmtTglId(sampai)}`} (terhitung dua kali).`);
+      }
+    }));
+  }
+  return pesan;
+}
+
+// Saran "lanjutkan dari bulan lalu": Minggu 1 bulan ini dimulai sehari setelah Minggu 4 bulan lalu berakhir.
+// Hanya bila bulan lalu memakai periode kustom & titik lanjutnya berbeda dari awal Minggu 1 saat ini.
+async function saranLanjutRentang(brandId, bulan, rentangSaatIni) {
+  const bulanLalu = geserBulan(bulan, -1);
+  const p = await pool.query('SELECT rentang FROM laporan_ads_bulan WHERE brand_id=$1 AND bulan=$2 AND rentang IS NOT NULL', [brandId, bulanLalu]);
+  if (!p.rows.length || !Array.isArray(p.rows[0].rentang) || p.rows[0].rentang.length !== 4) return null;
+  const mulai = tglTambah(p.rows[0].rentang[3].sampai, 1);
+  if (mulai === rentangSaatIni[0].dari) return null;
+  if (mulai < tglTambah(bulan + '-01', -7) || mulai > akhirBulan(bulan)) return null;
+  return { dari: mulai, dari_bulan: bulanLalu };
+}
+
+// Angka otomatis per minggu (M1–M4) untuk satu brand+bulan+periode. Dipakai GET laporan-ads, perhitungan ulang saat
+// periode diubah, dan pembekuan angka saat PDF diarsipkan — jadi semuanya PASTI memakai perhitungan yang sama.
+async function hitungAngkaLaporanAds(brand, bulan, rentang = rentangBawaan(bulan)) {
+  const auto = await pool.query(`
+    WITH r AS (
+      SELECT dari, sampai, minggu::int AS minggu
+      FROM unnest($2::date[], $3::date[]) WITH ORDINALITY AS t(dari, sampai, minggu)
+    ), hari AS (
+      SELECT r.minggu, x.tanggal
+      FROM r
+      JOIN LATERAL (
+        SELECT tanggal FROM meta_ads_insights WHERE brand_id=$1 AND tanggal BETWEEN r.dari AND r.sampai
+        UNION
+        SELECT tanggal FROM meta_ads_reports  WHERE brand_id=$1 AND tanggal BETWEEN r.dari AND r.sampai
+      ) x ON TRUE
+    )
+    SELECT h.minggu,
+           COALESCE(SUM(i.impresi), 0)::bigint                        AS impresi,
+           COALESCE(SUM(i.klik), 0)::bigint                           AS klik,
+           COALESCE(SUM(i.spend * ${KURS_KE_IDR}), 0)::numeric(16,2)  AS spend,
+           COALESCE(SUM(r.jumlah_order), 0)::int                      AS jumlah_order,
+           COALESCE(SUM(r.omzet), 0)::numeric(16,2)                   AS omzet
+    FROM hari h
+    JOIN meta_ads_brands b ON b.id = $1
+    LEFT JOIN meta_ads_insights i ON i.brand_id = b.id AND i.tanggal = h.tanggal
+    LEFT JOIN meta_ads_reports  r ON r.brand_id = b.id AND r.tanggal = h.tanggal
+    GROUP BY h.minggu
+  `, [brand.id, rentang.map(x => x.dari), rentang.map(x => x.sampai)]);
+
+  const hpp = Number(brand.hpp_default || 0);
+  const perMinggu = new Map(auto.rows.map(r => [Number(r.minggu), r]));
+  return [1, 2, 3, 4].map(m => {
+    const r = perMinggu.get(m);
+    const impresi = Number(r?.impresi || 0), klik = Number(r?.klik || 0);
+    const spend = Number(r?.spend || 0), omzet = Number(r?.omzet || 0);
+    return {
+      minggu: m, dari: rentang[m - 1].dari, sampai: rentang[m - 1].sampai,
+      ada_data: !!r, impresi, klik,
+      ctr: impresi > 0 ? (klik / impresi) * 100 : null,
+      spend, omzet, jumlah_order: Number(r?.jumlah_order || 0),
+      profit: omzet - (omzet * hpp / 100) - spend,
+    };
+  });
+}
+
+// POST /api/hub/meta-ads/laporan-ads/hitung — hitung ulang angka untuk periode yang sedang diedit (tanpa menyimpan)
+router.post('/meta-ads/laporan-ads/hitung', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
+  const { brand_id, bulan, rentang } = req.body;
+  if (!brand_id || !RE_BULAN.test(bulan || '')) return res.status(400).json({ error: 'brand_id dan bulan (YYYY-MM) wajib' });
+  const c = cekRentang(rentang ?? rentangBawaan(bulan), bulan);
+  if (c.error) return res.status(400).json({ error: c.error });
+  try {
+    const br = await pool.query('SELECT id, nama, hpp_default, mata_uang FROM meta_ads_brands WHERE id=$1', [brand_id]);
+    if (!br.rows.length) return res.status(404).json({ error: 'Brand tidak ditemukan' });
+    const [auto, peringatan] = await Promise.all([hitungAngkaLaporanAds(br.rows[0], bulan, c.rentang), peringatanRentang(br.rows[0].id, bulan, c.rentang)]);
+    res.json({ data: { auto, rentang: c.rentang, peringatan } });
+  } catch (e) { console.error('Gagal hitung angka laporan ads:', e.message); res.status(500).json({ error: 'Gagal menghitung angka' }); }
+});
+
 // GET /api/hub/meta-ads/laporan-ads?brand_id=&bulan=YYYY-MM
 router.get('/meta-ads/laporan-ads', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
   const { brand_id, bulan } = req.query;
@@ -2865,47 +3044,20 @@ router.get('/meta-ads/laporan-ads', authMiddleware, requirePageAccess('ads-perfo
     const br = await pool.query('SELECT id, nama, hpp_default, mata_uang FROM meta_ads_brands WHERE id=$1', [brand_id]);
     if (!br.rows.length) return res.status(404).json({ error: 'Brand tidak ditemukan' });
     const brand = br.rows[0];
-    const awal = bulan + '-01';
+    const hpp = Number(brand.hpp_default || 0);
 
-    const [profil, bln, prev, gambar, auto] = await Promise.all([
+    const bln = await pool.query('SELECT kpi, mingguan, kreatif, rentang FROM laporan_ads_bulan WHERE brand_id=$1 AND bulan=$2', [brand.id, bulan]);
+    const rentang = rentangEfektif(bln.rows[0], bulan);
+
+    const [profil, prev, gambar, angkaAuto, peringatan, saranLanjut] = await Promise.all([
       pool.query('SELECT judul, ig_handle FROM laporan_ads_profil WHERE brand_id=$1', [brand.id]),
-      pool.query('SELECT kpi, mingguan, kreatif FROM laporan_ads_bulan WHERE brand_id=$1 AND bulan=$2', [brand.id, bulan]),
       pool.query('SELECT kpi FROM laporan_ads_bulan WHERE brand_id=$1 AND bulan<$2 ORDER BY bulan DESC LIMIT 1', [brand.id, bulan]),
       pool.query(`SELECT id, jenis, minggu, data FROM laporan_ads_gambar
                   WHERE brand_id=$1 AND (jenis='maskot' OR bulan=$2) ORDER BY id`, [brand.id, bulan]),
-      pool.query(`
-        WITH hari AS (
-          SELECT tanggal FROM meta_ads_insights WHERE brand_id=$1 AND tanggal >= $2::date AND tanggal < ($2::date + INTERVAL '1 month')
-          UNION
-          SELECT tanggal FROM meta_ads_reports  WHERE brand_id=$1 AND tanggal >= $2::date AND tanggal < ($2::date + INTERVAL '1 month')
-        )
-        SELECT LEAST((EXTRACT(DAY FROM h.tanggal)::int - 1) / 7 + 1, 4) AS minggu,
-               COALESCE(SUM(i.impresi), 0)::bigint                        AS impresi,
-               COALESCE(SUM(i.klik), 0)::bigint                           AS klik,
-               COALESCE(SUM(i.spend * ${KURS_KE_IDR}), 0)::numeric(16,2)  AS spend,
-               COALESCE(SUM(r.jumlah_order), 0)::int                      AS jumlah_order,
-               COALESCE(SUM(r.omzet), 0)::numeric(16,2)                   AS omzet
-        FROM hari h
-        JOIN meta_ads_brands b ON b.id = $1
-        LEFT JOIN meta_ads_insights i ON i.brand_id = b.id AND i.tanggal = h.tanggal
-        LEFT JOIN meta_ads_reports  r ON r.brand_id = b.id AND r.tanggal = h.tanggal
-        GROUP BY 1
-      `, [brand.id, awal]),
+      hitungAngkaLaporanAds(brand, bulan, rentang),
+      peringatanRentang(brand.id, bulan, rentang),
+      saranLanjutRentang(brand.id, bulan, rentang),
     ]);
-
-    const hpp = Number(brand.hpp_default || 0);
-    const perMinggu = new Map(auto.rows.map(r => [Number(r.minggu), r]));
-    const angkaAuto = [1, 2, 3, 4].map(m => {
-      const r = perMinggu.get(m);
-      const impresi = Number(r?.impresi || 0), klik = Number(r?.klik || 0);
-      const spend = Number(r?.spend || 0), omzet = Number(r?.omzet || 0);
-      return {
-        minggu: m, ada_data: !!r, impresi, klik,
-        ctr: impresi > 0 ? (klik / impresi) * 100 : null,
-        spend, omzet, jumlah_order: Number(r?.jumlah_order || 0),
-        profit: omzet - (omzet * hpp / 100) - spend,
-      };
-    });
 
     res.json({ data: {
       brand: { id: brand.id, nama: brand.nama, mata_uang: brand.mata_uang, hpp_default: hpp },
@@ -2916,6 +3068,10 @@ router.get('/meta-ads/laporan-ads', authMiddleware, requirePageAccess('ads-perfo
       tersimpan: !!bln.rows[0],
       gambar: gambar.rows,
       auto: angkaAuto,
+      rentang,                                  // periode yang berlaku (kustom atau bawaan)
+      rentang_kustom: !!bln.rows[0]?.rentang,
+      peringatan,                               // tanggal yang terhitung dua kali dengan bulan tetangga
+      saran_lanjut: saranLanjut,                // { dari, dari_bulan } atau null
     } });
   } catch (e) { console.error('Gagal ambil laporan ads:', e.message); res.status(500).json({ error: 'Gagal ambil laporan ads' }); }
 });
@@ -2936,16 +3092,29 @@ router.put('/meta-ads/laporan-ads', authMiddleware, requirePageAccess('ads-perfo
       : []);
     bersih.kreatif.forEach(c => { if (!sah.has(c.gambar_id)) c.gambar_id = null; });
 
+    // Periode minggu: field tidak dikirim → biarkan yang lama; null → kembali ke bawaan; array → validasi lalu simpan
+    const adaRentang = Object.prototype.hasOwnProperty.call(req.body, 'rentang');
+    let rentangSimpan = null;
+    if (adaRentang && req.body.rentang !== null) {
+      const c = cekRentang(req.body.rentang, bulan);
+      if (c.error) return res.status(400).json({ error: c.error });
+      rentangSimpan = c.rentang;
+    }
+
     await pool.query(`
-      INSERT INTO laporan_ads_bulan (brand_id, bulan, kpi, mingguan, kreatif, updated_by, updated_at)
-      VALUES ($1,$2,$3,$4,$5,$6,NOW())
-      ON CONFLICT (brand_id, bulan) DO UPDATE SET kpi=$3, mingguan=$4, kreatif=$5, updated_by=$6, updated_at=NOW()
-    `, [brand_id, bulan, JSON.stringify(bersih.kpi), JSON.stringify(bersih.mingguan), JSON.stringify(bersih.kreatif), req.user.nama]);
+      INSERT INTO laporan_ads_bulan (brand_id, bulan, kpi, mingguan, kreatif, rentang, updated_by, updated_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+      ON CONFLICT (brand_id, bulan) DO UPDATE SET kpi=$3, mingguan=$4, kreatif=$5,
+        rentang = CASE WHEN $8::boolean THEN $6::jsonb ELSE laporan_ads_bulan.rentang END,
+        updated_by=$7, updated_at=NOW()
+    `, [brand_id, bulan, JSON.stringify(bersih.kpi), JSON.stringify(bersih.mingguan), JSON.stringify(bersih.kreatif),
+        rentangSimpan ? JSON.stringify(rentangSimpan) : null, req.user.nama, adaRentang]);
     await pool.query(`
       INSERT INTO laporan_ads_profil (brand_id, judul, ig_handle, updated_at) VALUES ($1,$2,$3,NOW())
       ON CONFLICT (brand_id) DO UPDATE SET judul=$2, ig_handle=$3, updated_at=NOW()
     `, [brand_id, laTeks(profil?.judul, 100), laTeks(profil?.ig_handle, 100)]);
-    res.json({ ok: true });
+    const tersimpan = await pool.query('SELECT rentang FROM laporan_ads_bulan WHERE brand_id=$1 AND bulan=$2', [brand_id, bulan]);
+    res.json({ ok: true, peringatan: await peringatanRentang(Number(brand_id), bulan, rentangEfektif(tersimpan.rows[0], bulan)) });
   } catch (e) { console.error('Gagal simpan laporan ads:', e.message); res.status(500).json({ error: 'Gagal simpan laporan ads' }); }
 });
 
@@ -2998,6 +3167,183 @@ router.delete('/meta-ads/laporan-ads/gambar/:id', authMiddleware, requirePageAcc
     }
     res.json({ ok: true });
   } catch (e) { console.error('Gagal hapus gambar laporan ads:', e.message); res.status(500).json({ error: 'Gagal hapus gambar' }); }
+});
+
+// ── RIWAYAT (ARSIP) PDF LAPORAN ADS ──────────────────────────────────────────
+// Setiap PDF yang dibuat dari halaman Laporan Ads Mingguan diunggah ke sini (body mentah application/pdf).
+// Angka beku (ringkasan/snapshot) dihitung SERVER dari data tersimpan, bukan dikirim klien. Hanya ARSIP_MAKS_VERSI
+// versi terbaru per brand+bulan+minggu yang disimpan; sisanya dihapus otomatis (soft delete, jejak tetap ada).
+
+const ARSIP_MAKS_BYTE = 15 * 1024 * 1024;
+const ARSIP_MAKS_VERSI = 3;
+const parserPdfMentah = express.raw({ type: 'application/pdf', limit: ARSIP_MAKS_BYTE });
+function parserPdf(req, res, next) {
+  parserPdfMentah(req, res, (err) => {
+    if (!err) return next();
+    const terlalu = err.status === 413 || err.type === 'entity.too.large';
+    res.status(terlalu ? 413 : 400).json({ error: terlalu ? 'PDF terlalu besar (maks 15 MB)' : 'Gagal membaca PDF' });
+  });
+}
+const catatArsip = (db, arsipId, aksi, oleh) =>
+  db.query('INSERT INTO laporan_ads_arsip_log (arsip_id, aksi, oleh) VALUES ($1,$2,$3)', [arsipId, aksi, oleh]);
+
+// POST /api/hub/meta-ads/laporan-ads/arsip?brand_id=&bulan=YYYY-MM&minggu=1..4&slide=N  (Content-Type: application/pdf)
+router.post('/meta-ads/laporan-ads/arsip', authMiddleware, requirePageAccess('ads-performance'), parserPdf, async (req, res) => {
+  const { brand_id, bulan } = req.query;
+  const minggu = Number(req.query.minggu);
+  const slide = Math.min(Math.max(parseInt(req.query.slide, 10) || 0, 0), 50);
+  if (!brand_id || !RE_BULAN.test(bulan || '') || ![1, 2, 3, 4].includes(minggu)) {
+    return res.status(400).json({ error: 'brand_id, bulan (YYYY-MM), dan minggu (1–4) wajib' });
+  }
+  const pdf = req.body;
+  if (!Buffer.isBuffer(pdf) || pdf.length < 100) return res.status(400).json({ error: 'Body harus berisi PDF (Content-Type: application/pdf)' });
+  if (pdf.subarray(0, 5).toString('latin1') !== '%PDF-') return res.status(400).json({ error: 'Berkas bukan PDF yang valid' });
+
+  try {
+    const br = await pool.query('SELECT id, nama, hpp_default, mata_uang FROM meta_ads_brands WHERE id=$1', [brand_id]);
+    if (!br.rows.length) return res.status(404).json({ error: 'Brand tidak ditemukan' });
+    const brand = br.rows[0];
+
+    // Potret angka & isian saat ini (sumber: database, bukan klien)
+    const bln = await pool.query('SELECT kpi, mingguan, kreatif, rentang FROM laporan_ads_bulan WHERE brand_id=$1 AND bulan=$2', [brand.id, bulan]);
+    const rentang = rentangEfektif(bln.rows[0], bulan);
+    const [profil, angka] = await Promise.all([
+      pool.query('SELECT judul, ig_handle FROM laporan_ads_profil WHERE brand_id=$1', [brand.id]),
+      hitungAngkaLaporanAds(brand, bulan, rentang),
+    ]);
+    const judul = profil.rows[0]?.judul || brand.nama;
+    const ringkasan = {
+      judul, ig_handle: profil.rows[0]?.ig_handle || '', hpp_default: Number(brand.hpp_default || 0), mata_uang: brand.mata_uang,
+      rentang, // periode yang dipakai PDF ini — dibekukan (tiap elemen `auto` juga memuat dari/sampai)
+      total_profit: angka.slice(0, minggu).reduce((s, a) => s + a.profit, 0),
+      auto: angka,
+    };
+    const snapshot = {
+      kpi: bln.rows[0]?.kpi || {},
+      mingguan: bln.rows[0]?.mingguan || [],
+      kreatif: (bln.rows[0]?.kreatif || []).map(k => ({ nama: k.nama, mingguan: k.mingguan })),
+    };
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      // serialkan unggahan bersamaan untuk minggu yang sama supaya nomor versi tidak bentrok
+      await client.query('SELECT pg_advisory_xact_lock($1::int, hashtext($2))', [brand.id, `${bulan}:${minggu}`]);
+      const v = await client.query(
+        'SELECT COALESCE(MAX(versi), 0) + 1 AS versi FROM laporan_ads_arsip WHERE brand_id=$1 AND bulan=$2 AND minggu=$3',
+        [brand.id, bulan, minggu]
+      );
+      const versi = v.rows[0].versi;
+      const ins = await client.query(`
+        INSERT INTO laporan_ads_arsip (brand_id, bulan, minggu, versi, judul, ukuran, jumlah_slide, dibuat_oleh, ringkasan, snapshot)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id, dibuat_pada
+      `, [brand.id, bulan, minggu, versi, judul, pdf.length, slide || null, req.user.nama, JSON.stringify(ringkasan), JSON.stringify(snapshot)]);
+      const id = ins.rows[0].id;
+      await client.query('INSERT INTO laporan_ads_arsip_file (arsip_id, pdf) VALUES ($1,$2)', [id, pdf]);
+      await catatArsip(client, id, 'dibuat', req.user.nama);
+
+      // batasi jumlah versi tersimpan: yang lebih lama dari ARSIP_MAKS_VERSI terbaru dihapus otomatis
+      const lama = await client.query(
+        `SELECT id FROM laporan_ads_arsip WHERE brand_id=$1 AND bulan=$2 AND minggu=$3 AND dihapus_pada IS NULL
+         ORDER BY versi DESC OFFSET $4`, [brand.id, bulan, minggu, ARSIP_MAKS_VERSI]
+      );
+      for (const row of lama.rows) {
+        await client.query('DELETE FROM laporan_ads_arsip_file WHERE arsip_id=$1', [row.id]);
+        await client.query(`UPDATE laporan_ads_arsip SET dihapus_pada=NOW(), dihapus_oleh='sistem (batas versi)' WHERE id=$1`, [row.id]);
+        await catatArsip(client, row.id, 'dihapus', 'sistem (batas versi)');
+      }
+      await client.query('COMMIT');
+      res.status(201).json({ data: { id, versi, ukuran: pdf.length, dibuat_pada: ins.rows[0].dibuat_pada, total_profit: ringkasan.total_profit } });
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw e;
+    } finally { client.release(); }
+  } catch (e) { console.error('Gagal simpan arsip laporan ads:', e.message); res.status(500).json({ error: 'Gagal menyimpan PDF ke riwayat' }); }
+});
+
+// GET /api/hub/meta-ads/laporan-ads/arsip?brand_id=&bulan=YYYY-MM  (bulan opsional = semua bulan)
+router.get('/meta-ads/laporan-ads/arsip', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
+  const { brand_id, bulan } = req.query;
+  if (!brand_id) return res.status(400).json({ error: 'brand_id wajib' });
+  if (bulan && !RE_BULAN.test(bulan)) return res.status(400).json({ error: 'bulan harus YYYY-MM' });
+  try {
+    const params = [brand_id];
+    let filter = '';
+    if (bulan) { params.push(bulan); filter = ' AND bulan=$2'; }
+    const r = await pool.query(`
+      SELECT id, brand_id, bulan, minggu, versi, judul, ukuran, jumlah_slide, dibuat_oleh, dibuat_pada, ringkasan,
+             jumlah_unduh, terakhir_diunduh_oleh, terakhir_diunduh_pada
+      FROM laporan_ads_arsip
+      WHERE brand_id=$1 AND dihapus_pada IS NULL${filter}
+      ORDER BY bulan DESC, minggu DESC, versi DESC LIMIT 200
+    `, params);
+    res.json({ data: r.rows });
+  } catch (e) { console.error('Gagal ambil arsip laporan ads:', e.message); res.status(500).json({ error: 'Gagal ambil riwayat' }); }
+});
+
+// GET /api/hub/meta-ads/laporan-ads/arsip/:id/log — jejak dibuat/diunduh/dihapus satu arsip
+router.get('/meta-ads/laporan-ads/arsip/:id/log', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'id tidak valid' });
+  try {
+    const r = await pool.query('SELECT aksi, oleh, waktu FROM laporan_ads_arsip_log WHERE arsip_id=$1 ORDER BY id DESC LIMIT 100', [id]);
+    res.json({ data: r.rows });
+  } catch (e) { console.error('Gagal ambil log arsip:', e.message); res.status(500).json({ error: 'Gagal ambil log' }); }
+});
+
+// GET /api/hub/meta-ads/laporan-ads/arsip/:id/pdf — unduh file & catat unduhan
+router.get('/meta-ads/laporan-ads/arsip/:id/pdf', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'id tidak valid' });
+  try {
+    const r = await pool.query(`
+      SELECT a.judul, a.bulan, a.minggu, a.versi, f.pdf
+      FROM laporan_ads_arsip a JOIN laporan_ads_arsip_file f ON f.arsip_id = a.id
+      WHERE a.id=$1 AND a.dihapus_pada IS NULL
+    `, [id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'PDF tidak ditemukan atau sudah dihapus' });
+    const a = r.rows[0];
+    // pencatatan tidak boleh menggagalkan unduhan
+    try {
+      await pool.query(
+        `UPDATE laporan_ads_arsip SET jumlah_unduh = jumlah_unduh + 1, terakhir_diunduh_oleh=$2, terakhir_diunduh_pada=NOW() WHERE id=$1`,
+        [id, req.user.nama]
+      );
+      await catatArsip(pool, id, 'diunduh', req.user.nama);
+    } catch (e) { console.error('Gagal mencatat unduhan arsip:', e.message); }
+    const nama = `Weekly Report - ${a.judul} ${a.bulan} M${a.minggu} v${a.versi}.pdf`;
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Length': a.pdf.length,
+      'Content-Disposition': `attachment; filename="${nama.replace(/[^A-Za-z0-9 ._-]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(nama)}`,
+      'Cache-Control': 'private, no-store',
+    });
+    res.end(a.pdf);
+  } catch (e) { console.error('Gagal unduh arsip laporan ads:', e.message); res.status(500).json({ error: 'Gagal mengunduh PDF' }); }
+});
+
+// DELETE /api/hub/meta-ads/laporan-ads/arsip/:id — hanya admin. Soft delete: file dibuang, jejak tetap.
+router.delete('/meta-ads/laporan-ads/arsip/:id', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin yang boleh menghapus PDF dari riwayat' });
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'id tidak valid' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const r = await client.query(
+      'UPDATE laporan_ads_arsip SET dihapus_pada=NOW(), dihapus_oleh=$2 WHERE id=$1 AND dihapus_pada IS NULL RETURNING id',
+      [id, req.user.nama]
+    );
+    if (!r.rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'PDF tidak ditemukan atau sudah dihapus' }); }
+    await client.query('DELETE FROM laporan_ads_arsip_file WHERE arsip_id=$1', [id]);
+    await catatArsip(client, id, 'dihapus', req.user.nama);
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Gagal hapus arsip laporan ads:', e.message);
+    res.status(500).json({ error: 'Gagal menghapus PDF' });
+  } finally { client.release(); }
 });
 
 // ── AI INSIGHT ───────────────────────────────────────────────────────────────

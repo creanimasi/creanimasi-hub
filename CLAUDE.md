@@ -77,6 +77,26 @@ Catatan soal migrasi yang tidak lengkap:
   ADD COLUMN IF NOT EXISTS` yang jalan otomatis tiap kali server start) — tidak ada file SQL-nya,
   tapi ini "by design", bukan gap.
 
+## Ads Performance & Laporan Ads Mingguan (backend/hub.js bagian META ADS + src/pages/LaporanAdsMingguan.jsx)
+- **Token Meta per brand**: kolom `meta_ads_brands.token_env` = NAMA env var (harus berawalan `META_ACCESS_TOKEN`; kosong = pakai
+  `META_ACCESS_TOKEN`). Token TIDAK disimpan di DB. Tiap token baru = env var baru di Coolify + redeploy backend.
+- **Mata uang**: `spend`/`cpm` disimpan mentah (mata uang ad account, terdeteksi ke `meta_ads_brands.mata_uang` saat sync).
+  Semua query membacanya lewat `KURS_KE_IDR` (akun USD × `kurs_usd` brand; selain itu dianggap IDR). Jangan baca `i.spend` mentah.
+- **Laporan Ads Mingguan** (`/laporan-ads-mingguan`, kunci akses = `ads-performance`, belum punya kunci sendiri): selalu 4 minggu
+  per bulan. **Periode tiap minggu** = 4 rentang tanggal `laporan_ads_bulan.rentang` (JSONB; NULL = bawaan 1–7, 8–14, 15–21,
+  22–akhir bulan). Bisa diatur per bulan (mulai tgl berapa pun, boleh melewati akhir bulan); validasi `cekRentang` (hub.js) dan
+  `utils/periodeMinggu.js` (frontend) harus dijaga sama: berurutan, tak tumpang tindih, tiap rentang ≤ 31 hari. Tumpang tindih dengan
+  bulan tetangga hanya peringatan; `saran_lanjut` menawarkan mulai sehari setelah Minggu 4 bulan lalu. Angka otomatis dihitung
+  `hitungAngkaLaporanAds(brand, bulan, rentang)` (sumber tunggal: GET, `POST .../hitung` saat periode diedit, dan pembekuan arsip);
+  isian manual di `laporan_ads_bulan`, gambar di `laporan_ads_gambar` (diunggah satu-satu, dikompres di browser).
+- **Riwayat PDF** (`laporan_ads_arsip`/`_file`/`_log`): tiap Download PDF mengunggah PDF mentah (`application/pdf`, maks 15 MB) ke
+  `POST /meta-ads/laporan-ads/arsip`; server membekukan angka dari DB (bukan dari klien). Maks 3 versi terbaru per brand+bulan+minggu
+  (sisanya soft delete otomatis). Hapus manual hanya admin (`req.user.role === 'admin'`). Unduhan tercatat di log.
+- **Batas upload**: nginx frontend meneruskan `/api/hub` dan default-nya membatasi body 1 MB — `client_max_body_size 25m` di
+  `nginx.conf` WAJIB ada (PDF berisi foto beberapa MB). Kalau unggah Riwayat 413, cek ini dulu (butuh deploy frontend).
+- Ekspor PDF di browser (`html2canvas` + `jsPDF`): html2canvas mengabaikan `object-fit` dan `repeating-linear-gradient` — di `SlideDeck.jsx`
+  maskot memakai `background-image` dan grid latar memakai pola SVG karena itu.
+
 ## Modul RPG / Gamifikasi (backend/rpg.js + src/modules/rpg)
 Terdaftar dari `hub.js` (`require('./rpg')(router, {...})`), endpoint `/api/hub/rpg/*`. Tabel `rpg_*` dibuat
 otomatis (IIFE `CREATE TABLE IF NOT EXISTS` di rpg.js): `rpg_xp_event` (ledger XP, UNIQUE tim_id+sumber+ref_key →
@@ -197,6 +217,12 @@ tabel `profiling_*`, bukan di `tim` lagi.
 4. Publish dir: `build`
 5. Env var: `REACT_APP_API_URL=http://163.61.44.177:3001/api/hub`
 6. Backend hub.js harus jalan di server port 3001
+7. **`DATABASE_URL` di Coolify HARUS memakai NAMA container Postgres (`w0cowk8gs8cs8ocs8o0scww8`), BUKAN IP** (mis. 10.0.1.x).
+   IP di jaringan `coolify` dibagikan dinamis: pada deploy 2026-09-21 container backend baru mengambil `10.0.1.4` — IP yang
+   tertulis di env — sehingga backend menyambung ke dirinya sendiri (`ECONNREFUSED 10.0.1.4:5432`, login 500). Postgres sendiri
+   ada di `10.0.1.8` dan tak pernah bermasalah. Diperbaiki dengan mengganti host di env (entri non-Preview) lalu deploy ulang.
+   Cek cepat setelah deploy: `docker logs <container>` tanpa `ECONN`/`Migration ... startup:`; login palsu → 401 (bukan 500).
+   Grep verifikasi jangan hanya `error|gagal` — galat migrasi berbunyi "Migration ... startup: connect ECONNREFUSED".
 
 ## Cara Jalankan Lokal
 ```bash
