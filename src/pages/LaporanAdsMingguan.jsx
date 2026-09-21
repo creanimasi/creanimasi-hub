@@ -80,7 +80,9 @@ function GaleriUnggah({ gambar, onTambah, onHapus, sibuk, maks = 8 }) {
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         {gambar.map(g => (
           <div key={g.id} style={{ position: 'relative', width: 96, height: 96, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)', background: '#222' }}>
-            <img src={g.data} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            {g.data
+              ? <img src={g.data} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', fontSize: 18 }}>{g.gagal ? '⚠️' : '⏳'}</div>}
             <button onClick={() => onHapus(g)} title="Hapus" style={{ position: 'absolute', top: 3, right: 3, width: 22, height: 22, borderRadius: 11, border: 'none', background: 'rgba(0,0,0,0.65)', color: '#fff', cursor: 'pointer', fontSize: 12, lineHeight: 1 }}>✕</button>
           </div>
         ))}
@@ -123,6 +125,8 @@ export default function LaporanAdsMingguan() {
   const permintaanHitung = useRef(0);
   const permintaanMuat = useRef(0);             // nomor pemuatan terbaru — balasan yang basi (ganti brand/bulan cepat) diabaikan
   const permintaanArsip = useRef(0);
+  const promesaGambar = useRef(new Map());      // id gambar → Promise URL objek (blob). Gambar tidak berubah per id, jadi aman di-cache
+  const terpasang = useRef(new Set());          // id yang sudah dipasangi penangan pemuatan (cegah permintaan ganda)
   const kunciAktif = useRef('');                // "brand|bulan" yang sedang tampil, untuk menolak hasil unggahan yang basi
 
   const previewRef = useRef();
@@ -198,6 +202,29 @@ export default function LaporanAdsMingguan() {
 
   useEffect(() => { muatArsip(); }, [muatArsip]);
   useEffect(() => { kunciAktif.current = `${brandId}|${bulan}`; }, [brandId, bulan]);
+
+  // Isi gambar diambil terpisah & hanya yang dibutuhkan: maskot, kreatif (dipakai semua minggu), dan gambar minggu yang dipilih.
+  // Gambar minggu lain baru diambil saat minggunya dibuka. Mengambil semua sekaligus membuat halaman berat (puluhan MB).
+  const ambilGambar = useCallback((id) => {
+    if (!promesaGambar.current.has(id)) {
+      promesaGambar.current.set(id, api.unduhGambarLaporanAds(id).then(blob => URL.createObjectURL(blob)));
+    }
+    return promesaGambar.current.get(id);
+  }, []);
+  useEffect(() => {
+    gambar
+      .filter(g => !g.data && !g.gagal && !terpasang.current.has(g.id) && (g.jenis === 'maskot' || g.jenis === 'kreatif' || g.minggu === minggu))
+      .forEach(g => {
+        terpasang.current.add(g.id);
+        ambilGambar(g.id)
+          .then(url => setGambar(prev => prev.map(x => (x.id === g.id ? { ...x, data: url } : x))))
+          .catch(() => { promesaGambar.current.delete(g.id); setGambar(prev => prev.map(x => (x.id === g.id ? { ...x, gagal: true } : x))); });
+      });
+  }, [gambar, minggu, ambilGambar]);
+  useEffect(() => () => { // lepas URL objek saat halaman ditutup
+    promesaGambar.current.forEach(p => p.then(u => URL.revokeObjectURL(u)).catch(() => {}));
+    promesaGambar.current.clear(); terpasang.current.clear();
+  }, []);
 
   // Periode diedit → hitung ulang angka otomatis (tanpa menyimpan) setelah jeda singkat, supaya tabel & preview ikut berubah
   const kunciRentang = form ? JSON.stringify(form.rentang) : '';
@@ -297,7 +324,10 @@ export default function LaporanAdsMingguan() {
 
   const gambarKreatif = (id) => gambar.find(g => g.id === id)?.data || null;
   const maskot = gambar.find(g => g.jenis === 'maskot')?.data || null;
+  const adaMaskot = gambar.some(g => g.jenis === 'maskot');   // ada di server (isinya bisa masih dimuat)
   const gambarMinggu = (jenis) => gambar.filter(g => g.jenis === jenis && g.minggu === minggu);
+  // gambar yang dibutuhkan PDF minggu ini belum semua termuat → PDF akan kehilangan gambar; tunggu dulu
+  const menungguGambar = gambar.some(g => !g.data && !g.gagal && (g.jenis === 'maskot' || g.jenis === 'kreatif' || g.minggu === minggu));
 
   const deckData = useMemo(() => {
     if (!form || !data) return null;
@@ -320,7 +350,7 @@ export default function LaporanAdsMingguan() {
   };
 
   const unduhPdf = async () => {
-    if (!deckData) return;
+    if (!deckData || menungguGambar) return; // gambar belum termuat → PDF akan kehilangan gambar
     // Angka beku di Riwayat dihitung server dari data TERSIMPAN — pastikan isi PDF = yang tersimpan
     if (kotor && !(await simpan(form, { diam: true }))) return;
     setEkspor({ i: 0, n: 0 });
@@ -406,7 +436,7 @@ export default function LaporanAdsMingguan() {
         <div style={{ flex: 1 }} />
         {kotor && <span style={{ fontSize: 11, color: '#FFB84B' }}>● Belum disimpan</span>}
         <button onClick={() => simpan()} disabled={menyimpan || !form} style={{ ...S.btnHijau, cursor: menyimpan ? 'not-allowed' : 'pointer' }}>{menyimpan ? 'Menyimpan…' : '💾 Simpan'}</button>
-        <button onClick={unduhPdf} disabled={!deckData || !!ekspor || cekPeriode.ada} title={cekPeriode.ada ? 'Perbaiki dulu periode minggu yang belum valid' : undefined} style={{ ...S.btn, cursor: ekspor ? 'wait' : cekPeriode.ada ? 'not-allowed' : 'pointer' }}>⬇️ Download PDF</button>
+        <button onClick={unduhPdf} disabled={!deckData || !!ekspor || cekPeriode.ada || menungguGambar} title={cekPeriode.ada ? 'Perbaiki dulu periode minggu yang belum valid' : menungguGambar ? 'Menunggu gambar selesai dimuat…' : undefined} style={{ ...S.btn, cursor: ekspor || menungguGambar ? 'wait' : cekPeriode.ada ? 'not-allowed' : 'pointer' }}>⬇️ Download PDF</button>
       </div>
 
       {pdfTerakhir && (
@@ -502,10 +532,10 @@ export default function LaporanAdsMingguan() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   {maskot ? <img src={maskot} alt="" style={{ width: 44, height: 44, objectFit: 'contain', background: '#3a3a3a', borderRadius: 6 }} /> : null}
                   <label style={{ ...S.btn, display: 'inline-block' }}>
-                    {sibuk === 'maskot' ? '⏳ Mengunggah…' : maskot ? 'Ganti' : 'Unggah'}
+                    {sibuk === 'maskot' ? '⏳ Mengunggah…' : adaMaskot ? 'Ganti' : 'Unggah'}
                     <input type="file" accept="image/*" style={{ display: 'none' }} disabled={!!sibuk} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) unggah('maskot', f); }} />
                   </label>
-                  {maskot && <button onClick={() => hapusGambar(gambar.find(g => g.jenis === 'maskot'))} style={S.btn}>Hapus</button>}
+                  {adaMaskot && <button onClick={() => hapusGambar(gambar.find(g => g.jenis === 'maskot'))} style={S.btn}>Hapus</button>}
                 </div>
               </Field>
             </div>
@@ -572,7 +602,7 @@ export default function LaporanAdsMingguan() {
             {form.kreatif.map((k, i) => (
               <div key={i} style={{ display: 'flex', gap: 14, flexWrap: 'wrap', padding: 12, border: '1px solid var(--border)', borderRadius: 10, marginBottom: 12 }}>
                 <div style={{ position: 'relative', width: 110, height: 150, borderRadius: 8, overflow: 'hidden', background: '#222', flexShrink: 0 }}>
-                  {gambarKreatif(k.gambar_id) ? <img src={gambarKreatif(k.gambar_id)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ color: '#888', fontSize: 11, padding: 8, display: 'block' }}>Tanpa gambar</span>}
+                  {gambarKreatif(k.gambar_id) ? <img src={gambarKreatif(k.gambar_id)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ color: '#888', fontSize: 11, padding: 8, display: 'block' }}>{gambar.some(g => g.id === k.gambar_id) ? (gambar.find(g => g.id === k.gambar_id).gagal ? 'Gagal dimuat' : 'Memuat…') : 'Tanpa gambar'}</span>}
                 </div>
                 <div style={{ flex: 1, minWidth: 240 }}>
                   <Field label="Nama kreatif (opsional)"><input value={k.nama} onChange={e => ubahKreatif(i, { nama: e.target.value })} style={S.input} placeholder="Iklan A — 3D print" /></Field>

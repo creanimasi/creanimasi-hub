@@ -201,7 +201,9 @@ export const api = {
   updateMetaBrandSettings: (id, data)             => request('PUT', `/meta-ads/brands/${id}/settings`, data),
   getMetaInsights:    (brandId, bulan)            => request('GET', `/meta-ads/insights?${brandId ? `brand_id=${brandId}&` : ''}${bulan ? `bulan=${bulan}` : ''}`),
   saveMetaReport:     (data)                      => request('POST', '/meta-ads/report', data),
-  getLaporanAds:      (brandId, bulan)            => request('GET', `/meta-ads/laporan-ads?brand_id=${brandId}&bulan=${bulan}`),
+  // ringkas=1: daftar gambar tanpa isinya (isi diambil per gambar lewat unduhGambarLaporanAds) — jauh lebih ringan
+  getLaporanAds:      (brandId, bulan)            => request('GET', `/meta-ads/laporan-ads?brand_id=${brandId}&bulan=${bulan}&ringkas=1`),
+  unduhGambarLaporanAds: (id)                     => rawRequest('GET', `/meta-ads/laporan-ads/gambar/${id}`, { blob: true }),
   saveLaporanAds:     (data)                      => request('PUT', '/meta-ads/laporan-ads', data),
   hitungAngkaLaporanAds: (brandId, bulan, rentang) => request('POST', '/meta-ads/laporan-ads/hitung', { brand_id: brandId, bulan, rentang }),
   uploadGambarLaporanAds: (data)                  => request('POST', '/meta-ads/laporan-ads/gambar', data),

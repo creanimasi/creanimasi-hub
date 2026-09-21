@@ -3073,10 +3073,13 @@ router.get('/meta-ads/laporan-ads', authMiddleware, requirePageAccess('ads-perfo
     const bln = await pool.query('SELECT kpi, mingguan, kreatif, rentang FROM laporan_ads_bulan WHERE brand_id=$1 AND bulan=$2', [brand.id, bulan]);
     const rentang = rentangEfektif(bln.rows[0], bulan);
 
+    // ringkas=1 → hanya daftar gambar (id/jenis/minggu) TANPA isinya; isi diambil terpisah lewat GET .../gambar/:id.
+    // Tanpa ringkas, isi (data URL base64) ikut dikirim seperti versi lama — dijaga demi kompatibilitas frontend lama.
+    const kolomGambar = req.query.ringkas === '1' ? 'id, jenis, minggu' : 'id, jenis, minggu, data';
     const [profil, prev, gambar, angkaAuto, peringatan, saranLanjut] = await Promise.all([
       pool.query('SELECT judul, ig_handle FROM laporan_ads_profil WHERE brand_id=$1', [brand.id]),
       pool.query('SELECT kpi FROM laporan_ads_bulan WHERE brand_id=$1 AND bulan<$2 ORDER BY bulan DESC LIMIT 1', [brand.id, bulan]),
-      pool.query(`SELECT id, jenis, minggu, data FROM laporan_ads_gambar
+      pool.query(`SELECT ${kolomGambar} FROM laporan_ads_gambar
                   WHERE brand_id=$1 AND (jenis='maskot' OR bulan=$2) ORDER BY id`, [brand.id, bulan]),
       hitungAngkaLaporanAds(brand, bulan, rentang),
       peringatanRentang(brand.id, bulan, rentang),
@@ -3172,6 +3175,23 @@ router.post('/meta-ads/laporan-ads/gambar', authMiddleware, requirePageAccess('a
     console.error('Gagal simpan gambar laporan ads:', e.message);
     res.status(500).json({ error: 'Gagal simpan gambar' });
   }
+});
+
+// GET /api/hub/meta-ads/laporan-ads/gambar/:id — isi satu gambar sebagai BINER (bukan base64: ±25% lebih kecil).
+// Gambar tidak pernah berubah per id, jadi boleh di-cache browser selamanya (private: butuh login).
+router.get('/meta-ads/laporan-ads/gambar/:id', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'id tidak valid' });
+  try {
+    const r = await pool.query('SELECT data FROM laporan_ads_gambar WHERE id=$1', [id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Gambar tidak ditemukan' });
+    const d = r.rows[0].data;
+    const koma = d.indexOf(',');
+    const mime = d.slice(5, d.indexOf(';'));                 // "data:image/webp;base64,...." → image/webp (sudah divalidasi saat unggah)
+    const buf = Buffer.from(d.slice(koma + 1), 'base64');
+    res.set({ 'Content-Type': mime, 'Content-Length': buf.length, 'Cache-Control': 'private, max-age=31536000, immutable' });
+    res.end(buf);
+  } catch (e) { console.error('Gagal ambil gambar laporan ads:', e.message); res.status(500).json({ error: 'Gagal mengambil gambar' }); }
 });
 
 // DELETE /api/hub/meta-ads/laporan-ads/gambar/:id — hapus gambar (kreatif juga dilepas dari daftar kreatif bulannya)
