@@ -640,13 +640,13 @@ function FormLaporanAdmin({ initial, onSave, onCancel, saving, error }) {
                   placeholder={`To-do ${i+1}...`}
                   style={{ ...inputStyle, fontSize:12, flex:1 }} />
                 {(form.todo_list||['']).length > 1 && (
-                  <button onClick={() => setField('todo_list', (form.todo_list||['']).filter((_,idx)=>idx!==i))}
+                  <button type="button" onClick={() => setField('todo_list', (form.todo_list||['']).filter((_,idx)=>idx!==i))}
                     style={{ background:'none', border:'none', color:'#ef4444', fontSize:16, cursor:'pointer',
                       padding:'0 2px', lineHeight:1, flexShrink:0 }} title="Hapus">×</button>
                 )}
               </div>
             ))}
-            <button onClick={() => setField('todo_list', [...(form.todo_list||['']), ''])}
+            <button type="button" onClick={() => setField('todo_list', [...(form.todo_list||['']), ''])}
               style={{ marginTop:4, background:'none', border:'1px dashed var(--amber)', color:'var(--amber)',
                 borderRadius:6, padding:'4px 12px', fontSize:11, cursor:'pointer', width:'100%' }}>
               + Tambah Item
@@ -666,13 +666,13 @@ function FormLaporanAdmin({ initial, onSave, onCancel, saving, error }) {
                   placeholder={`Kendala ${i+1}...`}
                   style={{ ...inputStyle, fontSize:12, flex:1 }} />
                 {(form.kendala_list||['']).length > 1 && (
-                  <button onClick={() => setField('kendala_list', (form.kendala_list||['']).filter((_,idx)=>idx!==i))}
+                  <button type="button" onClick={() => setField('kendala_list', (form.kendala_list||['']).filter((_,idx)=>idx!==i))}
                     style={{ background:'none', border:'none', color:'#ef4444', fontSize:16, cursor:'pointer',
                       padding:'0 2px', lineHeight:1, flexShrink:0 }} title="Hapus">×</button>
                 )}
               </div>
             ))}
-            <button onClick={() => setField('kendala_list', [...(form.kendala_list||['']), ''])}
+            <button type="button" onClick={() => setField('kendala_list', [...(form.kendala_list||['']), ''])}
               style={{ marginTop:4, background:'none', border:'1px dashed var(--amber)', color:'var(--amber)',
                 borderRadius:6, padding:'4px 12px', fontSize:11, cursor:'pointer', width:'100%' }}>
               + Tambah Item

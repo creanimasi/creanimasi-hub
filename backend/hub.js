@@ -673,14 +673,17 @@ router.post('/skb', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Tipe, nama, dan judul wajib diisi' });
     }
 
+    // Pengaju hanya boleh membuat draft/diajukan; disetujui/ditolak/selesai hanya lewat PATCH admin.
+    const status = req.body.status === 'diajukan' ? 'diajukan' : 'draft';
+
     const result = await query(
       `INSERT INTO skb (tipe, nama, divisi, level, judul, deskripsi,
          latar_belakang, tujuan, output, timeline, kebutuhan,
-         risiko, ukuran_sukses, komitmen)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+         risiko, ukuran_sukses, komitmen, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
       [tipe, nama, divisi, level, judul, deskripsi,
        latar_belakang, tujuan, output, timeline, kebutuhan,
-       risiko, ukuran_sukses, komitmen]
+       risiko, ukuran_sukses, komitmen, status]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (err) {
@@ -1132,9 +1135,13 @@ router.patch('/tim/:id', authMiddleware, requirePageAccess('master-data'), async
       await client.query('ROLLBACK');
       return res.status(403).json(FORBID_PROTECTED);
     }
+    // aktif & tanggal_lahir yang tidak dikirim (mis. dari "Ubah Role") dibiarkan apa adanya;
+    // tanggal_lahir '' / null yang dikirim sengaja = kosongkan.
     const timR = await client.query(
-      'UPDATE tim SET nama=$1, divisi=$2, level=$3, tipe=$4, aktif=$5, entitas=$6, tanggal_lahir=$7, updated_at=NOW() WHERE id=$8 RETURNING *',
-      [nama, divisi, level || '', tipe || '', aktif !== undefined ? aktif : true, entitas, tanggal_lahir || null, req.params.id]
+      `UPDATE tim SET nama=$1, divisi=$2, level=$3, tipe=$4, aktif=COALESCE($5::boolean, aktif), entitas=$6,
+              tanggal_lahir=CASE WHEN $9::boolean THEN $7::date ELSE tanggal_lahir END, updated_at=NOW()
+       WHERE id=$8 RETURNING *`,
+      [nama, divisi, level || '', tipe || '', aktif !== undefined ? aktif : null, entitas, tanggal_lahir || null, req.params.id, tanggal_lahir !== undefined]
     );
     if (!timR.rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Anggota tidak ditemukan' }); }
 
@@ -1592,7 +1599,7 @@ router.post('/sesi-1on1', authMiddleware, requirePageAccess('sesi-1on1'), async 
     const r = await hubPool.query(
       `INSERT INTO sesi_1on1 (tanggal, anggota, tipe, durasi_menit, ringkasan, tindak_lanjut, mood_sebelum, mood_sesudah, host)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [tanggal, anggota, tipe, durasi_menit||30, ringkasan, tindak_lanjut, mood_sebelum, mood_sesudah, req.user?.nama||'Admin']
+      [tanggal, anggota, tipe, durasi_menit||30, ringkasan, tindak_lanjut, mood_sebelum === '' ? null : mood_sebelum, mood_sesudah === '' ? null : mood_sesudah, req.user?.nama||'Admin']
     );
     res.json({ data: r.rows[0] });
   } catch { res.status(500).json({ error: 'Gagal simpan sesi 1-on-1' }); }
@@ -1764,12 +1771,18 @@ router.get('/revenue/history', authMiddleware, async (req, res) => {
 // ── ADMIN REPLY JURNAL ────────────────────────────────────────────────────────
 router.patch('/jurnal/:id/reply', authMiddleware, requirePageAccess('jurnal-admin'), async (req, res) => {
   const { reply } = req.body;
+  if (typeof reply !== 'string') return res.status(400).json({ error: 'Reply wajib diisi' });
   try {
-    // Simpan reply ke kolom catatan_mentor (repurpose untuk admin reply)
-    // Prefix dengan marker agar bisa dibedakan dari catatan member
+    // Reply disimpan di kolom catatan_mentor (repurpose) dengan format "pesan_member\n[ADMIN_REPLY]\nreply";
+    // pesan member (bagian sebelum marker) dipertahankan. Format lama "[ADMIN_REPLY] ..." dianggap tanpa pesan member.
     const r = await hubPool.query(
-      `UPDATE jurnal_mingguan SET catatan_mentor = $1 WHERE id = $2 RETURNING id, nama`,
-      [`[ADMIN_REPLY] ${reply}`, req.params.id]
+      `UPDATE jurnal_mingguan SET catatan_mentor = CASE
+         WHEN COALESCE(catatan_mentor, '') = '' OR catatan_mentor LIKE '[ADMIN_REPLY]%'
+           THEN E'[ADMIN_REPLY]\\n' || $1
+         ELSE split_part(catatan_mentor, E'\\n[ADMIN_REPLY]\\n', 1) || E'\\n[ADMIN_REPLY]\\n' || $1
+       END
+       WHERE id = $2 RETURNING id, nama`,
+      [reply, req.params.id]
     );
     if (!r.rowCount) return res.status(404).json({ error: 'Jurnal tidak ditemukan' });
     res.json({ ok: true, data: r.rows[0] });
@@ -2194,8 +2207,10 @@ router.get('/laporan-sdm-analisa', authMiddleware, requirePageAccess('laporan-me
         if (skor.length > 0)   bagian.push(`Catatan performa: ${skor.join(', ')}.`);
 
         // Pesan untuk mentor/secondline
-        if (j.catatan_mentor?.trim() && !j.catatan_mentor.startsWith('[ADMIN_REPLY]')) {
-          bagian.push(`Pesan: "${j.catatan_mentor}".`);
+        // Hanya pesan member (sebelum marker balasan admin)
+        const pesanMember = (j.catatan_mentor || '').split('\n[ADMIN_REPLY]')[0].trim();
+        if (pesanMember && !pesanMember.startsWith('[ADMIN_REPLY]')) {
+          bagian.push(`Pesan: "${pesanMember}".`);
         }
       }
 
@@ -2760,7 +2775,7 @@ router.get('/meta-ads/insights', authMiddleware, requirePageAccess('ads-performa
              i.klik, i.impresi, i.reach, ROUND(i.cpm * ${KURS_KE_IDR}, 2) AS cpm, i.ctr,
              ROUND(i.purchase_value * ${KURS_KE_IDR}, 2) AS purchase_value, i.purchase_count, i.synced_at,
              b.nama AS brand_nama, b.ad_account_id, b.kurs_usd, b.hpp_default,
-             r.jumlah_order, r.omzet,
+             r.jumlah_order, r.omzet, r.catatan AS catatan_report,
              ROUND(r.omzet / NULLIF(b.kurs_usd, 0), 2) AS omzet_usd,
              b.hpp_default AS hpp_persen,
              ROUND(r.omzet - (r.omzet * b.hpp_default / 100) - i.spend * ${KURS_KE_IDR}, 2) AS profit_bersih,

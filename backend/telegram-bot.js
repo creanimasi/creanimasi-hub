@@ -12,6 +12,14 @@ if (!TOKEN) { console.error('❌ TELEGRAM_BOT_TOKEN tidak di-set'); process.exit
 
 const pool = new Pool({ connectionString: DB_URL });
 
+// Daftar chat.id yang boleh mengirim laporan, dipisah koma (grup bernilai negatif; chat pribadi = id user).
+// Kosong = semua chat diterima (perilaku lama) — set di Coolify agar orang luar tak bisa menyuntik laporan.
+const ALLOWED_CHAT_IDS = (process.env.TELEGRAM_ALLOWED_CHAT_IDS || '')
+  .split(',').map(s => s.trim()).filter(Boolean);
+if (!ALLOWED_CHAT_IDS.length) {
+  console.warn('[BOT] ⚠️ TELEGRAM_ALLOWED_CHAT_IDS kosong — bot menerima laporan dari chat mana pun');
+}
+
 // ── PARSER LAPORAN ─────────────────────────────────────────────────────────────
 function parseLaporan(text) {
   const lines  = text.trim().split('\n').map(l => l.trim()).filter(Boolean);
@@ -182,6 +190,10 @@ async function handleUpdate(update) {
   if (!msg?.text) return;
 
   const chatId   = msg.chat.id;
+  if (ALLOWED_CHAT_IDS.length && !ALLOWED_CHAT_IDS.includes(String(chatId))) {
+    console.warn(`[BOT] ⛔ Pesan dari chat ${chatId} (${msg.from?.username || 'unknown'}) diabaikan — tidak ada di TELEGRAM_ALLOWED_CHAT_IDS`);
+    return;
+  }
   const text     = msg.text.trim();
   const fromUser = msg.from?.username || msg.from?.first_name || 'unknown';
 
@@ -231,7 +243,7 @@ async function handleUpdate(update) {
       futureWarning
     );
 
-    console.log(`[BOT] ✅ Laporan #${id} dari ${parsed.nama} (${fromUser}) disimpan`);
+    console.log(`[BOT] ✅ Laporan #${id} dari ${parsed.nama} (${fromUser}, chat ${chatId}) disimpan`);
   } catch (err) {
     console.error('[BOT] ❌ Gagal simpan:', err.message);
     await sendMessage(chatId, `❌ Gagal menyimpan laporan: ${err.message}`);

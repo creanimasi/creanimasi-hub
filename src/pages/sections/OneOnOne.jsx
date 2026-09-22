@@ -42,7 +42,11 @@ export function OneOnOne() {
     e.preventDefault();
     setSaving(true); setSubmitErr('');
     try {
-      await api.postSesi1on1(form);
+      await api.postSesi1on1({
+        ...form,
+        mood_sebelum: form.mood_sebelum === '' ? null : form.mood_sebelum,
+        mood_sesudah: form.mood_sesudah === '' ? null : form.mood_sesudah,
+      });
       setShowForm(false);
       setForm({ tanggal: new Date().toISOString().slice(0,10), anggota:'', tipe:'', durasi_menit:30, ringkasan:'', tindak_lanjut:'', mood_sebelum:'', mood_sesudah:'' });
       load();
@@ -67,7 +71,11 @@ export function OneOnOne() {
     .sort((a, b) => b.prioritasScore - a.prioritasScore);
   const weekAgo   = new Date(Date.now() - 7*24*60*60*1000);
   const thisWeek  = sesi.filter(s => new Date(s.tanggal) >= weekAgo);
-  const thisMonth = sesi.filter(s => new Date(s.tanggal).getMonth() === new Date().getMonth());
+  const now       = new Date();
+  const thisMonth = sesi.filter(s => {
+    const d = new Date(s.tanggal);
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  });
 
   if (loading) return <SkeletonList count={5} />;
 

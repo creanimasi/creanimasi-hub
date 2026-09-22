@@ -251,7 +251,7 @@ export function Absensi() {
       });
     });
     if (!rows.length) { alert('Buka minimal satu sesi dulu'); return; }
-    downloadCsv(rows, `absensi_${new Date().toISOString().slice(0,10)}.csv`);
+    downloadCsv(`absensi_${new Date().toISOString().slice(0,10)}.csv`, rows);
   };
 
   if (loading) return <SkeletonTable rows={6} cols={4} />;

@@ -1,4 +1,5 @@
-export function downloadCsv(filename, rows, headers) {
+// headers opsional — bila tidak diberikan dipakai kunci dari baris pertama.
+export function downloadCsv(filename, rows, headers = Object.keys(rows[0] || {})) {
   const escape = (v) => {
     if (v == null) return '';
     const s = String(v);

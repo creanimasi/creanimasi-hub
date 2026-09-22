@@ -212,7 +212,7 @@ export default function LaporanBulanan() {
       sesi_1on1: r.sesi1on1Total,
       reward: r.totalReward,
     }));
-    downloadCsv(rows, `laporan_bulanan_${bulan}.csv`);
+    downloadCsv(`laporan_bulanan_${bulan}.csv`, rows);
   };
 
   const selectedRow = selected ? enriched.find(r => r.nama === selected) : null;

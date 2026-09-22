@@ -91,7 +91,7 @@ export default function LaporanProfit() {
       'Profit Bersih (Rp)': r.total_profit_bersih,
       ROAS: r.roas,
     }));
-    downloadCsv(data, `laporan-profit-${bulan}.csv`);
+    downloadCsv(`laporan-profit-${bulan}.csv`, data);
   };
 
   const thStyle = { padding: '10px 14px', fontSize: 11, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'left', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' };
