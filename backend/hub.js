@@ -158,6 +158,40 @@ function requirePageAccess(pageKey) {
   };
 }
 
+// Sama seperti requirePageAccess tapi mengembalikan boolean, dipakai INLINE di dalam handler yang
+// perilakunya (bukan sekadar tolak/lolos) berbeda tergantung akses — mis. GET /jurnal & /laporan-harian
+// mengembalikan SEMUA baris utk yang berhak vs cuma baris miliknya sendiri utk yang tidak.
+async function hasPageAccess(user, pageKey) {
+  const r = await hubPool.query(
+    `SELECT 1 FROM halaman h
+     LEFT JOIN role_page_access rpa ON rpa.role_id=$1 AND rpa.page_key=h.page_key
+     WHERE h.page_key=$2 AND (h.is_baseline OR rpa.can_access) LIMIT 1`,
+    [user.role_id, pageKey]
+  );
+  return !!r.rows.length;
+}
+
+// Lolos kalau role punya akses ke SALAH SATU dari beberapa page_key — dipakai utk data (mis.
+// /profiling/all) yang dipakai bareng oleh beberapa halaman admin-tier berbeda (Kader, Sesi 1-on-1,
+// dst), bukan satu halaman spesifik. super_admin otomatis lolos krn di-seed TRUE di semua page_key.
+function requireAnyPageAccess(...pageKeys) {
+  return async (req, res, next) => {
+    try {
+      const r = await hubPool.query(
+        `SELECT 1 FROM halaman h
+         LEFT JOIN role_page_access rpa ON rpa.role_id=$1 AND rpa.page_key=h.page_key
+         WHERE h.page_key = ANY($2::text[]) AND (h.is_baseline OR rpa.can_access) LIMIT 1`,
+        [req.user.role_id, pageKeys]
+      );
+      if (!r.rows.length) return res.status(403).json({ error: 'Anda tidak memiliki akses ke halaman ini' });
+      next();
+    } catch (e) {
+      console.error('requireAnyPageAccess error:', e.message);
+      res.status(500).json({ error: 'Gagal memeriksa hak akses' });
+    }
+  };
+}
+
 // Varian khusus /laporan-admin: hari ini bisa diakses admin ATAU siapa pun
 // yang divisi tim-nya "Admin" (lihat AdminOrMarketRoute di frontend) — bukan
 // murni berbasis role, jadi butuh fallback pengecekan divisi.
@@ -306,6 +340,38 @@ router.patch('/auth/password', authMiddleware, async (req, res) => {
   } catch { res.status(500).json({ error: 'Gagal mengubah password' }); }
 });
 
+// v_profiling_all di database/schema.sql cuma punya id/divisi/nama/level_karier/tanggal_bergabung/
+// created_at — Kader.jsx, OneOnOne.jsx, Dashboard.jsx membaca kepuasan_diri & tertarik_memimpin dari
+// hasilnya, jadi selalu undefined dan diam-diam jatuh ke kolom statis tim.kepuasan/tim.kriteria (yang
+// sudah "-" sejak data pindah ke profiling_*). CREATE OR REPLACE di sini (bukan cuma schema.sql) supaya
+// production ikut ter-update setiap server start — sama seperti v_jurnal_stats di atas.
+;(async () => {
+  try {
+    await pool.query(`
+      CREATE OR REPLACE VIEW v_profiling_all AS
+        SELECT id, 'admin' AS divisi, nama, level_karier, tanggal_bergabung, created_at,
+               skor_komunikasi, skill_copywriting AS skor_teknis, skor_kerja_tim, kepuasan_diri, tertarik_memimpin
+          FROM profiling_admin
+        UNION ALL
+        SELECT id, 'pm' AS divisi, nama, level_karier, tanggal_bergabung, created_at,
+               skor_komunikasi_klien AS skor_komunikasi, skill_komunikasi AS skor_teknis, skor_kerja_tim, kepuasan_diri, tertarik_memimpin
+          FROM profiling_pm
+        UNION ALL
+        SELECT id, 'illustrator' AS divisi, nama, level_karier, tanggal_bergabung, created_at,
+               skor_komunikasi, skill_level_csp AS skor_teknis, skor_kerja_tim, kepuasan_diri, tertarik_memimpin
+          FROM profiling_illustrator
+        UNION ALL
+        SELECT id, 'rigger' AS divisi, nama, level_karier, tanggal_bergabung, created_at,
+               skor_komunikasi, skill_level_live2d AS skor_teknis, skor_kerja_tim, kepuasan_diri, tertarik_memimpin
+          FROM profiling_rigger
+        UNION ALL
+        SELECT id, '3d' AS divisi, nama, level_karier, tanggal_bergabung, created_at,
+               skor_komunikasi, skill_level_blender AS skor_teknis, skor_kerja_tim, kepuasan_diri, tertarik_memimpin
+          FROM profiling_3d
+    `);
+  } catch (e) { console.error('Migration v_profiling_all:', e.message); }
+})();
+
 // GET /api/hub/profiling/me — profiling terbaru milik user yang login
 router.get('/profiling/me', authMiddleware, async (req, res) => {
   const TABLE_MAP = { Admin:'profiling_admin', PM:'profiling_pm', Illustrator:'profiling_illustrator', Rigger:'profiling_rigger', '3D Modeler':'profiling_3d' };
@@ -383,14 +449,15 @@ router.post('/jurnal', authMiddleware, async (req, res) => {
   }
 });
 
-// GET /api/hub/jurnal — semua jurnal (untuk dashboard) atau riwayat milik sendiri
+// GET /api/hub/jurnal — semua jurnal (mode browse admin/mentor) atau riwayat milik sendiri
 router.get('/jurnal', authMiddleware, async (req, res) => {
   try {
-    const isAdmin = req.user.role === 'admin';
-    // Member hanya boleh lihat jurnal miliknya sendiri, apapun query ?nama= yang dikirim
+    // 'admin' legacy ATAU role dgn akses halaman jurnal-admin (mis. mentor/PM) boleh browse semua nama;
+    // selain itu dipaksa nama sendiri apapun ?nama= yang dikirim.
+    const isAdmin = req.user.role === 'admin' || await hasPageAccess(req.user, 'jurnal-admin');
     const nama = isAdmin ? req.query.nama : req.user.nama;
-    const { limit = 50 } = req.query;
-    const cap = Math.min(parseInt(limit) || 50, 200);
+    const { limit = 200 } = req.query;
+    const cap = Math.min(parseInt(limit) || 200, 200);
     let q = `SELECT * FROM jurnal_mingguan`;
     const params = [];
     if (nama) {
@@ -407,9 +474,8 @@ router.get('/jurnal', authMiddleware, async (req, res) => {
   }
 });
 
-// GET /api/hub/jurnal/stats — statistik untuk dashboard (admin only)
-router.get('/jurnal/stats', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+// GET /api/hub/jurnal/stats — statistik untuk dashboard admin/mentor
+router.get('/jurnal/stats', authMiddleware, requirePageAccess('jurnal-admin'), async (req, res) => {
   try {
     const result = await query(`SELECT * FROM v_jurnal_stats ORDER BY nama`);
     const mingguIni = result.rows.filter(r => r.isi_minggu_ini).length;
@@ -578,9 +644,9 @@ router.post('/profiling/:divisi', authMiddleware, async (req, res) => {
   }
 });
 
-// GET /api/hub/profiling/all — semua profiling untuk dashboard (admin only)
-router.get('/profiling/all', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+// GET /api/hub/profiling/all — dipakai Dashboard admin, tapi juga Kader & Sesi 1-on-1 (role
+// mentor/pm dkk yang diberi akses ke halaman itu lewat matriks, bukan cuma role legacy 'admin')
+router.get('/profiling/all', authMiddleware, requireAnyPageAccess('kader', 'sesi-1on1', 'jurnal-admin'), async (req, res) => {
   try {
     const result = await query(`SELECT * FROM v_profiling_all ORDER BY divisi, nama`);
     res.json({ success: true, data: result.rows });
@@ -589,9 +655,10 @@ router.get('/profiling/all', authMiddleware, async (req, res) => {
   }
 });
 
-// GET /api/hub/profiling/:divisi — profiling per divisi (admin only)
+// GET /api/hub/profiling/:divisi — riwayat profiling satu divisi. Admin (legacy) lihat semua;
+// anggota biasa cuma lihat riwayat miliknya sendiri (dipakai Profil.jsx utk "Riwayat Profiling") —
+// sebelumnya endpoint ini 403 utk SEMUA non-admin, jadi riwayat member selalu kosong.
 router.get('/profiling/:divisi', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
   const TABLE_MAP = {
     admin: 'profiling_admin', pm: 'profiling_pm',
     illustrator: 'profiling_illustrator', rigger: 'profiling_rigger', '3d': 'profiling_3d'
@@ -600,7 +667,10 @@ router.get('/profiling/:divisi', authMiddleware, async (req, res) => {
   if (!table) return res.status(400).json({ error: 'Divisi tidak valid' });
 
   try {
-    const result = await query(`SELECT * FROM ${table} ORDER BY created_at DESC`);
+    const isAdmin = req.user.role === 'admin';
+    const result = isAdmin
+      ? await query(`SELECT * FROM ${table} ORDER BY created_at DESC`)
+      : await query(`SELECT * FROM ${table} WHERE nama=$1 ORDER BY created_at DESC`, [req.user.nama]);
     res.json({ success: true, data: result.rows });
   } catch (err) {
     res.status(500).json({ error: 'Gagal mengambil data profiling' });
@@ -1670,8 +1740,7 @@ router.patch('/tim/:id/reset-password', authMiddleware, requirePageAccess('maste
 });
 
 // ── REVENUE BULANAN (admin only) ───────────────────────────────────────────────
-router.get('/revenue', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+router.get('/revenue', authMiddleware, requirePageAccess('reward'), async (req, res) => {
   const { bulan, tahun } = req.query;
   try {
     let q = 'SELECT * FROM revenue_bulanan';
@@ -1683,8 +1752,7 @@ router.get('/revenue', authMiddleware, async (req, res) => {
   } catch { res.status(500).json({ error: 'Gagal ambil revenue' }); }
 });
 
-router.post('/revenue', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin yang dapat mencatat revenue' });
+router.post('/revenue', authMiddleware, requirePageAccess('reward'), async (req, res) => {
   const { bulan, tahun, nama, jumlah, target, catatan } = req.body;
   try {
     const r = await hubPool.query(`
@@ -1756,8 +1824,7 @@ router.patch('/profil/update', authMiddleware, async (req, res) => {
 });
 
 // ── REVENUE HISTORY (6 bulan terakhir per admin) ─────────────────────────────
-router.get('/revenue/history', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Hanya admin' });
+router.get('/revenue/history', authMiddleware, requirePageAccess('reward'), async (req, res) => {
   try {
     const r = await hubPool.query(`
       SELECT nama, bulan, tahun, jumlah, target
@@ -2036,9 +2103,11 @@ router.get('/performa', authMiddleware, async (req, res) => {
 });
 
 // ── LAPORAN HARIAN ────────────────────────────────────────────────────────────
+// Halaman ini admin-tier (RequirePage pageKey="laporan-harian" di frontend), jadi siapa pun yang
+// berhasil sampai di sini semestinya melihat semua nama, bukan cuma legacy role==='admin'.
 router.get('/laporan-harian', authMiddleware, async (req, res) => {
   const { dari, sampai, nama, limit = 50 } = req.query;
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = req.user.role === 'admin' || await hasPageAccess(req.user, 'laporan-harian');
   try {
     const cap = Math.min(parseInt(limit) || 50, 200);
     let q = 'SELECT * FROM laporan_harian WHERE 1=1';
@@ -2065,7 +2134,7 @@ router.delete('/laporan-harian/:id', authMiddleware, requirePageAccess('laporan-
 
 router.get('/laporan-harian/stats', authMiddleware, async (req, res) => {
   const { dari, sampai } = req.query;
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = req.user.role === 'admin' || await hasPageAccess(req.user, 'laporan-harian');
   try {
     const params = [dari || null, sampai || null];
     let namaFilter = '';

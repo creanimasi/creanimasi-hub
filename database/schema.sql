@@ -256,16 +256,30 @@ FROM jurnal_mingguan
 GROUP BY nama;
 
 -- View: semua profiling digabung dari 5 divisi
+-- Kolom skor_teknis/skor_komunikasi dipetakan per divisi (tiap tabel profiling_* punya nama kolom
+-- teknis sendiri); PM pakai skor_komunikasi_klien krn tak punya skor_komunikasi. Sumber kebenaran
+-- ada di IIFE CREATE OR REPLACE VIEW di backend/hub.js (jalan tiap server start) — definisi di sini
+-- hanya utk referensi/local dev, JANGAN dianggap otomatis berlaku di production.
 CREATE OR REPLACE VIEW v_profiling_all AS
-  SELECT id, 'admin'       AS divisi, nama, level_karier, tanggal_bergabung, created_at FROM profiling_admin
+  SELECT id, 'admin'       AS divisi, nama, level_karier, tanggal_bergabung, created_at,
+         skor_komunikasi, skill_copywriting AS skor_teknis, skor_kerja_tim, kepuasan_diri, tertarik_memimpin
+    FROM profiling_admin
   UNION ALL
-  SELECT id, 'pm'          AS divisi, nama, level_karier, tanggal_bergabung, created_at FROM profiling_pm
+  SELECT id, 'pm'          AS divisi, nama, level_karier, tanggal_bergabung, created_at,
+         skor_komunikasi_klien AS skor_komunikasi, skill_komunikasi AS skor_teknis, skor_kerja_tim, kepuasan_diri, tertarik_memimpin
+    FROM profiling_pm
   UNION ALL
-  SELECT id, 'illustrator' AS divisi, nama, level_karier, tanggal_bergabung, created_at FROM profiling_illustrator
+  SELECT id, 'illustrator' AS divisi, nama, level_karier, tanggal_bergabung, created_at,
+         skor_komunikasi, skill_level_csp AS skor_teknis, skor_kerja_tim, kepuasan_diri, tertarik_memimpin
+    FROM profiling_illustrator
   UNION ALL
-  SELECT id, 'rigger'      AS divisi, nama, level_karier, tanggal_bergabung, created_at FROM profiling_rigger
+  SELECT id, 'rigger'      AS divisi, nama, level_karier, tanggal_bergabung, created_at,
+         skor_komunikasi, skill_level_live2d AS skor_teknis, skor_kerja_tim, kepuasan_diri, tertarik_memimpin
+    FROM profiling_rigger
   UNION ALL
-  SELECT id, '3d'          AS divisi, nama, level_karier, tanggal_bergabung, created_at FROM profiling_3d;
+  SELECT id, '3d'          AS divisi, nama, level_karier, tanggal_bergabung, created_at,
+         skor_komunikasi, skill_level_blender AS skor_teknis, skor_kerja_tim, kepuasan_diri, tertarik_memimpin
+    FROM profiling_3d;
 
 -- ── TIM ─────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS tim (
