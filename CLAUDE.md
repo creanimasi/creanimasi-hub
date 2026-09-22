@@ -100,6 +100,30 @@ Catatan soal migrasi yang tidak lengkap:
 - Ekspor PDF di browser (`html2canvas` + `jsPDF`): html2canvas mengabaikan `object-fit` dan `repeating-linear-gradient` — di `SlideDeck.jsx`
   maskot memakai `background-image` dan grid latar memakai pola SVG karena itu.
 
+## Papan Timeline (backend/timeline.js + src/pages/Timeline.jsx)
+Pengganti spreadsheet timeline manual (referensi: kolom NAMA/NAMA KLIEN/POIN/URGENSI per tim). SENGAJA terpisah total
+dari modul RPG — poin & urgensi di sini murni catatan manual, TIDAK terhubung ke XP/target poin sama sekali.
+- **Struktur 3 tingkat**: `timeline_grup` (mis. "Internal", "Freelance 3D" — 2 baris awal di-seed HANYA saat tabel
+  masih benar-benar kosong, `WHERE NOT EXISTS`, BUKAN `ON CONFLICT` per baris — supaya menghapus satu grup bawaan
+  tidak "hidup lagi" tiap restart selama grup lain masih ada) > `timeline_orang` (nama bebas teks — freelancer TIDAK
+  perlu ada di tabel `tim`; `tim_id` opsional buat menautkan staf internal, ikut membawa `tim_divisi` sebagai badge;
+  `warna` hex opsional, kosong = palet otomatis dari indeks urutan) > `timeline_tugas` (deskripsi bebas teks + `poin`
+  opsional + `urgensi` opsional). Urutan tiap tingkat lewat kolom `urutan` + endpoint `POST .../pindah {arah}` (tukar
+  dengan tetangga se-induk, transaksi + `FOR UPDATE`).
+- **Urgensi 1-4, ARAH KEBALIKAN dari RPG**: 1 = paling mendesak (merah) … 4 = paling santai (hijau tua) — RPG 1-7
+  arahnya sebaliknya (7 = paling mendesak). Definisi di `src/utils/timelineUrgensi.js`; token warna `--tl-urg-1..4` di
+  `index.css` (root + override `[data-theme="light"]`; retro ikut nilai root — sudah lolos kontras 3 tema, dipakai
+  sebagai warna teks+border select, BUKAN latar penuh).
+- **Satu kunci akses** `timeline` (admin-tier baru) untuk BACA dan TULIS sekaligus — beda dari pola RPG yang punya
+  `rpg-admin`/`rpg-pantau` terpisah, karena halaman ini memang cuma untuk admin/PM yang mengelola bareng, bukan model
+  lihat-saja. Default `MATRIX.pm` di hub.js sudah memuat `'timeline'`; `super_admin` otomatis penuh via `ALL_ADMIN_KEYS`.
+- **UI** (satu file `Timeline.jsx`, gaya `.card`/`.btn` standar hub — BUKAN tema pixel RPG): semua field tersimpan
+  otomatis saat blur/onChange (pola sama dengan `TargetAdmin.jsx`); hapus grup/orang pakai `window.confirm` native
+  (cascade — grup menghapus semua orang & tugas di dalamnya). State `versi` (naik tiap `muat()` selesai, termasuk
+  saat GAGAL) dilewatkan ke tiap child sebagai dependensi efek reset — supaya input yang sempat diubah lokal tapi
+  DITOLAK server (mis. poin di luar 0–999) kembali ke nilai server yang sebenarnya, bukan tertinggal menampilkan
+  nilai tak tersimpan (prop mentahnya sendiri bisa saja tak berubah dari percobaan yang gagal).
+
 ## Modul RPG / Gamifikasi (backend/rpg.js + src/modules/rpg)
 Terdaftar dari `hub.js` (`require('./rpg')(router, {...})`), endpoint `/api/hub/rpg/*`. Tabel `rpg_*` dibuat
 otomatis (IIFE `CREATE TABLE IF NOT EXISTS` di rpg.js): `rpg_xp_event` (ledger XP, UNIQUE tim_id+sumber+ref_key →

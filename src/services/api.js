@@ -259,6 +259,21 @@ export const api = {
   rpgAdminKunciPeriode: (kode)         => request('POST', `/rpg/admin/target/periode/${kode}/kunci`),
   rpgAdminBukaPeriode:  (kode)         => request('POST', `/rpg/admin/target/periode/${kode}/buka`),
 
+  // Papan Timeline
+  getTimeline:      ()                 => request('GET', '/timeline'),
+  timelineBuatGrup: (nama)             => request('POST', '/timeline/grup', { nama }),
+  timelineUbahGrup: (id, nama)         => request('PATCH', `/timeline/grup/${id}`, { nama }),
+  timelineHapusGrup:(id)               => request('DELETE', `/timeline/grup/${id}`),
+  timelinePindahGrup: (id, arah)       => request('POST', `/timeline/grup/${id}/pindah`, { arah }),
+  timelineBuatOrang:(data)             => request('POST', '/timeline/orang', data),
+  timelineUbahOrang:(id, data)         => request('PATCH', `/timeline/orang/${id}`, data),
+  timelineHapusOrang:(id)              => request('DELETE', `/timeline/orang/${id}`),
+  timelinePindahOrang: (id, arah)      => request('POST', `/timeline/orang/${id}/pindah`, { arah }),
+  timelineBuatTugas:(data)             => request('POST', '/timeline/tugas', data),
+  timelineUbahTugas:(id, data)         => request('PATCH', `/timeline/tugas/${id}`, data),
+  timelineHapusTugas:(id)              => request('DELETE', `/timeline/tugas/${id}`),
+  timelinePindahTugas: (id, arah)      => request('POST', `/timeline/tugas/${id}/pindah`, { arah }),
+
   // AI
   getAiInsightAds: (bulan, brandId) => request('POST', '/ai/insight-ads', { bulan, ...(brandId ? { brand_id: brandId } : {}) }),
   aiChat:          (pesan, riwayat) => request('POST', '/ai/chat', { pesan, riwayat }),

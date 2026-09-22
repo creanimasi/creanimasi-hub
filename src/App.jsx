@@ -9,6 +9,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Tim from './pages/Tim';
 import MasterData from './pages/MasterData';
+import Timeline from './pages/Timeline';
 import { Modul, Jurnal, SOP, Reward, Workshop, Kader, SKB, OneOnOne, FridayWin, Absensi } from './pages/Pages';
 import AktivitasTim from './pages/AktivitasTim';
 import { PageFormJurnal, PageFormProfiling, PageRiwayatJurnal } from './pages/FormPages';
@@ -88,6 +89,7 @@ function ProtectedRoutes() {
         {/* Diatur lewat Master Data > Hak Akses/Role, bukan lagi admin/member biner */}
         <Route path="/tim"          element={<RequirePage pageKey="tim"><Tim /></RequirePage>} />
         <Route path="/master-data"  element={<RequirePage pageKey="master-data"><MasterData /></RequirePage>} />
+        <Route path="/timeline"     element={<RequirePage pageKey="timeline"><Timeline /></RequirePage>} />
         <Route path="/jurnal"       element={<RequirePage pageKey="jurnal-admin"><Jurnal /></RequirePage>} />
         <Route path="/kader"        element={<RequirePage pageKey="kader"><Kader /></RequirePage>} />
         <Route path="/reward"       element={<RequirePage pageKey="reward"><Reward /></RequirePage>} />

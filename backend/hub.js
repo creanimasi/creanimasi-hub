@@ -894,6 +894,7 @@ router.patch('/skb/:id', authMiddleware, async (req, res) => {
       ['rpg-pantau', 'Pantau Anggota', '/rpg/anggota'],
       ['rpg-admin', 'Kelola RPG', '/rpg/kelola'],
       ['tim-kelola-legacy', 'Kelola Tim (legacy)', '/tim/kelola'],
+      ['timeline', 'Papan Timeline', '/timeline'],
     ];
     for (let i = 0; i < BASELINE.length; i++) {
       const [key, nama, path] = BASELINE[i];
@@ -968,7 +969,7 @@ router.patch('/skb/:id', authMiddleware, async (req, res) => {
       founder: ['reward', 'laporan-mentor', 'laporan-admin', 'laporan-harian', 'laporan-bulanan', 'ads-performance', 'laporan-profit', 'ai-assistant'],
       mentor: ['tim', 'kader', 'reward', 'jurnal-admin', 'sesi-1on1', 'workshop'],
       admin_market: ['ads-performance', 'laporan-profit', 'ai-assistant'],
-      pm: ['tim', 'kader', 'reward', 'jurnal-admin', 'workshop', 'absensi', 'friday-win', 'sesi-1on1', 'aktivitas-tim', 'kalender'],
+      pm: ['tim', 'kader', 'reward', 'jurnal-admin', 'workshop', 'absensi', 'friday-win', 'sesi-1on1', 'aktivitas-tim', 'kalender', 'timeline'],
     };
     const roleIdRes = await hubPool.query('SELECT id, key FROM roles');
     const roleIdByKey = Object.fromEntries(roleIdRes.rows.map(r => [r.key, r.id]));
@@ -3795,6 +3796,7 @@ try {
 
 // Modul RPG/gamifikasi — endpoint /rpg/* (lihat backend/rpg.js)
 require('./rpg')(router, { hubPool, authMiddleware, requirePageAccess, getPageAccessList });
+require('./timeline')(router, { hubPool, authMiddleware, requirePageAccess });
 
 module.exports = router;
 

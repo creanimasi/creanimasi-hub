@@ -37,6 +37,14 @@
   --on-amber:     #1A1206;   /* teks di atas latar --amber */
   color-scheme:   dark;      /* kontrol bawaan browser (ikon tanggal, scrollbar, select) ikut gelap */
 
+  /* Urgensi Papan Timeline (1 = paling mendesak/merah … 4 = paling santai/hijau tua — kebalikan skala
+     urgensi 1-7 modul RPG yang 7 = paling mendesak; keduanya sengaja terpisah, jangan disamakan).
+     Dipakai sebagai teks+border (bukan latar penuh) supaya kontras ≥ 4.5:1 terjaga di semua tema. */
+  --tl-urg-1: #F87171;
+  --tl-urg-2: #F59E0B;
+  --tl-urg-3: #22C55E;
+  --tl-urg-4: #14B8A6;
+
   --glow-green:   0 0 20px rgba(0,214,143,0.25);
   --glow-purple:  0 0 20px rgba(155,143,255,0.25);
 
@@ -81,6 +89,11 @@
   --text:         #1A1A2E;
   --text-2:       #4B5563;
   --text-3:       #5B6472;
+
+  --tl-urg-1: #B91C1C;
+  --tl-urg-2: #C2410C;
+  --tl-urg-3: #166534;
+  --tl-urg-4: #115E59;
 
   --glow-green:   none;
   --glow-purple:  none;
