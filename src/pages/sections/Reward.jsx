@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { REWARD_LIST, TIPE_COLOR } from '../../data/tim';
 import { STUDIO_CONFIG, REWARD_PERSONAL } from '../../data/constants';
@@ -28,8 +28,14 @@ export function Reward() {
   const ADMIN_LIST = tim.filter(t => t.divisi === 'Admin');
   const TARGET_PER_ADMIN = STUDIO_CONFIG.targetRevenuePerAdmin;
 
+  // Cegah respons yang tiba belakangan (ganti bulan/tahun cepat) menimpa data yg lebih baru
+  const revReqId = useRef(0);
   const loadRevenue = useCallback(() => {
-    api.getRevenue(bulan, tahun).then(res => setRevData(res.data || [])).catch(() => {});
+    const reqId = ++revReqId.current;
+    api.getRevenue(bulan, tahun).then(res => {
+      if (reqId !== revReqId.current) return;
+      setRevData(res.data || []);
+    }).catch(() => {});
   }, [bulan, tahun]);
 
   const loadRewards = useCallback(() => {

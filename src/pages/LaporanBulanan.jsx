@@ -321,7 +321,7 @@ export default function LaporanBulanan() {
                     </td>
                     <td style={{ padding: '10px 12px' }}>
                       {row.avgMood !== null
-                        ? <span style={{ fontWeight: 700, color: row.avgMood >= 4 ? '#00D68F' : row.avgMood >= 3 ? '#FFB84B' : '#FF6B6B' }}>{row.avgMood}/5</span>
+                        ? <span style={{ fontWeight: 700, color: row.avgMood >= 8 ? '#00D68F' : row.avgMood >= 6 ? '#FFB84B' : '#FF6B6B' }}>{row.avgMood}/10</span>
                         : <span style={{ color: 'var(--text-3)' }}>—</span>}
                     </td>
                     <td style={{ padding: '10px 12px' }}>

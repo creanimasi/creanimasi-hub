@@ -84,8 +84,9 @@ export function Workshop() {
       {/* Per-layer cards */}
       {WORKSHOP_JRUHUB.map(w => {
         const isOpen    = expanded === w.id;
-        // Hitung kehadiran layer ini
-        const layerHadir = kehadiran.filter(r => r.layer_id === w.id && r.hadir).length;
+        // Hitung kehadiran layer ini — dibatasi ke `anggota` (member hanya lihat dirinya sendiri)
+        const namaAnggota = new Set(anggota.map(a => a.nama));
+        const layerHadir = kehadiran.filter(r => r.layer_id === w.id && r.hadir && namaAnggota.has(r.nama)).length;
         const layerSlot  = anggota.length * w.items.length;
         const layerPct   = layerSlot > 0 ? Math.round(layerHadir / layerSlot * 100) : 0;
 

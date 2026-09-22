@@ -90,13 +90,16 @@ export function Modul() {
       : tim.filter(t => t.nama === user?.nama);
   };
 
-  const memberModulId = !isAdmin && user
-    ? DIVISI_TO_MODUL[tim.find(t => t.nama === user.nama)?.divisi]
-    : null;
+  const memberSelf = !isAdmin && user ? tim.find(t => t.nama === user.nama) : null;
+  const memberModulId = memberSelf ? DIVISI_TO_MODUL[memberSelf.divisi] : null;
+  // Secondline hanya relevan utk Rising Star / High Potential — sama seperti filter di getAnggota
+  // untuk admin. Tanpa ini, anggota lain melihat 12 topik secondline yang tak pernah bisa dicentang
+  // ikut menghitung progress mereka.
+  const memberBisaSecondline = !!memberSelf && ['Rising Star','High Potential'].includes(memberSelf.tipe);
 
   const visibleModul = isAdmin
     ? MODUL_LIST
-    : MODUL_LIST.filter(m => m.id === memberModulId || m.id === 'secondline');
+    : MODUL_LIST.filter(m => m.id === memberModulId || (m.id === 'secondline' && memberBisaSecondline));
 
   // Grand total dari topik
   const grandDone = visibleModul.reduce((s, m) => {
@@ -108,6 +111,9 @@ export function Modul() {
 
   if (loading) return <SkeletonPage metrics={2} items={4} />;
   if (error)   return <div className="alert alert-red"><span>⚠️</span><div>{error}</div></div>;
+  if (!isAdmin && !memberModulId && visibleModul.length === 0) {
+    return <div className="alert alert-amber"><span>ℹ️</span><div>Belum ada modul belajar untuk divisi {memberSelf?.divisi || 'kamu'}.</div></div>;
+  }
 
   return (
     <div>

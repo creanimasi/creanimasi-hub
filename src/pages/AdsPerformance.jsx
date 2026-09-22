@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../services/api';
 import { useToast } from '../hooks/useToast';
 import { SkeletonTable } from '../components/Skeleton';
@@ -164,9 +164,11 @@ function BrandSettingsModal({ brands, onSave, onClose }) {
 
   const handleSave = async () => {
     if (!selId) return;
+    const kursNum = Number(kurs);
+    if (!kursNum || kursNum <= 0) { showToast('Kurs USD harus lebih dari 0', 'error'); return; }
     setSaving(true);
     try {
-      await api.updateMetaBrandSettings(selId, { kurs_usd: Number(kurs), hpp_default: Number(hpp) });
+      await api.updateMetaBrandSettings(selId, { kurs_usd: kursNum, hpp_default: Number(hpp) || 0 });
       onSave();
       showToast(`Setting ${activeBrand?.nama} berhasil disimpan`);
     } catch (e) { showToast('Gagal: ' + e.message, 'error'); }
@@ -445,15 +447,22 @@ export default function AdsPerformance() {
     } catch { /* skip */ }
   }, []);
 
+  // Cegah respons yang tiba belakangan (ganti bulan/brand cepat) menimpa data yg lebih baru
+  const dataReqId = useRef(0);
   const loadData = useCallback(async () => {
+    const reqId = ++dataReqId.current;
     setLoading(true);
     setError('');
     try {
       const r = await api.getMetaInsights(brandId || null, bulan);
+      if (reqId !== dataReqId.current) return;
       setRows(r.data || []);
     } catch (e) {
+      if (reqId !== dataReqId.current) return;
       setError('Gagal memuat data: ' + e.message);
-    } finally { setLoading(false); }
+    } finally {
+      if (reqId === dataReqId.current) setLoading(false);
+    }
   }, [bulan, brandId]);
 
   useEffect(() => { loadBrands(); }, [loadBrands]);
@@ -487,7 +496,15 @@ export default function AdsPerformance() {
   const totalKlik    = rows.reduce((s, r) => s + Number(r.klik   || 0), 0);
   const totalOrder   = rows.reduce((s, r) => s + Number(r.jumlah_order || 0), 0);
   const totalOmzet   = rows.reduce((s, r) => s + Number(r.omzet  || 0), 0);
-  const totalProfit  = rows.reduce((s, r) => s + Number(r.profit_bersih || 0), 0);
+  // profit_bersih per baris bernilai NULL utk hari tanpa laporan manual (omzet NULL), jadi
+  // menjumlahkannya langsung "melupakan" spend hari itu dan profit jadi terlalu tinggi.
+  // Dihitung ulang di sini persis seperti /meta-ads/laporan: total omzet-bersih (hanya hari
+  // yang punya laporan) dikurangi TOTAL spend (semua hari, bukan cuma yang ada laporan).
+  const totalNetOmzet = rows.reduce((s, r) => {
+    if (r.omzet == null) return s;
+    return s + Number(r.omzet) - (Number(r.omzet) * Number(r.hpp_persen || 0) / 100);
+  }, 0);
+  const totalProfit  = totalNetOmzet - totalSpend;
   const avgRoas      = totalSpend > 0 ? (totalOmzet / totalSpend) : null;
 
   const thStyle = { padding: '8px 10px', fontSize: 11, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '1px solid var(--border)' };

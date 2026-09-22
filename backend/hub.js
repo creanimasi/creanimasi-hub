@@ -1472,7 +1472,7 @@ router.get('/laporan-bulanan', authMiddleware, requirePageAccess('laporan-bulana
          WHERE tanggal >= $1 AND tanggal <= $2`,
         [tglAwal, tglAkhir]
       ),
-      hubPool.query('SELECT nama, hadir FROM workshop_kehadiran'),
+      hubPool.query('SELECT nama, layer_id, sesi_idx, hadir FROM workshop_kehadiran'),
       hubPool.query(
         `SELECT nama, nominal, kategori FROM reward_tracking
          WHERE tanggal >= $1 AND tanggal <= $2`,
@@ -1535,8 +1535,9 @@ router.get('/laporan-bulanan', authMiddleware, requirePageAccess('laporan-bulana
 
       // Status kesehatan (badge)
       let status = 'baik';
+      // mood 1-10 (lihat FormJurnal MoodSlider); ambang disamakan dgn cutoff amber tampilan (<6/10)
       if (pctAbsensi !== null && pctAbsensi < 70) status = 'risiko';
-      else if ((avgMood !== null && avgMood < 3) || (pctAbsensi !== null && pctAbsensi < 80)) status = 'perhatian';
+      else if ((avgMood !== null && avgMood < 6) || (pctAbsensi !== null && pctAbsensi < 80)) status = 'perhatian';
 
       return {
         nama, jmlJurnal,
@@ -2706,6 +2707,7 @@ router.get('/meta-ads/brands', authMiddleware, requirePageAccess('ads-performanc
 router.put('/meta-ads/brands/:id/settings', authMiddleware, requirePageAccess('ads-performance'), async (req, res) => {
   const { kurs_usd, hpp_default } = req.body;
   if (kurs_usd == null || hpp_default == null) return res.status(400).json({ error: 'kurs_usd dan hpp_default wajib' });
+  if (!(Number(kurs_usd) > 0)) return res.status(400).json({ error: 'kurs_usd harus lebih dari 0' });
   try {
     await pool.query(
       `UPDATE meta_ads_brands SET kurs_usd=$1, hpp_default=$2 WHERE id=$3`,
@@ -3618,10 +3620,19 @@ router.post('/ai/chat', authMiddleware, requirePageAccess('ai-assistant'), async
       pool.query(`SELECT nama, tanggal_jurnal::text, mood, skor_karya, skor_waktu, skor_komunikasi, skor_skill, catatan_mentor, hambatan, pencapaian_1 FROM jurnal_mingguan ORDER BY tanggal_jurnal DESC LIMIT 30`).catch(() => ({ rows: [] })),
       pool.query(`SELECT s.label AS nama_sesi, s.tanggal::text, a.nama, a.status FROM absensi_sesi s JOIN absensi_kehadiran a ON a.sesi_id=s.id WHERE s.tanggal >= NOW()-INTERVAL '30 days' ORDER BY s.tanggal DESC LIMIT 60`).catch(() => ({ rows: [] })),
       pool.query(`SELECT b.nama AS brand, i.tanggal::text, ROUND(i.spend * ${KURS_KE_IDR}, 2) AS spend, i.klik, i.ctr, i.impresi, ROUND(i.cpm * ${KURS_KE_IDR}, 2) AS cpm, rep.jumlah_order, rep.omzet, rep.hpp_persen FROM meta_ads_insights i JOIN meta_ads_brands b ON b.id=i.brand_id LEFT JOIN meta_ads_reports rep ON rep.brand_id=i.brand_id AND rep.tanggal=i.tanggal WHERE DATE_TRUNC('month',i.tanggal)=DATE_TRUNC('month',$1::date) ORDER BY i.tanggal DESC`, [tglIni]).catch(() => ({ rows: [] })),
-      pool.query(`SELECT nama, jenis_reward, poin, bulan::text FROM reward_tracking ORDER BY created_at DESC LIMIT 20`).catch(() => ({ rows: [] })),
+      pool.query(`SELECT nama, kategori, bentuk, nominal, tanggal::text FROM reward_tracking ORDER BY created_at DESC LIMIT 20`).catch(() => ({ rows: [] })),
       pool.query(`SELECT nama, judul, status, created_at::text FROM skb ORDER BY created_at DESC LIMIT 20`).catch(() => ({ rows: [] })),
       pool.query(`SELECT nama, bulan, tahun, jumlah, target, catatan FROM revenue_bulanan ORDER BY tahun DESC, bulan DESC LIMIT 20`).catch(() => ({ rows: [] })),
-      pool.query(`SELECT t.nama, t.divisi, p.skor_teknis, p.skor_komunikasi, p.created_at::text FROM tim t LEFT JOIN LATERAL (SELECT skor_teknis, skor_komunikasi, created_at FROM profiling_illustrator WHERE nama=t.nama UNION ALL SELECT skor_teknis, skor_komunikasi, created_at FROM profiling_rigger WHERE nama=t.nama UNION ALL SELECT skor_teknis, skor_komunikasi, created_at FROM profiling_pm WHERE nama=t.nama UNION ALL SELECT skor_teknis, skor_komunikasi, created_at FROM profiling_3d WHERE nama=t.nama ORDER BY created_at DESC LIMIT 1) p ON TRUE WHERE t.aktif=TRUE`).catch(() => ({ rows: [] })),
+      // Tiap divisi punya nama kolom skill teknis sendiri — dipetakan ke skor_teknis di sini.
+      // PM tidak punya skor_komunikasi, hanya skor_komunikasi_klien.
+      pool.query(`SELECT t.nama, t.divisi, p.skor_teknis, p.skor_komunikasi, p.created_at::text FROM tim t LEFT JOIN LATERAL (
+        SELECT skill_level_csp AS skor_teknis, skor_komunikasi, created_at FROM profiling_illustrator WHERE nama=t.nama
+        UNION ALL SELECT skill_level_live2d, skor_komunikasi, created_at FROM profiling_rigger WHERE nama=t.nama
+        UNION ALL SELECT skill_komunikasi, skor_komunikasi_klien, created_at FROM profiling_pm WHERE nama=t.nama
+        UNION ALL SELECT skill_level_blender, skor_komunikasi, created_at FROM profiling_3d WHERE nama=t.nama
+        UNION ALL SELECT skill_copywriting, skor_komunikasi, created_at FROM profiling_admin WHERE nama=t.nama
+        ORDER BY created_at DESC LIMIT 1
+      ) p ON TRUE WHERE t.aktif=TRUE`).catch(() => ({ rows: [] })),
       pool.query(`SELECT anggota, tipe, tanggal::text, ringkasan, tindak_lanjut, mood_sebelum, mood_sesudah FROM sesi_1on1 ORDER BY tanggal DESC LIMIT 10`).catch(() => ({ rows: [] })),
     ]);
 
@@ -3660,7 +3671,7 @@ SESI 1-ON-1 TERBARU:
 ${sesi1on1.rows.length > 0 ? sesi1on1.rows.map(s => `- ${s.anggota} (${s.tipe}, ${s.tanggal?.slice(0,10)}): mood ${s.mood_sebelum}→${s.mood_sesudah} | ${s.ringkasan}`).join('\n') : 'Belum ada sesi 1-on-1'}
 
 REWARD TERBARU:
-${reward.rows.length > 0 ? reward.rows.slice(0,10).map(r => `- ${r.nama}: ${r.jenis_reward} (${r.poin} poin) — ${r.bulan}`).join('\n') : 'Belum ada data reward'}
+${reward.rows.length > 0 ? reward.rows.slice(0,10).map(r => `- ${r.nama}: ${r.kategori||'-'} — ${r.bentuk||'-'} (Rp${Number(r.nominal||0).toLocaleString('id-ID')}) — ${r.tanggal?.slice(0,10)}`).join('\n') : 'Belum ada data reward'}
 
 SKB (Skill & Kompetensi Berbasis):
 ${skb.rows.length > 0 ? skb.rows.slice(0,10).map(s => `- ${s.nama}: "${s.judul}" — ${s.status} (${s.created_at?.slice(0,10)})`).join('\n') : 'Belum ada data SKB'}
