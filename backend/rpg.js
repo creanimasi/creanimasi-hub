@@ -37,6 +37,10 @@ const CONFIG = {
     KUNCI_OTOMATIS_HARI: 6,   // dikunci otomatis N hari setelah tanggal tutup (27 → 3) bila admin belum mengunci
     TARGET_MAKS: 100000, RIWAYAT: 6, LOOKBACK_PERIODE: 4,
   },
+  // Batas waktu admin bisa menarik kembali (batalkan) quest yang SUDAH disetujui — mencegah pembatalan
+  // sewenang-wenang atas riwayat lama; sengaja lebih pendek dari SELESAI_HARI (30) supaya kartu masih bisa
+  // dibatalkan sebelum "menghilang" dari tampilan Selesai.
+  BATAL_MAKS_HARI: 7,
 };
 
 const ACHIEVEMENTS_SEED = [
@@ -146,6 +150,11 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
       // Urgensi quest: tambah kolom bila belum ada. Baris lama otomatis bernilai default (4 = Normal); CHECK 1–7 di level DB.
       await q(`ALTER TABLE rpg_quest ADD COLUMN IF NOT EXISTS urgensi SMALLINT NOT NULL DEFAULT ${CONFIG.URGENSI_DEFAULT}
                CHECK (urgensi BETWEEN ${CONFIG.URGENSI_MIN} AND ${CONFIG.URGENSI_MAX})`);
+      // Audit pembatalan persetujuan quest (lihat POST /rpg/admin/assignments/:id/batalkan). ditinjau_oleh/ditinjau_pada
+      // TETAP menyimpan siapa & kapan quest DISETUJUI semula — kolom di bawah menyimpan siapa & kapan itu DITARIK kembali.
+      await q(`ALTER TABLE rpg_quest_assignment ADD COLUMN IF NOT EXISTS dibatalkan_oleh VARCHAR(100)`);
+      await q(`ALTER TABLE rpg_quest_assignment ADD COLUMN IF NOT EXISTS dibatalkan_pada TIMESTAMPTZ`);
+      await q(`ALTER TABLE rpg_quest_assignment ADD COLUMN IF NOT EXISTS xp_dibatalkan INTEGER`);
       await target.migrasi();
       for (const [code, label, deskripsi, tipe, nilai, urutan] of ACHIEVEMENTS_SEED) {
         await q(`INSERT INTO rpg_achievement (code, label, deskripsi, syarat_tipe, syarat_nilai, urutan)
@@ -640,6 +649,58 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
     res.json({ success: true });
   });
 
+  // Batalkan persetujuan quest yang SUDAH disetujui (mis. salah ditugaskan/disetujui): XP ditarik kembali dari
+  // ledger dan status dikembalikan ke 'ditolak' (anggota melihat alasan, bisa mengajukan ulang bila memang berhak).
+  // Dibatasi CONFIG.BATAL_MAKS_HARI hari sejak disetujui — bukan untuk mengubah riwayat lama sembarangan.
+  // TIDAK mencabut achievement yang mungkin sudah terbuka dari XP ini (konsisten dengan bagian lain sistem: sekali
+  // terbuka, achievement biasa tidak dievaluasi ulang — kecuali achievement target, yang dicabut lewat "buka kembali
+  // periode" di rpg_target.js). Bila XP ini sudah masuk periode TARGET yang sudah dikunci, respons menyertakan
+  // peringatan — hasil periode itu tidak ikut terkoreksi otomatis; admin perlu membuka kembali periode itu bila perlu.
+  router.post('/rpg/admin/assignments/:id/batalkan', ...adminOnly, async (req, res) => {
+    const alasan = String(req.body.alasan || '').trim().slice(0, 1000);
+    if (!alasan) return res.status(400).json({ error: 'Alasan pembatalan wajib diisi' });
+    const client = await hubPool.connect();
+    let hasil = null;
+    try {
+      await client.query('BEGIN');
+      const a = await client.query(
+        `SELECT a.id, a.tim_id, a.status, a.ditinjau_pada, qs.xp, qs.judul, t.divisi
+         FROM rpg_quest_assignment a JOIN rpg_quest qs ON qs.id = a.quest_id JOIN tim t ON t.id = a.tim_id
+         WHERE a.id = $1 FOR UPDATE OF a`, [parseInt(req.params.id, 10)]);
+      if (!a.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Quest tidak ditemukan' }); }
+      const row = a.rows[0];
+      if (row.status !== 'disetujui') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Hanya quest yang sudah disetujui yang bisa dibatalkan' }); }
+      const batasHari = (Date.now() - new Date(row.ditinjau_pada).getTime()) / 86400000;
+      if (batasHari > CONFIG.BATAL_MAKS_HARI) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: `Sudah lewat ${CONFIG.BATAL_MAKS_HARI} hari sejak disetujui — tidak bisa dibatalkan lagi` });
+      }
+      const ditarik = await client.query(
+        `DELETE FROM rpg_xp_event WHERE tim_id = $1 AND sumber = 'quest' AND ref_key = $2 RETURNING xp`,
+        [row.tim_id, 'q:' + row.id]);
+      const xpDitarik = ditarik.rows[0]?.xp ?? 0;
+      await client.query(
+        `UPDATE rpg_quest_assignment SET status = 'ditolak', catatan_review = $1, dibatalkan_oleh = $2, dibatalkan_pada = NOW(), xp_dibatalkan = $3 WHERE id = $4`,
+        [alasan, req.user.nama, xpDitarik, row.id]);
+      await client.query('COMMIT');
+      hasil = { xpDitarik, timId: row.tim_id, divisi: row.divisi, ditinjauPada: row.ditinjau_pada };
+    } catch (e) { await client.query('ROLLBACK'); console.error('[RPG] batalkan quest:', e.message); return res.status(500).json({ error: 'Gagal membatalkan persetujuan' }); }
+    finally { client.release(); }
+    // Peringatan tak-blokir: XP ini sudah masuk potret periode target yang terkunci? (hanya relevan divisi produksi)
+    let peringatanTarget = null;
+    try {
+      if (CONFIG.TARGET.DIVISI.includes(hasil.divisi)) {
+        const tglWib = new Date(new Date(hasil.ditinjauPada).getTime() + 7 * 3600 * 1000).toISOString().slice(0, 10);
+        const p = target.meta.periodeDari(tglWib);
+        const st = await q('SELECT status FROM rpg_periode WHERE kode = $1', [p.kode]);
+        if (st.rows[0]?.status === 'dikunci') {
+          peringatanTarget = `Poin quest ini sudah dihitung di periode target ${p.label} yang SUDAH DIKUNCI — hasil periode itu tidak ikut terkoreksi otomatis. Buka kembali periode itu di Kelola RPG › Target bila perlu dihitung ulang.`;
+        }
+      }
+    } catch (e) { console.error('[RPG] cek peringatan target saat batalkan:', e.message); }
+    res.json({ success: true, data: { xpDitarik: hasil.xpDitarik, peringatanTarget } });
+  });
+
   router.get('/rpg/admin/achievements', ...adminOnly, async (req, res) => {
     try {
       const r = await q(`
@@ -683,7 +744,7 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
         q('SELECT id, nama, divisi, entitas FROM tim WHERE aktif = TRUE ORDER BY nama'),
         q('SELECT tim_id, SUM(xp)::int AS xp FROM rpg_xp_event GROUP BY tim_id'),
         // Aturan tampil sama dengan Papan Quest anggota: quest nonaktif disembunyikan kecuali yang sudah disetujui.
-        q(`SELECT a.id, a.tim_id, a.status, a.progress_pct, a.catatan_anggota, a.catatan_review, a.diajukan_pada, a.ditinjau_pada,
+        q(`SELECT a.id, a.tim_id, a.status, a.progress_pct, a.catatan_anggota, a.catatan_review, a.diajukan_pada, a.ditinjau_pada, a.dibatalkan_oleh,
                   qs.id AS quest_id, qs.judul, qs.deskripsi, qs.tipe, qs.xp, qs.ikon, qs.urgensi, to_char(qs.tenggat, 'YYYY-MM-DD') AS tenggat
            FROM rpg_quest_assignment a
            JOIN rpg_quest qs ON qs.id = a.quest_id
@@ -706,9 +767,10 @@ module.exports = function registerRpg(router, { hubPool, authMiddleware, require
         id: a.id, timId: a.tim_id, questId: a.quest_id, judul: a.judul, deskripsi: a.deskripsi, tipe: a.tipe, xp: a.xp, ikon: a.ikon, urgensi: a.urgensi,
         tenggat: a.tenggat, ...labelTenggat(a.tenggat, hariIni),
         status: a.status, progressPct: a.progress_pct, catatanAnggota: a.catatan_anggota, catatanReview: a.catatan_review,
-        diajukanPada: a.diajukan_pada, ditinjauPada: a.ditinjau_pada,
+        diajukanPada: a.diajukan_pada, ditinjauPada: a.ditinjau_pada, dibatalkanOleh: a.dibatalkan_oleh,
+        bisaDibatalkan: a.status === 'disetujui' && (Date.now() - new Date(a.ditinjau_pada).getTime()) / 86400000 <= CONFIG.BATAL_MAKS_HARI,
       }));
-      res.json({ success: true, data: { selesaiHari: SELESAI_HARI, anggota, kartu, belumDitugaskan: belumR.rows[0].n, periodeTarget: tgt.periode } });
+      res.json({ success: true, data: { selesaiHari: SELESAI_HARI, batalMaksHari: CONFIG.BATAL_MAKS_HARI, anggota, kartu, belumDitugaskan: belumR.rows[0].n, periodeTarget: tgt.periode } });
     } catch (e) { console.error('[RPG] papan admin:', e.message); res.status(500).json({ error: 'Gagal memuat papan quest' }); }
   });
 

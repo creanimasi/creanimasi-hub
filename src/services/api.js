@@ -246,6 +246,7 @@ export const api = {
   rpgAdminTugaskan: (id, tim_ids)      => request('POST', `/rpg/admin/quests/${id}/tugaskan`, { tim_ids }),
   rpgAdminReview:   ()                 => request('GET', '/rpg/admin/review'),
   rpgAdminPutuskan: (id, status, catatan_review) => request('PATCH', `/rpg/admin/assignments/${id}`, { status, catatan_review }),
+  rpgAdminBatalkan: (id, alasan) => request('POST', `/rpg/admin/assignments/${id}/batalkan`, { alasan }),
   rpgAdminAchievements: ()             => request('GET', '/rpg/admin/achievements'),
   rpgAdminGrant:    (code, tim_id)     => request('POST', `/rpg/admin/achievements/${code}/grant`, { tim_id }),
   // Target poin produksi

@@ -125,6 +125,18 @@ idempoten), `rpg_quest`, `rpg_quest_assignment`, `rpg_achievement`, `rpg_achieve
   `GET /rpg/admin/papan` (baca: rpg-admin ATAU rpg-pantau; hanya-baca). Setujui/tolak dari kartu memakai
   `PATCH /rpg/admin/assignments/:id` (rpg-admin saja, transaksi + 409 bila sudah diproses). Admin TIDAK bisa memindahkan
   status Aktif/Diajukan (itu hak anggota). Akun tanpa tautan tim punya sakelar "Papan saya" (pesan netral).
+- **Batalkan persetujuan** (`POST /rpg/admin/assignments/:id/batalkan`, semua pemegang `rpg-admin`, BUKAN `rpg-pantau`):
+  menarik kembali quest yang SUDAH disetujui (mis. salah menugaskan) — XP dihapus dari ledger (`DELETE ... rpg_xp_event`,
+  bukan entri minus, supaya assignment id yang sama bisa dipakai lagi bila anggota mengajukan ulang & disetujui lagi tanpa
+  bentrok UNIQUE ref_key) dan status kembali ke `ditolak` (anggota melihat "Ditolak: <alasan>", bisa ajukan ulang). Dibatasi
+  `CONFIG.BATAL_MAKS_HARI` (7) hari sejak `ditinjau_pada` — transaksi + `FOR UPDATE`, 409 bila sudah lewat batas atau status
+  bukan `disetujui`. Audit tersimpan di kolom baru `dibatalkan_oleh/pada`, `xp_dibatalkan` — TIDAK menimpa `ditinjau_oleh/pada`
+  asli (siapa & kapan MENYETUJUI semula tetap utuh). **TIDAK mencabut achievement** yang mungkin sudah terbuka dari XP itu
+  (konsisten dengan desain: achievement biasa tidak pernah dievaluasi ulang setelah terbuka — kecuali achievement TARGET,
+  yang memang dicabut lewat "buka kembali periode" di rpg_target.js). Bila XP-nya sudah masuk potret periode TARGET yang
+  terkunci, respons menyertakan `peringatanTarget` (string) — hasil periode itu TIDAK ikut terkoreksi otomatis, admin perlu
+  membuka kembali periode itu di Kelola RPG › Target bila perlu dihitung ulang. Tombol "Batalkan persetujuan" ada di kartu
+  Selesai pada Kanban (`bisaDibatalkan` dari server, disembunyikan otomatis lewat batas waktu).
 - **Urgensi quest 1–7** (`rpg_quest.urgensi`, SMALLINT NOT NULL DEFAULT 4, CHECK 1–7; 7 = paling mendesak; nama: Santai,
   Rendah, Agak rendah, Normal, Tinggi, Mendesak, Kritis). Konstanta `URGENSI_*` di `CONFIG` rpg.js; daftar nama/keterangan +
   warna (`--rpg-urg-1..7`, skala panas, semua ≥4,5:1) di `src/modules/rpg/utils/urgensi.js` + `rpg-tokens.css`. TIDAK

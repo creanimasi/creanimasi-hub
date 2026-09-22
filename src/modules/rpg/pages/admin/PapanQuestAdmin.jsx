@@ -119,7 +119,7 @@ function FilterDivisi({ daftar, dipilih, onUbah }) {
   );
 }
 
-function Kartu({ k, bisaAksi, onSetujui, onTolak }) {
+function Kartu({ k, bisaAksi, onSetujui, onTolak, onBatalkan }) {
   const st = STATUS[k.status];
   return (
     <article aria-label={`${k.judul} — ${st.label}`} style={{
@@ -163,11 +163,22 @@ function Kartu({ k, bisaAksi, onSetujui, onTolak }) {
       )}
       {k.status === 'ditolak' && (
         <div style={{ ...hud, fontSize: '.98rem', color: 'var(--rpg-warn)', overflowWrap: 'anywhere' }}>
-          Ditolak{k.catatanReview ? `: ${k.catatanReview}` : ''}
-          <div style={{ color: 'var(--rpg-ink-dim)', fontSize: '.9rem' }}>Menunggu perbaikan dari anggota</div>
+          {k.dibatalkanOleh ? 'Dibatalkan admin' : 'Ditolak'}{k.catatanReview ? `: ${k.catatanReview}` : ''}
+          <div style={{ color: 'var(--rpg-ink-dim)', fontSize: '.9rem' }}>
+            {k.dibatalkanOleh ? `XP ditarik kembali oleh ${k.dibatalkanOleh}` : 'Menunggu perbaikan dari anggota'}
+          </div>
         </div>
       )}
-      {k.status === 'disetujui' && <div style={{ ...hud, fontSize: '.98rem', color: 'var(--rpg-success)' }}>✓ Selesai {lalu(k.ditinjauPada).toLowerCase()}</div>}
+      {k.status === 'disetujui' && (
+        <div>
+          <div style={{ ...hud, fontSize: '.98rem', color: 'var(--rpg-success)' }}>✓ Selesai {lalu(k.ditinjauPada).toLowerCase()}</div>
+          {bisaAksi && k.bisaDibatalkan && (
+            <button type="button" onClick={onBatalkan} title="Menarik kembali XP dan mengembalikan quest ke status ditolak" style={{
+              ...hud, fontSize: '.9rem', cursor: 'pointer', background: 'transparent', color: 'var(--rpg-warn)', border: '2px solid var(--rpg-warn)', padding: '.05rem .5rem', marginTop: '.3rem',
+            }}>Batalkan persetujuan</button>
+          )}
+        </div>
+      )}
     </article>
   );
 }
@@ -194,7 +205,7 @@ function TargetMini({ t, periode }) {
   );
 }
 
-function Kolom({ k, mobile, bisaAksi, bisaDetail, selesaiTerbuka, onToggleSelesai, onSetujui, onTolak, onDetail, periodeTarget }) {
+function Kolom({ k, mobile, bisaAksi, bisaDetail, selesaiTerbuka, onToggleSelesai, onSetujui, onTolak, onBatalkan, onDetail, periodeTarget }) {
   const aktif = k.kartu.filter(c => c.status !== 'disetujui');
   const selesai = k.kartu.filter(c => c.status === 'disetujui');
   const hitung = (s) => k.kartu.filter(c => c.status === s).length;
@@ -229,7 +240,7 @@ function Kolom({ k, mobile, bisaAksi, bisaDetail, selesaiTerbuka, onToggleSelesa
             <button type="button" aria-expanded={selesaiTerbuka} onClick={onToggleSelesai} style={{ ...hud, fontSize: '1rem', cursor: 'pointer', background: 'transparent', color: 'var(--rpg-success)', border: 'none', padding: '.1rem 0', textAlign: 'left' }}>
               {selesaiTerbuka ? '▾' : '▸'} Selesai ({selesai.length}){k.a.selesaiTotal > selesai.length ? ` · ${k.a.selesaiTotal} total` : ''}
             </button>
-            {selesaiTerbuka && <div style={{ display: 'flex', flexDirection: 'column', gap: '.6rem', marginTop: '.5rem' }}>{selesai.map(c => <Kartu key={c.id} k={c} bisaAksi={false} />)}</div>}
+            {selesaiTerbuka && <div style={{ display: 'flex', flexDirection: 'column', gap: '.6rem', marginTop: '.5rem' }}>{selesai.map(c => <Kartu key={c.id} k={c} bisaAksi={bisaAksi} onBatalkan={() => onBatalkan(c, k.a)} />)}</div>}
           </div>
         )}
       </div>
@@ -345,14 +356,22 @@ export default function PapanQuestAdmin({ atas }) {
   const tutupAksi = () => { setAksi(null); setAlasan(''); };
   const putuskan = async () => {
     if (!aksi) return;
-    if (aksi.jenis === 'tolak' && !alasan.trim()) return showToast('Alasan penolakan wajib diisi', 'error');
+    if ((aksi.jenis === 'tolak' || aksi.jenis === 'batalkan') && !alasan.trim()) {
+      return showToast(aksi.jenis === 'tolak' ? 'Alasan penolakan wajib diisi' : 'Alasan pembatalan wajib diisi', 'error');
+    }
     setBusy(true);
     try {
-      await api.rpgAdminPutuskan(aksi.kartu.id, aksi.jenis === 'setujui' ? 'disetujui' : 'ditolak', aksi.jenis === 'tolak' ? alasan.trim() : undefined);
-      showToast(aksi.jenis === 'setujui' ? `${aksi.anggota.nama} mendapat +${aksi.kartu.xp} XP` : 'Quest dikembalikan ke anggota untuk diperbaiki');
+      if (aksi.jenis === 'batalkan') {
+        const r = await api.rpgAdminBatalkan(aksi.kartu.id, alasan.trim());
+        showToast(`${aksi.anggota.nama}: -${r.data.xpDitarik} XP ditarik kembali`);
+        if (r.data.peringatanTarget) showToast(r.data.peringatanTarget, 'info');
+      } else {
+        await api.rpgAdminPutuskan(aksi.kartu.id, aksi.jenis === 'setujui' ? 'disetujui' : 'ditolak', aksi.jenis === 'tolak' ? alasan.trim() : undefined);
+        showToast(aksi.jenis === 'setujui' ? `${aksi.anggota.nama} mendapat +${aksi.kartu.xp} XP` : 'Quest dikembalikan ke anggota untuk diperbaiki');
+      }
     } catch (e) {
       const m = pesanError(e);
-      showToast(m, /sudah diproses/i.test(m) ? 'info' : 'error');
+      showToast(m, /sudah diproses|sudah disetujui yang bisa dibatalkan|Sudah lewat/i.test(m) ? 'info' : 'error');
     } finally { setBusy(false); tutupAksi(); res.reload(); }
   };
 
@@ -438,6 +457,7 @@ export default function PapanQuestAdmin({ atas }) {
             <Kolom k={mobPilih} mobile bisaAksi={bisaAksi} bisaDetail={bisaDetail} selesaiTerbuka={selesaiAuto || terbuka.has(mobPilih.a.id)}
               onToggleSelesai={() => setTerbuka(s => { const n = new Set(s); n.has(mobPilih.a.id) ? n.delete(mobPilih.a.id) : n.add(mobPilih.a.id); return n; })}
               onSetujui={(c, a) => setAksi({ jenis: 'setujui', kartu: c, anggota: a })} onTolak={(c, a) => { setAlasan(''); setAksi({ jenis: 'tolak', kartu: c, anggota: a }); }}
+              onBatalkan={(c, a) => { setAlasan(''); setAksi({ jenis: 'batalkan', kartu: c, anggota: a }); }}
               onDetail={() => navigate(`/rpg/anggota?id=${mobPilih.a.id}`)} periodeTarget={d?.periodeTarget} />
           ) : (
             <div data-testid="papan-scroll" style={{ overflowX: 'auto', paddingBottom: '.6rem' }}>
@@ -452,6 +472,7 @@ export default function PapanQuestAdmin({ atas }) {
                         <Kolom key={k.a.id} k={k} bisaAksi={bisaAksi} bisaDetail={bisaDetail} selesaiTerbuka={selesaiAuto || terbuka.has(k.a.id)}
                           onToggleSelesai={() => setTerbuka(s => { const n = new Set(s); n.has(k.a.id) ? n.delete(k.a.id) : n.add(k.a.id); return n; })}
                           onSetujui={(c, a) => setAksi({ jenis: 'setujui', kartu: c, anggota: a })} onTolak={(c, a) => { setAlasan(''); setAksi({ jenis: 'tolak', kartu: c, anggota: a }); }}
+                          onBatalkan={(c, a) => { setAlasan(''); setAksi({ jenis: 'batalkan', kartu: c, anggota: a }); }}
                           onDetail={() => navigate(`/rpg/anggota?id=${k.a.id}`)} periodeTarget={d?.periodeTarget} />
                       ))}
                     </div>
@@ -471,15 +492,18 @@ export default function PapanQuestAdmin({ atas }) {
       </div>
 
       {aksi && (
-        <RpgModal title={aksi.jenis === 'setujui' ? 'SETUJUI QUEST' : 'TOLAK QUEST'} onClose={busy ? () => {} : tutupAksi} width={470}>
+        <RpgModal title={aksi.jenis === 'setujui' ? 'SETUJUI QUEST' : aksi.jenis === 'batalkan' ? 'BATALKAN PERSETUJUAN' : 'TOLAK QUEST'} onClose={busy ? () => {} : tutupAksi} width={470}>
           <p style={{ ...hud, fontSize: '1.1rem', color: 'var(--rpg-ink-dim)', margin: '0 0 .8rem' }}>
             {aksi.jenis === 'setujui'
               ? <>Setujui <b style={{ color: 'var(--rpg-ink)' }}>“{aksi.kartu.judul}”</b> untuk {aksi.anggota.nama}? Ia akan mendapat <b style={{ color: 'var(--rpg-success)' }}>+{aksi.kartu.xp} XP</b>. Tindakan ini tidak bisa dibatalkan.</>
+              : aksi.jenis === 'batalkan'
+              ? <>Tarik kembali <b style={{ color: 'var(--rpg-warn)' }}>-{aksi.kartu.xp} XP</b> yang sudah diberikan ke {aksi.anggota.nama} untuk <b style={{ color: 'var(--rpg-ink)' }}>“{aksi.kartu.judul}”</b>. Quest ini kembali berstatus ditolak dan anggota bisa mengajukan ulang. Alasan ini akan dilihat anggota.</>
               : <>Kembalikan <b style={{ color: 'var(--rpg-ink)' }}>“{aksi.kartu.judul}”</b> milik {aksi.anggota.nama} untuk diperbaiki. Alasan ini akan dilihat anggota.</>}
           </p>
           {aksi.kartu.catatanAnggota && <p style={{ ...hud, fontSize: '1rem', color: 'var(--rpg-ink-faint)', margin: '0 0 .8rem' }}>Catatan anggota: “{aksi.kartu.catatanAnggota}”</p>}
-          {aksi.jenis === 'tolak' && (
-            <input aria-label="Alasan penolakan" autoFocus placeholder="Alasan penolakan (wajib)" value={alasan} maxLength={1000} onChange={e => setAlasan(e.target.value)}
+          {(aksi.jenis === 'tolak' || aksi.jenis === 'batalkan') && (
+            <input aria-label={aksi.jenis === 'tolak' ? 'Alasan penolakan' : 'Alasan pembatalan'} autoFocus
+              placeholder={aksi.jenis === 'tolak' ? 'Alasan penolakan (wajib)' : 'Alasan pembatalan (wajib)'} value={alasan} maxLength={1000} onChange={e => setAlasan(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && putuskan()}
               style={{ ...hud, fontSize: '1.05rem', width: '100%', boxSizing: 'border-box', color: 'var(--rpg-ink)', background: 'var(--rpg-bg)', border: '2px solid var(--rpg-line-dim)', padding: '.4rem .6rem', marginBottom: '.8rem' }} />
           )}
@@ -489,7 +513,7 @@ export default function PapanQuestAdmin({ atas }) {
               ...chipBase, fontSize: '1.05rem', opacity: busy ? .6 : 1,
               background: aksi.jenis === 'setujui' ? 'var(--rpg-success)' : 'transparent', color: aksi.jenis === 'setujui' ? '#08240f' : 'var(--rpg-warn)',
               borderColor: aksi.jenis === 'setujui' ? 'var(--rpg-success)' : 'var(--rpg-warn)',
-            }}>{busy ? 'Memproses…' : aksi.jenis === 'setujui' ? 'Setujui' : 'Kirim penolakan'}</button>
+            }}>{busy ? 'Memproses…' : aksi.jenis === 'setujui' ? 'Setujui' : aksi.jenis === 'batalkan' ? 'Tarik kembali XP' : 'Kirim penolakan'}</button>
           </div>
         </RpgModal>
       )}
