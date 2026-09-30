@@ -274,6 +274,11 @@ export const api = {
   timelineHapusTugas:(id)              => request('DELETE', `/timeline/tugas/${id}`),
   timelinePindahTugas: (id, arah)      => request('POST', `/timeline/tugas/${id}/pindah`, { arah }),
 
+  // Laporan KPI Artist — poin harian direkap otomatis dari Poin+tanggal_kerja Papan Timeline
+  getLaporanKpi:        (bulan)          => request('GET', `/laporan-kpi?bulan=${bulan}`),
+  laporanKpiSetTarget:  (data)           => request('PUT', '/laporan-kpi/target', data),
+  laporanKpiSalinTarget:(dari, ke)       => request('POST', '/laporan-kpi/target/salin', { dari, ke }),
+
   // AI
   getAiInsightAds: (bulan, brandId) => request('POST', '/ai/insight-ads', { bulan, ...(brandId ? { brand_id: brandId } : {}) }),
   aiChat:          (pesan, riwayat) => request('POST', '/ai/chat', { pesan, riwayat }),

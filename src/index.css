@@ -39,11 +39,18 @@
 
   /* Urgensi Papan Timeline (1 = paling mendesak/merah … 4 = paling santai/hijau tua — kebalikan skala
      urgensi 1-7 modul RPG yang 7 = paling mendesak; keduanya sengaja terpisah, jangan disamakan).
-     Dipakai sebagai teks+border (bukan latar penuh) supaya kontras ≥ 4.5:1 terjaga di semua tema. */
+     Dipakai sebagai LATAR PENUH (badge, meniru referensi spreadsheet); --tl-urg-on = warna teks di atasnya
+     (beda per tema — warna terang di sini butuh teks gelap, warna gelap di tema terang butuh teks putih). */
   --tl-urg-1: #F87171;
   --tl-urg-2: #F59E0B;
   --tl-urg-3: #22C55E;
   --tl-urg-4: #14B8A6;
+  --tl-urg-on: #0A0E14;
+  /* Banner "TIMELINE <GRUP>" + header kolom, meniru pita merah/coral referensi spreadsheet — SATU nilai
+     tetap (bukan per-tema) karena ini warna brand halaman itu sendiri, bukan token semantik yang perlu
+     ikut tema; putih di atasnya sudah dihitung ≥4.5:1 (5.44:1) jadi aman dipakai di 3 tema sekaligus. */
+  --tl-banner-bg: #C0392B;
+  --tl-banner-text: #FFFFFF;
 
   --glow-green:   0 0 20px rgba(0,214,143,0.25);
   --glow-purple:  0 0 20px rgba(155,143,255,0.25);
@@ -94,6 +101,7 @@
   --tl-urg-2: #C2410C;
   --tl-urg-3: #166534;
   --tl-urg-4: #115E59;
+  --tl-urg-on: #FFFFFF;
 
   --glow-green:   none;
   --glow-purple:  none;
@@ -425,6 +433,12 @@ body {
   transition: border-color .2s, box-shadow .2s;
 }
 .card:hover { border-color: var(--border-2); }
+
+/* Papan Timeline: tombol pindah/hapus per baris pudar sampai baris disorot/difokus — biar tabel tidak
+   ramai saat tidak dipakai, tapi tetap terlihat (bukan hilang total) & tetap tampak saat fokus keyboard.
+   .95 (bukan lebih pudar) supaya glyph teks (⋯ ↑ ↓ ✕, terutama ✕ merah) tetap ≥4.5:1 di semua tema saat tak disorot. */
+.tl-row-actions { opacity: .95; transition: opacity .15s; }
+tr:hover .tl-row-actions, tr:focus-within .tl-row-actions { opacity: 1; }
 .card-title {
   font-size: 13px;
   font-weight: 700;

@@ -33,3 +33,6 @@ node_modules/
 # artefak runtime lokal
 *.log
 *.pid
+
+# skrip seed berisi hash password asli — jangan pernah di-commit
+backend/scripts/seed-hub-users.sql

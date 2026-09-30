@@ -895,6 +895,7 @@ router.patch('/skb/:id', authMiddleware, async (req, res) => {
       ['rpg-admin', 'Kelola RPG', '/rpg/kelola'],
       ['tim-kelola-legacy', 'Kelola Tim (legacy)', '/tim/kelola'],
       ['timeline', 'Papan Timeline', '/timeline'],
+      ['laporan-kpi', 'Laporan KPI', '/laporan-kpi'],
     ];
     for (let i = 0; i < BASELINE.length; i++) {
       const [key, nama, path] = BASELINE[i];
@@ -3797,6 +3798,7 @@ try {
 // Modul RPG/gamifikasi — endpoint /rpg/* (lihat backend/rpg.js)
 require('./rpg')(router, { hubPool, authMiddleware, requirePageAccess, getPageAccessList });
 require('./timeline')(router, { hubPool, authMiddleware, requirePageAccess });
+require('./laporan_kpi')(router, { hubPool, authMiddleware, requirePageAccess });
 
 module.exports = router;
 

@@ -41,7 +41,7 @@ const SECTION_GROUPS = [
   { label: 'Tim', keys: ['tim', 'master-data', 'absensi', 'timeline'] },
   { label: 'Aksi Cepat', keys: ['laporan-admin'] },
   { label: 'Program', keys: ['workshop', 'aktivitas-tim', 'reward', 'kader'] },
-  { label: 'Laporan', keys: ['laporan-harian', 'laporan-mentor', 'laporan-bulanan'] },
+  { label: 'Laporan', keys: ['laporan-harian', 'laporan-mentor', 'laporan-bulanan', 'laporan-kpi'] },
   { label: 'Marketing', keys: ['ads-performance', 'laporan-profit'] },
   { label: 'Lainnya', keys: ['jurnal-admin', 'sesi-1on1', 'friday-win', 'tim-kelola-legacy', 'ai-assistant', 'kalender'] },
 ];

@@ -6,8 +6,11 @@
 // papan bersama, bukan model baca-tulis terpisah seperti modul RPG.
 // ══════════════════════════════════════════════════════════════════════════════
 
-const BATAS = { GRUP_NAMA: 60, ORANG_NAMA: 100, DESKRIPSI: 300, POIN_MAKS: 999, URGENSI_MIN: 1, URGENSI_MAX: 4 };
+const BATAS = { GRUP_NAMA: 60, ORANG_NAMA: 100, DESKRIPSI: 300, POIN_MAKS: 999, URGENSI_MIN: 1, URGENSI_MAX: 4, SLOT_AWAL: 4 };
 const WARNA_RE = /^#[0-9a-fA-F]{6}$/;
+// Divisi "tim produksi" (sama seperti definisi Target Poin Produksi RPG) — dipakai HANYA untuk
+// seed satu kali nama tim ke grup Internal, lihat migrasi 'seed_tim_produksi' di bawah.
+const DIVISI_PRODUKSI = ['Illustrator', 'Rigger', '3D Modeler', 'Desainer'];
 
 module.exports = function registerTimeline(router, { hubPool, authMiddleware, requirePageAccess }) {
   const q = (text, params) => hubPool.query(text, params);
@@ -29,20 +32,65 @@ module.exports = function registerTimeline(router, { hubPool, authMiddleware, re
         poin INTEGER CHECK (poin IS NULL OR (poin BETWEEN 0 AND ${BATAS.POIN_MAKS})),
         urgensi SMALLINT CHECK (urgensi IS NULL OR (urgensi BETWEEN ${BATAS.URGENSI_MIN} AND ${BATAS.URGENSI_MAX})),
         urutan INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`);
+      // Tanggal PEKERJAAN itu dilakukan (opsional) — BUKAN created_at/updated_at (kapan baris disentuh di
+      // sistem, bisa telat ketik/batch beberapa hari sekaligus). Dipakai Laporan KPI Artist untuk kelompokkan
+      // poin per tanggal kalender; tugas tanpa tanggal ini dilewati laporan itu, tak dianggap error.
+      await q('ALTER TABLE timeline_tugas ADD COLUMN IF NOT EXISTS tanggal_kerja DATE');
       await q('CREATE INDEX IF NOT EXISTS idx_timeline_orang_grup ON timeline_orang (grup_id)');
       await q('CREATE INDEX IF NOT EXISTS idx_timeline_tugas_orang ON timeline_tugas (orang_id)');
+      await q('CREATE INDEX IF NOT EXISTS idx_timeline_tugas_tanggal ON timeline_tugas (tanggal_kerja)');
       // Dua grup awal sesuai referensi spreadsheet — HANYA saat tabel masih kosong sama sekali (instalasi baru).
       // Bukan ON CONFLICT per baris: kalau begitu, menghapus SATU grup bawaan (mis. admin sudah tak butuh
       // "Freelance 3D") akan membuatnya "hidup lagi" tiap server restart selama grup lain masih ada.
       await q(`INSERT INTO timeline_grup (nama, urutan)
                SELECT * FROM (VALUES ('Internal', 0), ('Freelance 3D', 1)) AS v(nama, urutan)
                WHERE NOT EXISTS (SELECT 1 FROM timeline_grup)`);
+      // Migrasi SEKALI-JALAN (ditandai di timeline_migrasi, BUKAN dicek dari isi timeline_orang — tabel itu
+      // sudah terisi entri manual di production, jadi guard "WHERE NOT EXISTS" ala grup di atas tidak cocok
+      // di sini): isi grup Internal dengan nama tim produksi aktif (Illustrator/Rigger/3D Modeler/Desainer),
+      // masing-masing langsung dapat SLOT_AWAL baris tugas kosong. Berjalan PERSIS SEKALI selamanya — admin
+      // bebas menghapus siapa pun sesudahnya tanpa "hidup lagi" tiap restart.
+      await q(`CREATE TABLE IF NOT EXISTS timeline_migrasi (
+        kunci VARCHAR(60) PRIMARY KEY, dijalankan_pada TIMESTAMPTZ DEFAULT NOW())`);
+      const migClient = await hubPool.connect();
+      try {
+        await migClient.query('BEGIN');
+        const tanda = await migClient.query(`INSERT INTO timeline_migrasi (kunci) VALUES ('seed_tim_produksi') ON CONFLICT DO NOTHING RETURNING kunci`);
+        if (tanda.rowCount > 0) {
+          const grupInternal = await migClient.query(`SELECT id FROM timeline_grup WHERE nama = 'Internal' LIMIT 1`);
+          if (grupInternal.rows.length) {
+            const grupId = grupInternal.rows[0].id;
+            const anggota = await migClient.query(
+              `SELECT id, nama FROM tim WHERE divisi = ANY($1) AND aktif = TRUE ORDER BY nama`, [DIVISI_PRODUKSI]);
+            for (const a of anggota.rows) {
+              const sudahAda = await migClient.query('SELECT 1 FROM timeline_orang WHERE tim_id = $1', [a.id]);
+              if (sudahAda.rows.length) continue; // sudah ditautkan manual sebelumnya — jangan duplikat
+              const urutan = (await migClient.query('SELECT COALESCE(MAX(urutan), -1) + 1 AS n FROM timeline_orang WHERE grup_id = $1', [grupId])).rows[0].n;
+              const insOrang = await migClient.query('INSERT INTO timeline_orang (grup_id, nama, tim_id, urutan) VALUES ($1,$2,$3,$4) RETURNING id',
+                [grupId, a.nama, a.id, urutan]);
+              await buatSlotAwal(migClient, insOrang.rows[0].id);
+            }
+          }
+        }
+        await migClient.query('COMMIT');
+      } catch (e) { await migClient.query('ROLLBACK').catch(() => {}); throw e; }
+      finally { migClient.release(); }
     } catch (e) { console.error('Migration Timeline startup:', e.message); }
   })();
   router.use('/timeline', async (req, res, next) => { await ready; next(); });
 
   const gagal = (res, tag, e, pesan) => { console.error(`[Timeline] ${tag}:`, e.message); res.status(500).json({ error: pesan }); };
   const teks = (v, maks) => { const t = String(v ?? '').trim(); return t ? t.slice(0, maks) : null; };
+
+  // SLOT_AWAL baris tugas kosong siap-isi (deskripsi='', urgensi 1..SLOT_AWAL sebagai penanda urutan visual
+  // saja — bukan urgensi sungguhan sampai diisi) — dipakai tiap kali orang baru dibuat, meniru referensi
+  // spreadsheet yang selalu punya baris kosong menunggu diisi. Insert langsung (bukan lewat validasiTugas),
+  // deskripsi kosong diizinkan di sini karena ini baris PLACEHOLDER, bukan input pengguna.
+  async function buatSlotAwal(runner, orangId) {
+    for (let i = 0; i < BATAS.SLOT_AWAL; i++) {
+      await runner.query('INSERT INTO timeline_tugas (orang_id, deskripsi, urgensi, urutan) VALUES ($1, $2, $3, $4)', [orangId, '', i + 1, i]);
+    }
+  }
 
   // ── GET /timeline — seluruh papan, bersarang & terurut ──────────────────────
   router.get('/timeline', ...akses, async (req, res) => {
@@ -51,7 +99,7 @@ module.exports = function registerTimeline(router, { hubPool, authMiddleware, re
         q('SELECT id, nama, urutan FROM timeline_grup ORDER BY urutan, id'),
         q(`SELECT o.id, o.grup_id, o.nama, o.tim_id, o.warna, o.urutan, t.divisi AS tim_divisi
            FROM timeline_orang o LEFT JOIN tim t ON t.id = o.tim_id ORDER BY o.urutan, o.id`),
-        q(`SELECT id, orang_id, deskripsi, poin, urgensi, urutan FROM timeline_tugas ORDER BY urutan, id`),
+        q(`SELECT id, orang_id, deskripsi, poin, urgensi, tanggal_kerja::text AS tanggal_kerja, urutan FROM timeline_tugas ORDER BY urutan, id`),
       ]);
       const tugasPerOrang = new Map();
       for (const t of tugasR.rows) { const arr = tugasPerOrang.get(t.orang_id) || []; arr.push(t); tugasPerOrang.set(t.orang_id, arr); }
@@ -106,22 +154,28 @@ module.exports = function registerTimeline(router, { hubPool, authMiddleware, re
 
   // ── Orang ─────────────────────────────────────────────────────────────────
   router.post('/timeline/orang', ...akses, async (req, res) => {
+    const grupId = bilangan(req.body.grup_id);
+    const nama = teks(req.body.nama, BATAS.ORANG_NAMA);
+    if (!Number.isInteger(grupId)) return res.status(400).json({ error: 'Grup tidak valid' });
+    if (!nama) return res.status(400).json({ error: 'Nama wajib diisi' });
+    const timId = req.body.tim_id != null && req.body.tim_id !== '' ? bilangan(req.body.tim_id) : null;
+    if (timId !== null && !Number.isInteger(timId)) return res.status(400).json({ error: 'Tautan anggota tidak valid' });
+    const warna = req.body.warna ? String(req.body.warna).trim() : null;
+    if (warna && !WARNA_RE.test(warna)) return res.status(400).json({ error: 'Warna harus kode hex (mis. #FDE68A)' });
+    const client = await hubPool.connect();
     try {
-      const grupId = bilangan(req.body.grup_id);
-      const nama = teks(req.body.nama, BATAS.ORANG_NAMA);
-      if (!Number.isInteger(grupId)) return res.status(400).json({ error: 'Grup tidak valid' });
-      if (!nama) return res.status(400).json({ error: 'Nama wajib diisi' });
-      const timId = req.body.tim_id != null && req.body.tim_id !== '' ? bilangan(req.body.tim_id) : null;
-      if (timId !== null && !Number.isInteger(timId)) return res.status(400).json({ error: 'Tautan anggota tidak valid' });
-      const warna = req.body.warna ? String(req.body.warna).trim() : null;
-      if (warna && !WARNA_RE.test(warna)) return res.status(400).json({ error: 'Warna harus kode hex (mis. #FDE68A)' });
-      const g = await q('SELECT 1 FROM timeline_grup WHERE id = $1', [grupId]);
-      if (!g.rows.length) return res.status(404).json({ error: 'Grup tidak ditemukan' });
-      const urutan = (await q('SELECT COALESCE(MAX(urutan), -1) + 1 AS n FROM timeline_orang WHERE grup_id = $1', [grupId])).rows[0].n;
-      const r = await q('INSERT INTO timeline_orang (grup_id, nama, tim_id, warna, urutan) VALUES ($1,$2,$3,$4,$5) RETURNING id',
+      await client.query('BEGIN');
+      const g = await client.query('SELECT 1 FROM timeline_grup WHERE id = $1', [grupId]);
+      if (!g.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Grup tidak ditemukan' }); }
+      const urutan = (await client.query('SELECT COALESCE(MAX(urutan), -1) + 1 AS n FROM timeline_orang WHERE grup_id = $1', [grupId])).rows[0].n;
+      const r = await client.query('INSERT INTO timeline_orang (grup_id, nama, tim_id, warna, urutan) VALUES ($1,$2,$3,$4,$5) RETURNING id',
         [grupId, nama, timId, warna, urutan]);
-      res.json({ success: true, data: { id: r.rows[0].id } });
-    } catch (e) { gagal(res, 'tambah orang', e, 'Gagal menambah anggota'); }
+      const orangId = r.rows[0].id;
+      await buatSlotAwal(client, orangId); // langsung SLOT_AWAL baris tugas kosong, siap diisi (meniru spreadsheet)
+      await client.query('COMMIT');
+      res.json({ success: true, data: { id: orangId } });
+    } catch (e) { await client.query('ROLLBACK').catch(() => {}); gagal(res, 'tambah orang', e, 'Gagal menambah anggota'); }
+    finally { client.release(); }
   });
 
   router.patch('/timeline/orang/:id', ...akses, async (req, res) => {
@@ -191,6 +245,14 @@ module.exports = function registerTimeline(router, { hubPool, authMiddleware, re
         out.urgensi = urgensi;
       }
     }
+    if ('tanggal_kerja' in b) {
+      if (b.tanggal_kerja === null || b.tanggal_kerja === '') out.tanggal_kerja = null;
+      else {
+        const tgl = String(b.tanggal_kerja);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(tgl)) return { error: 'Tanggal kerja harus format YYYY-MM-DD' };
+        out.tanggal_kerja = tgl;
+      }
+    }
     return { out };
   };
 
@@ -203,8 +265,8 @@ module.exports = function registerTimeline(router, { hubPool, authMiddleware, re
       const o = await q('SELECT 1 FROM timeline_orang WHERE id = $1', [orangId]);
       if (!o.rows.length) return res.status(404).json({ error: 'Anggota tidak ditemukan' });
       const urutan = (await q('SELECT COALESCE(MAX(urutan), -1) + 1 AS n FROM timeline_tugas WHERE orang_id = $1', [orangId])).rows[0].n;
-      const r = await q('INSERT INTO timeline_tugas (orang_id, deskripsi, poin, urgensi, urutan) VALUES ($1,$2,$3,$4,$5) RETURNING id',
-        [orangId, out.deskripsi, out.poin ?? null, out.urgensi ?? null, urutan]);
+      const r = await q('INSERT INTO timeline_tugas (orang_id, deskripsi, poin, urgensi, tanggal_kerja, urutan) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
+        [orangId, out.deskripsi, out.poin ?? null, out.urgensi ?? null, out.tanggal_kerja ?? null, urutan]);
       res.json({ success: true, data: { id: r.rows[0].id } });
     } catch (e) { gagal(res, 'tambah tugas', e, 'Gagal menambah tugas'); }
   });

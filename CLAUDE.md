@@ -111,18 +111,155 @@ dari modul RPG — poin & urgensi di sini murni catatan manual, TIDAK terhubung 
   opsional + `urgensi` opsional). Urutan tiap tingkat lewat kolom `urutan` + endpoint `POST .../pindah {arah}` (tukar
   dengan tetangga se-induk, transaksi + `FOR UPDATE`).
 - **Urgensi 1-4, ARAH KEBALIKAN dari RPG**: 1 = paling mendesak (merah) … 4 = paling santai (hijau tua) — RPG 1-7
-  arahnya sebaliknya (7 = paling mendesak). Definisi di `src/utils/timelineUrgensi.js`; token warna `--tl-urg-1..4` di
-  `index.css` (root + override `[data-theme="light"]`; retro ikut nilai root — sudah lolos kontras 3 tema, dipakai
-  sebagai warna teks+border select, BUKAN latar penuh).
+  arahnya sebaliknya (7 = paling mendesak). Definisi di `src/utils/timelineUrgensi.js`; token warna `--tl-urg-1..4`
+  di `index.css` (root + override `[data-theme="light"]`; retro ikut nilai root). Dipakai sebagai LATAR PENUH pada
+  `<select>` urgensi (badge, meniru referensi spreadsheet asli — bukan lagi teks-berwarna-di-atas-latar-polos dari
+  versi tabel awal), makanya butuh token teks terpisah `--tl-urg-on` (warna teks DI ATAS badge, beda per tema:
+  `#0A0E14` gelap untuk dark/retro karena `--tl-urg-*` di sana terang, `#FFFFFF` untuk light karena di sana gelap)
+  — jangan pakai `teksKontrasHex()` (fungsi lama, masih diekspor tapi tak dipakai lagi di sini) untuk ini, itu untuk
+  warna kustom pita bebas-pilih, bukan token tema yang sudah tetap.
 - **Satu kunci akses** `timeline` (admin-tier baru) untuk BACA dan TULIS sekaligus — beda dari pola RPG yang punya
   `rpg-admin`/`rpg-pantau` terpisah, karena halaman ini memang cuma untuk admin/PM yang mengelola bareng, bukan model
   lihat-saja. Default `MATRIX.pm` di hub.js sudah memuat `'timeline'`; `super_admin` otomatis penuh via `ALL_ADMIN_KEYS`.
-- **UI** (satu file `Timeline.jsx`, gaya `.card`/`.btn` standar hub — BUKAN tema pixel RPG): semua field tersimpan
-  otomatis saat blur/onChange (pola sama dengan `TargetAdmin.jsx`); hapus grup/orang pakai `window.confirm` native
-  (cascade — grup menghapus semua orang & tugas di dalamnya). State `versi` (naik tiap `muat()` selesai, termasuk
-  saat GAGAL) dilewatkan ke tiap child sebagai dependensi efek reset — supaya input yang sempat diubah lokal tapi
-  DITOLAK server (mis. poin di luar 0–999) kembali ke nilai server yang sebenarnya, bukan tertinggal menampilkan
-  nilai tak tersimpan (prop mentahnya sendiri bisa saja tak berubah dari percobaan yang gagal).
+- **UI** (satu file `Timeline.jsx`, gaya tabel `.card`/`<table>` mengikuti konvensi `AdsPerformance.jsx` — BUKAN
+  tema pixel RPG): satu `<table>` per grup, sel Nama memakai `rowSpan` menyatu ke bawah sepanjang baris tugas
+  orang itu (border kiri = warna pita). Isian polos tanpa garis (`selInput`, meniru rasa mengetik langsung di sel
+  spreadsheet). Sel Nama sengaja dibuat SESEDERHANA gambar referensi (nama teks polos, tanpa avatar/badge yang
+  selalu tampil): tautan ke `tim` (badge divisi) dan pemilih warna pita kustom dipindah ke balik tombol "⋯"
+  (state lokal `showDetail` di `SelOrang`, tersembunyi secara default) — hanya terlihat saat diklik, supaya baris
+  utama tetap bersih. Tombol pindah/hapus per baris (tugas & orang) diberi `className="tl-row-actions"`
+  (`index.css`, `opacity: .95` diam → `1` saat `tr:hover`/`tr:focus-within`) supaya tabel tidak ramai saat tak
+  disorot tapi tetap terlihat (BUKAN `.45` seperti percobaan pertama — glyph teks kecil `⋯ ↑ ↓ ✕` di opacity
+  serendah itu jatuh di bawah kontras WCAG 4.5:1, terutama `✕` merah di tema dark; `.95` adalah titik teraman
+  yang masih lolos audit di 3 tema, jadi JANGAN diturunkan lagi tanpa re-audit kontras).
+  **Jebakan Playwright yang sudah kena**: (1) pada baris tugas PERTAMA milik satu orang, `<tr>`-nya SEKALIGUS
+  memuat sel Nama (rowspan, punya `.tl-row-actions` MILIK ORANG) DAN `.tl-row-actions` milik tugas baris itu
+  sendiri — scope ke `.tl-row-actions` di dalam `<tr>` itu ambigu (2 elemen). Urutan DOM selalu [aksi-orang
+  (kalau ada), aksi-tugas] → `.locator('.tl-row-actions').last()` aman dipakai seragam di baris manapun (dengan
+  atau tanpa sel Nama), jangan `.first()`. (2) kontrol di balik "⋯" (select tautan tim, color picker) tidak ada
+  di DOM sampai tombol diklik dulu — `getByLabel(...).count()` harus 0 sebelum klik, baru bisa diisi sesudahnya.
+  (3) warna latar (`background`) di-set di tiap `<td>`, BUKAN di `<tr>` induknya — `getComputedStyle(tr)` selalu
+  `rgba(0,0,0,0)`, harus baca salah satu `<td>` anaknya.
+  Semua field tersimpan otomatis saat blur/onChange (pola sama dengan `TargetAdmin.jsx`); hapus grup/orang pakai
+  `window.confirm` native (cascade — grup menghapus semua orang & tugas di dalamnya). State `versi` (naik tiap
+  `muat()` selesai, termasuk saat GAGAL) dilewatkan ke tiap child sebagai dependensi efek reset — supaya input
+  yang sempat diubah lokal tapi DITOLAK server (mis. poin di luar 0–999) kembali ke nilai server yang sebenarnya,
+  bukan tertinggal menampilkan nilai tak tersimpan (prop mentahnya sendiri bisa saja tak berubah dari percobaan
+  yang gagal).
+- **Tampilan "sama persis spreadsheet referensi" (rework kedua)**: setiap `<td>` milik satu blok orang (sel Nama
+  + semua sel tugasnya, termasuk baris "+ tugas") berbagi SATU warna latar PENUH lewat `warnaLatarOrang(o, indeks)`
+  (`utils/timelineUrgensi.js`) — bukan cuma garis aksen di sel Nama seperti rework pertama. Tanpa `o.warna`:
+  pakai `paletOtomatis(indeks).bg` (6 token `-light` yang sudah ada, dipakai juga sebagai badge di `data/tim.js` —
+  opak pastel di tema light, tint alpha 12% di tema dark/retro). Dengan `o.warna` (hex bebas dari color picker):
+  DIUBAH jadi tint `rgba(r,g,b,0.12)` (BUKAN warna penuh) — supaya `var(--text)` di atasnya tetap terbaca untuk
+  hex APA PUN tanpa perlu tabel kontras per warna (beda dari `teksKontrasHex()` yang masih diekspor tapi tak
+  dipakai di jalur ini). Tiap `<tr>` tugas + baris "+ tugas" diberi `data-orang-id={o.id}` (dan `<td rowSpan>`
+  Nama juga) khusus untuk mempermudah scoping Playwright yang presisi tanpa bergantung pada urutan DOM.
+  Header kolom + banner judul "TIMELINE <NAMA GRUP>" (menggantikan `.card-title` polos) memakai warna TETAP
+  (bukan per-tema) `--tl-banner-bg`/`--tl-banner-text` (`index.css`, #C0392B/#FFFFFF, putih di atasnya dihitung
+  5,44:1 — aman di 3 tema sekaligus karena ini warna brand halaman, bukan token semantik yang perlu ikut tema).
+  Tombol di dalam banner (pindah/hapus grup) SENGAJA dipakai apa adanya (`BtnIcon` biasa, TANPA varian warna
+  khusus) — latar `.btn` (`var(--surface-2)`) sudah opak jadi otomatis kontras cukup di atas banner merah apa
+  pun temanya; sempat dicoba kasih latar kaca tembus pandang (`rgba(255,255,255,.14)`) supaya "menyatu" dengan
+  banner tapi itu MEMBUAT kontrasnya gagal (glyph putih di atas merah yang sudah tercampur RGBA putih jadi lebih
+  terang, ratio turun di bawah 4,5:1) — jangan diulangi.
+- **Nama ditengahkan, bisa membungkus 2 baris**: field Nama di `SelOrang` pakai `<textarea rows={2}>` (BUKAN
+  `<input>` — input tak bisa wrap ke baris baru), 14px bold `textAlign:'center'`, `resize:'none'`, mengisi sisa
+  tinggi blok orang lewat flex-column pada `<td>` (bukan `verticalAlign` — konten dipecah 3 baris flex: tombol
+  aksi di atas, nama di tengah `flex:1`, panel "⋯" di bawah kalau terbuka). Sempat dicoba 18px dalam `<input>`
+  (nama panjang jadi 1 baris kepotong/menggeser tata letak) — diganti `<textarea>` supaya nama panjang otomatis
+  membungkus 2 baris alih-alih terpotong. Enter tetap menyimpan (blur) BUKAN bikin baris baru manual
+  (`e.preventDefault()` di `onKeyDown`), biar wrap-nya murni dari CSS, bukan `\n` literal di data.
+- **Papan grid 2 kolom** (`Timeline()`, bukan lagi kartu bertumpuk penuh-lebar): `gridTemplateColumns:
+  repeat(auto-fit, minmax(min(700px,100%), 1fr))` — ambang 700px (BUKAN lebih kecil mis. 480px) SENGAJA sedikit
+  di atas lebar minimum satu tabel (±650px: Nama `width` TETAP 150 — sempat 170 lalu `minWidth`, lalu 130, tapi
+  `minWidth` saja tetap dibiarkan browser melebar mengambil sisa ruang tabel karena tak ada `width` sebagai
+  batas atas; `width` tetap memaksanya sesempit itu, sisa ruang mengalir ke Nama Klien yang memang `minWidth`
+  saja/sengaja fleksibel — + Nama Klien 220 + Poin 70 + Urgensi 118 + Aksi 84), supaya kolom baru pecah jadi 2
+  kalau BENAR cukup lebar untuk kedua tabel tampil PENUH tanpa scroll horizontal internal
+  — ambang lebih kecil membuat "terlihat 2 kolom" tapi tombol pindah/hapus selalu ketutup di luar layar tiap
+  layar biasa (~1400px), harus discroll tiap mau dipakai. Di bawah ambang otomatis balik 1 kolom penuh-lebar
+  (bagian `min(700px,100%)` mencegah overflow di ponsel). `alignItems:'start'` supaya tinggi kartu ikut isinya
+  sendiri, grup ramai tak memaksa grup sebelah ikut setinggi itu. **Jebakan CSS Grid**: item grid (`.card` di
+  `GrupTable`) WAJIB diberi `minWidth: 0` eksplisit — defaultnya `min-width: auto`, artinya track grid TAK AKAN
+  menyusut di bawah lebar intrinsik konten di dalamnya (tabelnya), sehingga `overflowX:auto` pada div pembungkus
+  tabel tak pernah aktif (kolom malah ikut melebar/konten terpotong `overflow:hidden` milik `.card`) — baru
+  setelah `minWidth:0` scroll horizontal per-kartu itu benar berfungsi kalau suatu saat memang perlu.
+- **Baris dipadatkan** (respons ke keluhan "8 orang harus scroll jauh ke bawah" — dihitung: 8 orang × ±5 baris
+  = 41 baris, sebelum dipadatkan ±38px/baris = ±1540px, viewport laptop umum cuma ±900px, JADI TAK MUNGKIN
+  "satu halaman tanpa scroll" tercapai literal selama tiap orang tetap menampilkan SLOT_AWAL 4 baris kosong —
+  sudah dijelaskan ke user, padatkan baris cuma MENDEKATKAN, bukan menghilangkan scroll total). `tdStyle.padding`
+  3px→1px, `selInput.padding` 5px→2px, `BtnIcon` & tombol "⋯" diberi `padding:'3px 5px'` inline (override
+  `.btn-icon` bawaan 7px — aman karena `BtnIcon` cuma dipakai lokal di file ini, tak memengaruhi tombol ikon
+  di halaman lain), `thStyle.padding` 7px→5px, minHeight kontainer nama 40→36. Hasil: ±38px → ±26px per baris
+  (~31% lebih padat), diverifikasi lewat audit kontras ulang (ikon lebih kecil TETAP ≥4,5:1 di 3 tema — kalau
+  nanti dipadatkan lagi, WAJIB re-run `kontras()` di test, jangan asumsikan otomatis aman kayak insiden
+  `.tl-row-actions` opacity di rework pertama).
+- **Auto-seed nama tim produksi** (migrasi `seed_tim_produksi`, tabel penanda `timeline_migrasi(kunci PK)`):
+  begitu grup Internal ada, backend mengisi otomatis dengan semua anggota `tim` yang `divisi IN ('Illustrator',
+  'Rigger','3D Modeler','Desainer')` (definisi SAMA dengan "tim produksi" RPG Target) DAN `aktif = TRUE` — tiap
+  orang langsung dapat SLOT_AWAL (4) baris tugas kosong (lihat poin berikut). **Berjalan PERSIS SEKALI selamanya**
+  (ditandai lewat INSERT `ON CONFLICT DO NOTHING RETURNING` ke `timeline_migrasi`, BUKAN dicek dari isi
+  `timeline_orang` — beda dari pola 2-grup-awal di atas, karena tabel itu sudah bisa terisi entri manual dari
+  pemakaian nyata sehingga guard "WHERE NOT EXISTS" tak cocok di sini). Admin bebas menghapus siapa pun sesudahnya
+  tanpa "hidup lagi" tiap restart. Kalau seseorang SUDAH ditautkan manual ke `tim_id` itu di grup mana pun
+  sebelum migrasi jalan (jarang, tapi mungkin), migrasi melompatinya (tak menduplikasi). Grup lain (mis.
+  Freelance 3D) TIDAK pernah disentuh migrasi ini.
+- **SLOT_AWAL = 4 baris tugas kosong otomatis** (`BATAS.SLOT_AWAL` di `timeline.js`): SETIAP orang baru — baik
+  dari migrasi produksi di atas MAUPUN ditambah manual admin lewat `POST /timeline/orang` — langsung dapat 4
+  baris (`deskripsi=''`, `urgensi=1..4` sebagai penanda urutan visual saja, BUKAN urgensi sungguhan sampai
+  diisi) dalam SATU transaksi (`buatSlotAwal(client, orangId)`, dipakai baik oleh endpoint maupun migrasi).
+  Insert langsung (bukan lewat `validasiTugas`) karena `deskripsi` kosong hanya boleh untuk baris PLACEHOLDER
+  ini — endpoint publik tetap menolak deskripsi kosong untuk tugas yang dibuat via `KotakTambah`/PATCH biasa.
+- **`timeline_tugas.tanggal_kerja`** (`DATE NULL`, `ALTER TABLE ADD COLUMN IF NOT EXISTS`): tanggal PEKERJAAN
+  itu dilakukan — BUKAN `created_at`/`updated_at` (kapan baris disentuh di sistem; PM sering entry beberapa
+  hari sekaligus belakangan, jadi timestamp itu tak akurat buat rekap per-hari-kalender). Opsional, diatur
+  lewat tombol "Tgl" di `.tl-row-actions` tiap baris tugas (`Timeline.jsx`) yang membuka popover
+  `position:absolute` kecil (SENGAJA absolute, bukan bagian alur tabel — supaya tak memengaruhi lebar kolom
+  Aksi cuma karena satu baris sedang membuka popovernya). Satu-satunya konsumen field ini: **Laporan KPI
+  Artist** (bawah) — tugas berpoin TANPA `tanggal_kerja` dilewati laporan itu, tak dianggap error.
+
+## Laporan KPI Artist (backend/laporan_kpi.js + src/pages/LaporanKpi.jsx)
+Rekap poin harian tim produksi per bulan kalender — pengganti spreadsheet manual "Artist Assignment" (kolom
+NAMA per artist, baris tanggal, baris KPI/Total assignment/Total Bonus). PRD lengkap (termasuk keputusan v1
+& alasan tiap satu) ada di percakapan 2026-09-23, diringkas di sini.
+- **Poin harian OTOMATIS dari Papan Timeline** — dijumlahkan dari kolom `poin` + `tanggal_kerja` di
+  `timeline_tugas` (lihat poin di atas), dikelompokkan per tanggal & artist (`o.tim_id`). Halaman ini
+  **TIDAK PUNYA** input poin manual sendiri — kalau angkanya salah, perbaikannya di Papan Timeline, bukan di
+  sini. **Cakupan artist**: CUMA yang tertaut `tim_id` ke divisi produksi (Illustrator/Rigger/3D
+  Modeler/Desainer) & aktif — sama persis definisi dipakai auto-seed Papan Timeline & Target Poin Produksi
+  RPG. Freelancer/orang tanpa tautan tim (mis. isi manual grup "Freelance 3D") TAK PERNAH ikut hitungan
+  laporan ini walau poinnya tetap valid & tercatat normal di Papan Timeline sendiri.
+- **SENGAJA terpisah total dari Target Poin Produksi RPG** (`rpg_target.js`) — v1, keputusan eksplisit di PRD.
+  Dua sistem hitung poin berbeda tujuan (ini: rekap harian buat bonus/payroll; RPG: gamifikasi per-periode
+  28-27 dari quest disetujui) berjalan berdampingan, TAK saling baca/tulis/pengaruhi. Jangan disatukan tanpa
+  keputusan eksplisit baru.
+- **KPI & Total Bonus = input admin manual**, disimpan di tabel baru `laporan_kpi_target(tim_id, bulan
+  VARCHAR(7) "YYYY-MM", target INT NULL, catatan TEXT NULL, total_bonus INT NULL, UNIQUE(tim_id,bulan))`.
+  Endpoint `PUT /laporan-kpi/target` upsert PARSIAL (pola sama seperti PATCH tugas Papan Timeline — cuma
+  field yang benar-benar dikirim yang diubah; isi Total Bonus TIDAK menimpa target yang sudah ada, dst).
+  Rumus otomatis Total Bonus **belum ditentukan** — kolom disiapkan, diisi manual dulu.
+- **"Salin target dari bulan lalu"** (`POST /laporan-kpi/target/salin`): copy `target`+`catatan` ke bulan
+  berjalan, `ON CONFLICT DO NOTHING` (tak menimpa target yang sudah diisi manual di bulan tujuan).
+  `total_bonus` SENGAJA TIDAK ikut tersalin — itu hasil bulan itu sendiri, bukan rencana yang bisa dibawa maju.
+- **Kunci akses baru `laporan-kpi`** (admin-tier), default HANYA Super Admin (tak dimasukkan ke `MATRIX`
+  role manapun di `hub.js`, sama pola dengan `rpg-analytics`/`rpg-admin`/`rpg-pantau`) — data berkaitan
+  bonus/finansial, sengaja lebih restriktif dari `timeline`. Bisa didelegasikan lewat Master Data > Hak
+  Akses seperti kunci lain. Menu sidebar masuk grup collapsible "Laporan" (`groupKey:'laporan'`, path
+  ditambahkan ke `LAPORAN_PATHS` di `Sidebar.jsx` biar grup auto-expand saat halaman ini aktif).
+- **UI**: grid `<table>` HTML (`Hari`/`Tgl` + satu kolom per artist), `<thead>` 2 baris (nama artist, lalu
+  KPI editable), `<tbody>` satu baris per tanggal kalender penuh sebulan (baris Minggu ditandai merah, isi
+  poin dikosongkan — bukan berarti tak boleh kerja, cuma tak ditampilkan biar konsisten pola libur di
+  referensi), `<tfoot>` Total assignment (read-only, dihitung server) + Total Bonus (editable). **Jebakan
+  Playwright**: baris KPI/Total assignment/Total Bonus punya `<td colSpan={2}>` label di depan — index
+  artist ke-N di baris itu ada di posisi DOM berbeda dari posisi `<th>` di header (colSpan menghitung 1
+  elemen DOM tapi 2 lebar kolom). Jangan pakai `nth-child` mentah untuk cocokkan kolom antar baris; pakai
+  `.locator('td').nth(idx)` Playwright (menghitung elemen HASIL QUERY, kebal dari colSpan) dengan offset
+  konsisten (+1 buat lewati td label). Juga: `<th>` diberi CSS `text-transform:uppercase` — `innerText()`
+  Playwright membaca teks HASIL RENDER (ikut transform), jadi cocokkan nama artist case-insensitive.
+- Navigasi SPA (`pushState`+popstate, dipakai helper uji `go()`) ke path yang SAMA seperti sekarang **TIDAK**
+  memicu re-fetch (komponen tak remount, state `bulan` lokal tak berubah) — kalau butuh data benar-benar
+  segar dari titik uji yang sudah di halaman itu, pakai navigasi penuh (`page.goto`/reload), bukan `go()`.
 
 ## Modul RPG / Gamifikasi (backend/rpg.js + src/modules/rpg)
 Terdaftar dari `hub.js` (`require('./rpg')(router, {...})`), endpoint `/api/hub/rpg/*`. Tabel `rpg_*` dibuat

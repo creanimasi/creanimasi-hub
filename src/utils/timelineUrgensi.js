@@ -22,6 +22,20 @@ const PALET_OTOMATIS = [
 ];
 export const paletOtomatis = (indeks) => PALET_OTOMATIS[indeks % PALET_OTOMATIS.length];
 
+// Latar PENUH satu blok orang (semua sel Nama + tugasnya): palet otomatis (bg token, sudah ≥4,5:1 buat
+// var(--text) di atasnya — dipakai juga di data/tim.js) kalau tak ada warna kustom; kalau ADA warna
+// kustom, dijadikan tint tipis (alpha 12%, sama seperti alpha token `-light` tema gelap) bukan warna
+// PENUH — supaya var(--text) di atasnya tetap terbaca apa pun hex yang dipilih admin (tak perlu tabel
+// kontras manual per warna sembarang), dan bobotnya konsisten dengan blok warna otomatis di sebelahnya.
+export function warnaLatarOrang(o, indeks) {
+  if (o?.warna && /^#[0-9a-fA-F]{6}$/.test(o.warna)) {
+    const n = parseInt(o.warna.slice(1), 16);
+    const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    return `rgba(${r},${g},${b},0.12)`;
+  }
+  return paletOtomatis(indeks).bg;
+}
+
 // Untuk warna kustom (hex bebas dari admin): pilih teks hitam/putih dari kecerahan warnanya sendiri,
 // supaya tetap terbaca di atas warna apa pun tanpa perlu tabel kontras manual per warna.
 export function teksKontrasHex(hex) {

@@ -10,6 +10,7 @@ import Dashboard from './pages/Dashboard';
 import Tim from './pages/Tim';
 import MasterData from './pages/MasterData';
 import Timeline from './pages/Timeline';
+import LaporanKpi from './pages/LaporanKpi';
 import { Modul, Jurnal, SOP, Reward, Workshop, Kader, SKB, OneOnOne, FridayWin, Absensi } from './pages/Pages';
 import AktivitasTim from './pages/AktivitasTim';
 import { PageFormJurnal, PageFormProfiling, PageRiwayatJurnal } from './pages/FormPages';
@@ -90,6 +91,7 @@ function ProtectedRoutes() {
         <Route path="/tim"          element={<RequirePage pageKey="tim"><Tim /></RequirePage>} />
         <Route path="/master-data"  element={<RequirePage pageKey="master-data"><MasterData /></RequirePage>} />
         <Route path="/timeline"     element={<RequirePage pageKey="timeline"><Timeline /></RequirePage>} />
+        <Route path="/laporan-kpi"  element={<RequirePage pageKey="laporan-kpi"><LaporanKpi /></RequirePage>} />
         <Route path="/jurnal"       element={<RequirePage pageKey="jurnal-admin"><Jurnal /></RequirePage>} />
         <Route path="/kader"        element={<RequirePage pageKey="kader"><Kader /></RequirePage>} />
         <Route path="/reward"       element={<RequirePage pageKey="reward"><Reward /></RequirePage>} />
