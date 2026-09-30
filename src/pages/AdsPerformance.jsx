@@ -222,6 +222,11 @@ function BrandSettingsModal({ brands, onSave, onClose }) {
   );
 }
 
+// Belum dipasang ke UI (tombol pemicunya belum dibuat) tapi SENGAJA dipertahankan —
+// bukan sisa kode mati. Tanpa baris disable di bawah, `npm run build` GAGAL saat
+// CI=true (react-scripts memperlakukan no-unused-vars sebagai error), dan itu
+// membuat deploy Coolify berhenti. Hapus baris ini begitu komponennya dipakai.
+// eslint-disable-next-line no-unused-vars
 function AiInsightModal({ bulan, brandId, onClose }) {
   const [loading, setLoading] = useState(true);
   const [insight, setInsight] = useState('');

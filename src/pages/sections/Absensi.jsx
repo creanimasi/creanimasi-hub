@@ -5,7 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useTim } from '../../hooks/useTim';
 import { downloadCsv } from '../../utils/exportCsv';
 import { useToast } from '../../hooks/useToast';
-import { SkeletonTable, SkeletonCards } from '../../components/Skeleton';
+import { SkeletonTable } from '../../components/Skeleton';
 
 const STATUS = [
   { key: 'hadir',       label: 'Hadir',       emoji: '✅', color: '#00D68F', bg: 'rgba(0,214,143,0.12)',  border: 'rgba(0,214,143,0.35)' },
