@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import './index.css';
-import './modules/rpg/styles/rpg-tokens.css'; // token warna/font retro — dipakai tema "retro" & modul RPG
+import './styles/theme-tokens.css'; // token warna/font dasar — dipakai tema "dark" & "retro"
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { useTim } from './hooks/useTim';
 import Layout from './components/Layout';
@@ -25,13 +25,6 @@ import LaporanProfit from './pages/LaporanProfit';
 import LaporanAdsMingguan from './pages/LaporanAdsMingguan';
 import AiAssistant from './pages/AiAssistant';
 import Kalender from './pages/Kalender';
-import CharacterSheetPage from './modules/rpg/pages/CharacterSheetPage';
-import QuestBoardPage from './modules/rpg/pages/QuestBoardPage';
-import GuildHallPage from './modules/rpg/pages/GuildHallPage';
-import AchievementsPage from './modules/rpg/pages/AchievementsPage';
-import RpgAnalyticsPage from './modules/rpg/pages/admin/RpgAnalyticsPage';
-import RpgKelolaPage from './modules/rpg/pages/admin/RpgKelolaPage';
-import RpgPantauPage from './modules/rpg/pages/admin/RpgPantauPage';
 
 // Gerbang akses generik berbasis page_access (dihitung backend dari
 // role_page_access, dibawa lewat /auth/me & /auth/login). Menggantikan
@@ -81,12 +74,6 @@ function ProtectedRoutes() {
         <Route path="/skb"          element={<SKB />} />
         <Route path="/performa"     element={<Performa />} />
 
-        {/* Modul RPG (gamifikasi) — semua halaman diatur lewat Master Data > Hak Akses/Role (grup "Guild") */}
-        <Route path="/rpg/character" element={<RequirePage pageKey="rpg-character"><CharacterSheetPage /></RequirePage>} />
-        <Route path="/rpg/quests"    element={<RequirePage pageKey="rpg-quests"><QuestBoardPage /></RequirePage>} />
-        <Route path="/rpg/guild"     element={<RequirePage pageKey="rpg-guild"><GuildHallPage /></RequirePage>} />
-        <Route path="/rpg/achievements" element={<RequirePage pageKey="rpg-achievements"><AchievementsPage /></RequirePage>} />
-
         {/* Diatur lewat Master Data > Hak Akses/Role, bukan lagi admin/member biner */}
         <Route path="/tim"          element={<RequirePage pageKey="tim"><Tim /></RequirePage>} />
         <Route path="/master-data"  element={<RequirePage pageKey="master-data"><MasterData /></RequirePage>} />
@@ -109,9 +96,6 @@ function ProtectedRoutes() {
         <Route path="/laporan-ads-mingguan" element={<RequirePage pageKey="ads-performance"><LaporanAdsMingguan /></RequirePage>} />
         <Route path="/ai-assistant"       element={<RequirePage pageKey="ai-assistant"><AiAssistant /></RequirePage>} />
         <Route path="/kalender"     element={<RequirePage pageKey="kalender"><Kalender /></RequirePage>} />
-        <Route path="/rpg/anggota"   element={<RequirePage pageKey="rpg-pantau"><RpgPantauPage /></RequirePage>} />
-        <Route path="/rpg/kelola"    element={<RequirePage pageKey="rpg-admin"><RpgKelolaPage /></RequirePage>} />
-        <Route path="/rpg/analytics" element={<RequirePage pageKey="rpg-analytics"><RpgAnalyticsPage /></RequirePage>} />
 
         <Route path="*"             element={<Navigate to="/" replace />} />
       </Routes>

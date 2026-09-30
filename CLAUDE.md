@@ -43,6 +43,8 @@ src/
     api.js             — semua call ke backend /api/hub (40+ methods)
   utils/
     exportCsv.js       — utility download CSV
+  styles/
+    theme-tokens.css — token warna/font dasar (tema dark & retro) — JANGAN dihapus
 ```
 
 ## API Backend
@@ -261,71 +263,25 @@ NAMA per artist, baris tanggal, baris KPI/Total assignment/Total Bonus). PRD len
   memicu re-fetch (komponen tak remount, state `bulan` lokal tak berubah) — kalau butuh data benar-benar
   segar dari titik uji yang sudah di halaman itu, pakai navigasi penuh (`page.goto`/reload), bukan `go()`.
 
-## Modul RPG / Gamifikasi (backend/rpg.js + src/modules/rpg)
-Terdaftar dari `hub.js` (`require('./rpg')(router, {...})`), endpoint `/api/hub/rpg/*`. Tabel `rpg_*` dibuat
-otomatis (IIFE `CREATE TABLE IF NOT EXISTS` di rpg.js): `rpg_xp_event` (ledger XP, UNIQUE tim_id+sumber+ref_key →
-idempoten), `rpg_quest`, `rpg_quest_assignment`, `rpg_achievement`, `rpg_achievement_unlock`.
-- **Semua angka aturan** (XP per aktivitas, kurva level, stage, title, tanggal mulai `RPG_MULAI`) ada di objek
-  `CONFIG` di atas `backend/rpg.js`. Level tidak disimpan — selalu dihitung dari total XP ledger.
-- XP otomatis dari data terverifikasi (`syncXp`, maks 1×/60 dtk, dipanggil lazy saat endpoint dibaca): laporan
-  harian, jurnal mingguan, absensi hadir/terlambat, Friday Win diterima, dan quest yang **disetujui admin**.
-  Centang mandiri (workshop/modul) sengaja tidak dihitung. Pencocokan `LOWER(TRIM(nama))` ke `tim.nama`.
-- Hak akses: SEMUA 6 halaman diatur lewat Master Data > Hak Akses/Role (grup "Guild"): 4 halaman anggota
-  (`rpg-character|rpg-quests|rpg-guild|rpg-achievements`, default TRUE untuk semua role — dulu baseline) dan 2 halaman
-  admin (`rpg-admin` = /rpg/kelola, `rpg-analytics`, default hanya Super Admin). Endpoint anggota memakai
-  `requirePageAccess`; /rpg/character menyaring panel Quest/Guild/Pencapaian sesuai akses (`data.akses`).
-  Migrasi di IIFE master hub.js: beri semua role akses dulu, baru lepas flag baseline (satu transaksi, tidak menimpa
-  pencabutan admin saat restart).
-- **Pantau Anggota** (`/rpg/anggota`, kunci akses `rpg-pantau`, default hanya Super Admin, bisa didelegasikan lewat matriks):
-  hanya-baca. Daftar semua anggota aktif + detail per anggota (kartu karakter/stat/quest/pencapaian dibangun oleh fungsi
-  yang SAMA dengan milik anggota → identik) + asal XP per sumber + "aktivitas tak dikenali" (nama di laporan/jurnal/
-  absensi/Friday Win yang tak cocok dengan anggota mana pun → tak menghasilkan XP; biasanya salah ketik).
-- **Papan Quest admin (Kanban)**: menu Papan Quest untuk pemegang `rpg-admin`/`rpg-pantau` menampilkan satu KOLOM per anggota,
-  kartu = penugasan quest dengan status di dalam kartu (urut: Menunggu → Perlu perbaikan → Aktif → Selesai terlipat, 30 hari).
-  Filter divisi/cari/tipe/status di state React (URL sebagai cermin), kolom anggota tanpa kartu disembunyikan. Data:
-  `GET /rpg/admin/papan` (baca: rpg-admin ATAU rpg-pantau; hanya-baca). Setujui/tolak dari kartu memakai
-  `PATCH /rpg/admin/assignments/:id` (rpg-admin saja, transaksi + 409 bila sudah diproses). Admin TIDAK bisa memindahkan
-  status Aktif/Diajukan (itu hak anggota). Akun tanpa tautan tim punya sakelar "Papan saya" (pesan netral).
-- **Batalkan persetujuan** (`POST /rpg/admin/assignments/:id/batalkan`, semua pemegang `rpg-admin`, BUKAN `rpg-pantau`):
-  menarik kembali quest yang SUDAH disetujui (mis. salah menugaskan) — XP dihapus dari ledger (`DELETE ... rpg_xp_event`,
-  bukan entri minus, supaya assignment id yang sama bisa dipakai lagi bila anggota mengajukan ulang & disetujui lagi tanpa
-  bentrok UNIQUE ref_key) dan status kembali ke `ditolak` (anggota melihat "Ditolak: <alasan>", bisa ajukan ulang). Dibatasi
-  `CONFIG.BATAL_MAKS_HARI` (7) hari sejak `ditinjau_pada` — transaksi + `FOR UPDATE`, 409 bila sudah lewat batas atau status
-  bukan `disetujui`. Audit tersimpan di kolom baru `dibatalkan_oleh/pada`, `xp_dibatalkan` — TIDAK menimpa `ditinjau_oleh/pada`
-  asli (siapa & kapan MENYETUJUI semula tetap utuh). **TIDAK mencabut achievement** yang mungkin sudah terbuka dari XP itu
-  (konsisten dengan desain: achievement biasa tidak pernah dievaluasi ulang setelah terbuka — kecuali achievement TARGET,
-  yang memang dicabut lewat "buka kembali periode" di rpg_target.js). Bila XP-nya sudah masuk potret periode TARGET yang
-  terkunci, respons menyertakan `peringatanTarget` (string) — hasil periode itu TIDAK ikut terkoreksi otomatis, admin perlu
-  membuka kembali periode itu di Kelola RPG › Target bila perlu dihitung ulang. Tombol "Batalkan persetujuan" ada di kartu
-  Selesai pada Kanban (`bisaDibatalkan` dari server, disembunyikan otomatis lewat batas waktu).
-- **Urgensi quest 1–7** (`rpg_quest.urgensi`, SMALLINT NOT NULL DEFAULT 4, CHECK 1–7; 7 = paling mendesak; nama: Santai,
-  Rendah, Agak rendah, Normal, Tinggi, Mendesak, Kritis). Konstanta `URGENSI_*` di `CONFIG` rpg.js; daftar nama/keterangan +
-  warna (`--rpg-urg-1..7`, skala panas, semua ≥4,5:1) di `src/modules/rpg/utils/urgensi.js` + `rpg-tokens.css`. TIDAK
-  memengaruhi XP. Memengaruhi urutan (papan anggota & kartu Kanban non-Selesai: urgensi desc) dan filter Kanban "Urgensi ≥ N"
-  (`?urg=`). Warna = saluran terpisah dari warna status; angka + batang sinyal (`UrgensiChip`) adalah isyarat utama karena
-  beberapa pasangan warna berdekatan bagi penderita buta warna. Jangan beri `opacity` pada baris yang berisi teks (menurunkan
-  kontras di bawah 4,5:1).
-- **Target poin produksi** (`backend/rpg_target.js`, angka di `CONFIG.TARGET` rpg.js): tim produksi (Illustrator, Rigger,
-  3D Modeler, Desainer) punya target poin per PERIODE = tanggal 28 bulan lalu s/d 27 bulan ini (WIB; kode periode = bulan
-  tanggal 27, mis. `2026-09` = 28 Agu–27 Sep). Poin = XP quest yang DISETUJUI (dari ledger `rpg_xp_event`, jadi edit XP quest
-  belakangan tak mengubah hasil lama), dihitung menurut tanggal DIAJUKAN (admin telat meninjau tak merugikan anggota); BUKAN XP
-  otomatis dari laporan/jurnal/absensi. Target diatur admin per divisi × level (`rpg_target_poin`; level `*` = semua level;
-  level dipetakan dari teks `tim.level` lewat `levelKey`, tahan ejaan "Magang/Probation" vs "Magang / Probation"); tanpa angka
-  = "tanpa target" (poin tetap dicatat). Penyesuaian per orang per periode: `rpg_target_override` (target khusus atau
-  dikecualikan). Status: tercapai (poin ≥ target) / belum / tanpa_target / dikecualikan; selama berjalan "belum" dipecah
-  sesuai jalur / tertinggal (bandingkan persen dengan hari berjalan). Setelah tanggal 27 periode "menunggu kunci" (hasil
-  sementara, masih dihitung langsung); admin menekan Kunci, atau otomatis 6 hari setelah tutup (tgl 3) lewat cron 00:10 WIB +
-  pemicu malas saat endpoint dibaca. Kunci = potret ke `rpg_periode_hasil` (target saat itu dibekukan; transaksi + FOR UPDATE →
-  tak ganda). "Buka kembali" menghapus potret, menahan kunci otomatis, dan mencabut lencana target (dievaluasi ulang dari periode
-  lain). Periode sebelum `RPG_MULAI` tak pernah dihitung/dikunci. Endpoint: anggota `GET /rpg/target` (rpg-quests) & papan
-  terbuka penuh `GET /rpg/target/papan` (rpg-guild, urut PERSEN target, bukan poin mentah); admin `/rpg/admin/target[...]`
-  (rpg-admin; rekap juga untuk rpg-pantau, hanya-baca). `?periode=sebelumnya` yang belum ada → 200 `data:null`. Lencana:
-  `targethit`, `target120`, `targetstreak` (3 periode beruntun), `bintang` (peringkat 1) — terbuka hanya dari periode TERKUNCI.
-  UI: kartu di Papan Quest anggota (`TargetCard`, komponen sama dipakai Pantau), tab "Target Produksi" di Guild Hall (`?tab=target`),
-  tab "Target" di Kelola RPG (`?tab=target`), mini progress di header kolom Kanban, notifikasi (pengingat sisa ≤7/≤3 hari,
-  tercapai, hasil periode lalu di 10 hari pertama, admin: periode menunggu kunci). Status selalu berteks (bukan hanya warna).
-- `tim.tipe`/`kepuasan` TIDAK pernah dikirim ke endpoint anggota (hanya `distribusi tipe` di analytics admin).
-- Akun tanpa tautan ke `tim` → endpoint anggota 404 → UI menampilkan "Belum terhubung".
+## Modul Guild / RPG (SUDAH DIHAPUS di branch `web-hub-v1`)
+Modul gamifikasi (7 halaman: Character Sheet, Papan Quest, Guild Hall, Pencapaian, Pantau Anggota,
+Kelola RPG, RPG Analytics) **sudah dihapus** — `src/modules/rpg/`, `backend/rpg.js`, `backend/rpg_target.js`,
+28 method `rpg*` di `api.js`, blok notifikasi RPG di `useNotifications.js`, rute di `App.jsx`, grup "Guild" di
+Sidebar & matriks Master Data. Baris registri `halaman` ber-`page_key` `rpg-%` dihapus otomatis oleh migrasi
+idempoten di `hub.js` (`role_page_access` ikut lewat FK cascade).
+
+Yang SENGAJA tidak dihapus:
+- **Tabel data `rpg_*`** di PostgreSQL (`rpg_xp_event`, `rpg_quest`, `rpg_quest_assignment`, `rpg_achievement`,
+  `rpg_achievement_unlock`, `rpg_target_poin`, `rpg_target_override`, `rpg_periode_hasil`) — dibiarkan utuh
+  supaya modul masih bisa dipulihkan. Tak ada kode yang membacanya lagi.
+- **`src/styles/theme-tokens.css`** (dulu `src/modules/rpg/styles/rpg-tokens.css`) — WAJIB tetap ada:
+  `index.css` meng-alias SEMUA warna tema "dark" & "retro" ke token `--rpg-*` di file ini. Nama `--rpg-*`
+  dipertahankan apa adanya (warisan penamaan; menggantinya tidak mengubah apa pun secara fungsional).
+  Token `--rpg-urg-1..7` (urgensi quest) sudah dibuang karena hanya dipakai modul yang dihapus.
+
+Riwayat lengkap desain modul ini ada di commit `e52de47` dan sebelumnya, bila suatu saat perlu dipulihkan.
+Acuan urgensi 1-7 yang masih disebut di bagian Papan Timeline & Laporan KPI di atas merujuk modul ini
+(dipertahankan sebagai penjelasan mengapa skala Timeline sengaja dibuat berlawanan arah).
 
 ## Sistem Role & Akses
 **Admin (kholed/admin123):** Semua halaman + edit modul/workshop/SKB review/reset PW

@@ -38,7 +38,7 @@
   color-scheme:   dark;      /* kontrol bawaan browser (ikon tanggal, scrollbar, select) ikut gelap */
 
   /* Urgensi Papan Timeline (1 = paling mendesak/merah … 4 = paling santai/hijau tua — kebalikan skala
-     urgensi 1-7 modul RPG yang 7 = paling mendesak; keduanya sengaja terpisah, jangan disamakan).
+     urgensi 1-7 modul gamifikasi lama yang 7 = paling mendesak — modul itu sudah dihapus).
      Dipakai sebagai LATAR PENUH (badge, meniru referensi spreadsheet); --tl-urg-on = warna teks di atasnya
      (beda per tema — warna terang di sini butuh teks gelap, warna gelap di tema terang butuh teks putih). */
   --tl-urg-1: #F87171;
@@ -109,8 +109,9 @@
 
 /* ── RETRO GAME MODE (pixel 16-bit) ──────────────────────────────
    Semua nilai alias ke token --rpg-* (didefinisikan di
-   src/modules/rpg/styles/rpg-tokens.css, di-import global lewat App.jsx)
-   supaya satu sumber warna dengan modul gamifikasi RPG — tidak duplikasi
+   src/styles/theme-tokens.css, di-import global lewat App.jsx) supaya satu
+   sumber warna, tidak duplikasi. Nama --rpg-* adalah warisan modul gamifikasi
+   (Guild) yang sudah dihapus — tokennya sendiri tetap dipakai tema di sini
    nilai warna di dua tempat berbeda. */
 [data-theme="retro"] {
   --green:        var(--rpg-success);

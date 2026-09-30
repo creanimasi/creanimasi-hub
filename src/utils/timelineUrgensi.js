@@ -1,5 +1,5 @@
 // Urgensi Papan Timeline: 1 = paling mendesak (merah) … 4 = paling santai (hijau tua).
-// SENGAJA terpisah dari skala urgensi 1-7 modul RPG (yang arahnya kebalikan: 7 = paling mendesak) —
+// Arahnya KEBALIKAN dari skala urgensi 1-7 modul gamifikasi lama (di sana 7 = paling mendesak) —
 // jangan disatukan, supaya tak membingungkan siapa pun yang membuka kedua halaman.
 export const TIMELINE_URGENSI = [
   { n: 1, label: 'Mendesak', warna: 'var(--tl-urg-1)' },

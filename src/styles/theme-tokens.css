@@ -1,9 +1,12 @@
 /*
-  rpg-tokens.css
-  Token warna & tipografi untuk modul gamifikasi RPG hub.creanimasi.
-  Diekstrak dari mockup yang sudah disetujui (arah visual: pixel retro 16-bit).
-  Prefix --rpg-* sengaja dipakai supaya tidak pernah bentrok dengan token
-  global di src/index.css. Jangan timpa token global yang sudah ada.
+  theme-tokens.css
+  Token warna & tipografi dasar hub.creanimasi (arah visual: pixel retro 16-bit).
+  Sumber tunggal warna untuk tema "dark" & "retro" — src/index.css meng-alias
+  token di sini (lihat blok :root & [data-theme="retro"] di sana). Di-import
+  global lewat src/App.jsx.
+  Prefix --rpg-* dipertahankan apa adanya: penamaan warisan dari modul
+  gamifikasi (Guild) yang sudah dihapus, tapi masih dirujuk index.css di
+  banyak tempat — mengganti nama token tidak ada gunanya secara fungsional.
 */
 
 @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@500;600;700&family=VT323&display=swap');
@@ -33,14 +36,6 @@
   --rpg-stat-inisiatif: #b98cf0;
   --rpg-stat-konsistensi: #4ade80;
 
-  /* --- Urgensi quest 1–7 (skala panas: abu → biru → toska → hijau → kuning → oranye → merah) --- */
-  --rpg-urg-1: #aab3d6;
-  --rpg-urg-2: #5aa9ff;
-  --rpg-urg-3: #2dd4bf;
-  --rpg-urg-4: #8be04e;
-  --rpg-urg-5: #ffd23f;
-  --rpg-urg-6: #ff9a3c;
-  --rpg-urg-7: #ff6b80;
 
   /* --- Semantik --- */
   --rpg-success: #4ade80;

@@ -4,21 +4,6 @@ import { useTim } from './useTim';
 
 const STORAGE_KEY = 'hub_notif_read';
 const getRead = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; } };
-// Akun tanpa tautan tim → /rpg/quests selalu 404; jangan ditanyakan lagi tiap polling.
-let rpgTanpaTim = null; // id user yang terbukti tidak punya tautan tim
-const TIGA_HARI = 3 * 24 * 60 * 60 * 1000;
-// build() sering jalan dobel berbarengan (tim selesai dimuat) → satu request dipakai bersama.
-let rpgQuestCache = null; // { uid, at, promise }
-const fetchRpgQuests = (uid) => {
-  if (rpgQuestCache && rpgQuestCache.uid === uid && Date.now() - rpgQuestCache.at < 20000) return rpgQuestCache.promise;
-  const promise = api.rpgQuests();
-  rpgQuestCache = { uid, at: Date.now(), promise };
-  return promise;
-};
-
-// 'YYYY-MM' → kode bulan sebelumnya (periode target berkode bulan tempat tanggal tutupnya jatuh)
-const bulanLalu = (kode) => { const [y, m] = kode.split('-').map(Number); return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`; };
-
 const markRead = (ids) => localStorage.setItem(STORAGE_KEY, JSON.stringify([...new Set([...getRead(), ...ids])]));
 
 export function useNotifications(user) {
@@ -152,79 +137,6 @@ export function useNotifications(user) {
       }
     } catch {
       // Notifikasi bersifat opsional — gagal fetch tidak crash UI
-    }
-
-    // ── RPG: dipisah supaya kegagalannya tidak menghapus notifikasi lain ──
-    try {
-      if (!(user.page_access || []).includes('rpg-admin')) throw new Error('skip');
-      const rv = await api.rpgAdminReview();
-      const antre = rv.data || [];
-      if (antre.length > 0) {
-        const id = `rpg_review_${antre.map(a => a.id).join('_')}`;
-        list.push({ id, type: 'urgent', icon: '⚔️', unread: !read.includes(id),
-          title: `${antre.length} quest menunggu persetujuan`,
-          body: antre.slice(0, 4).map(a => `${a.nama.split(' ')[0]}: ${a.judul}`).join(' · '),
-          time: new Date(antre[0].diajukan_pada), path: '/rpg/kelola', urgent: true });
-      }
-    } catch { /* bukan pemegang rpg-admin, atau gagal — dilewati */ }
-    if (rpgTanpaTim !== user.id && (user.page_access || []).includes('rpg-quests')) {
-      try {
-        const q = (await fetchRpgQuests(user.id)).data;
-        const semua = q.groups.flatMap(g => g.quests).filter(x => x.reviewedAt && now - new Date(x.reviewedAt) < TIGA_HARI);
-        semua.filter(x => x.status === 'ditolak').forEach(x => {
-          const id = `rpg_tolak_${x.id}_${x.reviewedAt}`;
-          list.push({ id, type: 'warn', icon: '❌', unread: !read.includes(id), title: `Quest "${x.title}" ditolak`,
-            body: x.dueLabel.replace(/^Ditolak:? ?/, ''), time: new Date(x.reviewedAt), path: '/rpg/quests' });
-        });
-        q.completed.filter(x => x.reviewedAt && now - new Date(x.reviewedAt) < TIGA_HARI).forEach(x => {
-          const id = `rpg_ok_${x.id}`;
-          list.push({ id, type: 'ok', icon: '✅', unread: !read.includes(id), title: `Quest "${x.title}" disetujui`,
-            body: `+${x.xpReward} XP`, time: new Date(x.reviewedAt), path: '/rpg/quests' });
-        });
-      } catch (e) { if (/^(404|403)/.test(e.message || '')) rpgTanpaTim = user.id; }
-    }
-
-    // ── Target poin produksi (anggota produksi): pengingat, capaian, hasil periode lalu ──
-    if (rpgTanpaTim !== user.id && (user.page_access || []).includes('rpg-quests')) {
-      try {
-        const t = (await api.rpgTarget()).data;
-        if (t.ikut && t.saya.target && t.saya.status !== 'dikecualikan') {
-          const { periode, saya } = t;
-          if (saya.status === 'tercapai') {
-            const id = `target_ok_${periode.kode}`;
-            list.push({ id, type: 'ok', icon: '🎯', unread: !read.includes(id), title: `Target poin ${periode.label} tercapai`,
-              body: `${saya.poin.toLocaleString('id-ID')} dari ${saya.target.toLocaleString('id-ID')} poin`, time: now, path: '/rpg/quests' });
-          } else if (periode.fase === 'berjalan' && periode.sisaHari >= 1 && periode.sisaHari <= 7) {
-            const id = `target_ingat_${periode.kode}_${periode.sisaHari <= 3 ? 3 : 7}`;
-            list.push({ id, type: 'warn', icon: '🎯', unread: !read.includes(id), urgent: periode.sisaHari <= 3,
-              title: `Target poin: sisa ${periode.sisaHari} hari`,
-              body: `Kurang ${(saya.target - saya.poin).toLocaleString('id-ID')} poin${saya.butuhPerHari ? ` (~${saya.butuhPerHari}/hari)` : ''} — ${saya.poin}/${saya.target}`,
-              time: now, path: '/rpg/quests' });
-          }
-        }
-        // hasil periode yang baru dikunci: tampil di 10 hari pertama periode berikutnya
-        const lalu = t.ikut && t.riwayat[0];
-        if (lalu && lalu.kode === bulanLalu(t.periode.kode) && t.periode.hariBerjalan <= 10) {
-          const id = `target_hasil_${lalu.kode}`;
-          list.push({ id, type: lalu.status === 'tercapai' ? 'ok' : 'info', icon: '🏁', unread: !read.includes(id),
-            title: `Hasil target ${lalu.label}: ${lalu.status === 'tercapai' ? 'tercapai' : lalu.status === 'belum' ? 'belum tercapai' : 'tidak dinilai'}`,
-            body: `${lalu.poin.toLocaleString('id-ID')}${lalu.target ? ' dari ' + lalu.target.toLocaleString('id-ID') : ''} poin${lalu.peringkat ? ' · peringkat #' + lalu.peringkat : ''}`,
-            time: now, path: '/rpg/guild?tab=target' });
-        }
-      } catch { /* opsional — bukan anggota produksi / gagal dimuat */ }
-    }
-    // ── Admin: periode target yang sudah berakhir dan menunggu dikunci ──
-    if ((user.page_access || []).some(k => k === 'rpg-admin' || k === 'rpg-pantau')) {
-      try {
-        const r = (await api.rpgTargetRekap('sebelumnya')).data;
-        if (r && r.fase === 'menunggu_kunci') {
-          const id = `target_kunci_${r.periode.kode}`;
-          list.push({ id, type: 'info', icon: '🔒', unread: !read.includes(id),
-            title: `Periode target ${r.periode.label} menunggu dikunci`,
-            body: r.tahanKunci ? 'Penguncian otomatis ditahan — kunci manual bila sudah siap.' : `${r.ringkasan.tercapai} dari ${r.ringkasan.peserta} tercapai (sementara). Dikunci otomatis ${r.kunciOtomatisPada}.`,
-            time: now, path: '/rpg/kelola?tab=target' });
-        }
-      } catch { /* periode sebelumnya belum ada / tak berhak — dilewati */ }
     }
 
     setNotifs(list);
